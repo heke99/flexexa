@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "repository": "heke99/flexexa",
+  "masterPlan": "FLEXEXA_MASTER_BUILD_PROMPT_V1.md",
+  "snapshotDate": "2026-09-09",
+  "localSkillsDirectory": ".agents/skills",
+  "architectureAuthority": "FLEXEXA_MASTER_BUILD_PROMPT_V1.md",
+  "skills": {
+    "supabase": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/supabase/supabase/skill.md",
+      "localPath": ".agents/skills/supabase/SKILL.md",
+      "priority": "critical",
+      "purpose": "Auth, Postgres, migrations, RLS, RPC, Supabase configuration and security controls."
+    },
+    "supabase-postgres-best-practices": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/supabase/supabase-postgres-best-practices/skill.md",
+      "localPath": ".agents/skills/supabase-postgres-best-practices/SKILL.md",
+      "priority": "critical",
+      "purpose": "Schema, indexes, query performance, locking, concurrency, RLS and PostgreSQL design."
+    },
+    "nextjs": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/nextjs/skill.md",
+      "localPath": ".agents/skills/nextjs/SKILL.md",
+      "priority": "critical",
+      "purpose": "Partner portal, admin, developer portal, PWA, App Router and server/client boundaries."
+    },
+    "turborepo": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/turborepo/skill.md",
+      "localPath": ".agents/skills/turborepo/SKILL.md",
+      "priority": "critical",
+      "purpose": "Flexexa monorepo, task graph, caching and CI."
+    },
+    "deployments-cicd": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/deployments-cicd/skill.md",
+      "localPath": ".agents/skills/deployments-cicd/SKILL.md",
+      "priority": "critical",
+      "purpose": "Vercel frontend deployments, previews, promotion and CI/CD."
+    },
+    "env-vars": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/env-vars/skill.md",
+      "localPath": ".agents/skills/env-vars/SKILL.md",
+      "priority": "critical",
+      "purpose": "Secrets and environment configuration without credential leakage."
+    },
+    "observability": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/observability/skill.md",
+      "localPath": ".agents/skills/observability/SKILL.md",
+      "priority": "critical",
+      "purpose": "OpenTelemetry, logs, traces, metrics and frontend/backend diagnostics."
+    },
+    "vercel-firewall": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/vercel-firewall/skill.md",
+      "localPath": ".agents/skills/vercel-firewall/SKILL.md",
+      "priority": "critical",
+      "purpose": "WAF, rate limits and DDoS/bot protection for public Vercel surfaces."
+    },
+    "verification": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/verification/skill.md",
+      "localPath": ".agents/skills/verification/SKILL.md",
+      "priority": "critical",
+      "purpose": "Full-story E2E verification: browser to API to data to response."
+    },
+    "agent-browser-verify": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/agent-browser-verify/skill.md",
+      "localPath": ".agents/skills/agent-browser-verify/SKILL.md",
+      "priority": "critical",
+      "purpose": "Visual verification after UI/portal changes."
+    },
+    "react-best-practices": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/react-best-practices/skill.md",
+      "localPath": ".agents/skills/react-best-practices/SKILL.md",
+      "priority": "high",
+      "purpose": "TSX review, hooks, accessibility, performance and React quality."
+    },
+    "shadcn": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/shadcn/skill.md",
+      "localPath": ".agents/skills/shadcn/SKILL.md",
+      "priority": "high",
+      "purpose": "UI foundation and consistent white-label design system."
+    },
+    "vercel-api": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/vercel-api/skill.md",
+      "localPath": ".agents/skills/vercel-api/SKILL.md",
+      "priority": "high",
+      "purpose": "Read/manage Vercel projects, domains, deployments and logs."
+    },
+    "investigation-mode": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/investigation-mode/skill.md",
+      "localPath": ".agents/skills/investigation-mode/SKILL.md",
+      "priority": "high",
+      "purpose": "Systematic debugging when CI, deploy or runtime is broken."
+    },
+    "bootstrap": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/bootstrap/skill.md",
+      "localPath": ".agents/skills/bootstrap/SKILL.md",
+      "priority": "high-initial",
+      "purpose": "Safe initial repo, Vercel and environment bootstrap."
+    },
+    "vercel-agent": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/vercel-agent/skill.md",
+      "localPath": ".agents/skills/vercel-agent/SKILL.md",
+      "priority": "useful",
+      "purpose": "PR review and incident investigation."
+    },
+    "routing-middleware": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/routing-middleware/skill.md",
+      "localPath": ".agents/skills/routing-middleware/SKILL.md",
+      "priority": "useful",
+      "purpose": "Hostname/tenant routing, custom domains and selected access flows."
+    },
+    "vercel-flags": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/vercel/vercel-flags/skill.md",
+      "localPath": ".agents/skills/vercel-flags/SKILL.md",
+      "priority": "selective",
+      "purpose": "UI/product feature rollout only; never the central Flexexa Rules Engine."
+    }
+  }
+}
