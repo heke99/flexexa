@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
         with:
           version: 2.117.0
       - name: Check tracked local configuration
@@ -28,6 +28,14 @@ jobs:
         run: supabase db reset --local
       - name: Real PostgreSQL RLS and authorization tests
         run: supabase test db
+      - name: Retain exact migration replay inputs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-db-replay-inputs
+          path: supabase/migrations/*.sql
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain tracked source snapshot for review
         if: always()
         run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
