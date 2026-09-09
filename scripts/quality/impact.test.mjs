@@ -29,3 +29,30 @@ test('dynamic/unresolved index data forces full scope',()=>{
 test('database work is never verified by an import graph alone',()=>{
  const result=analyze({files:['supabase/migrations/001.sql'],dirty:false},baseIndex,config);assert(result.requiredChecks.includes('database-replay-and-rls'));
 });
+
+test('database workflow edits retain database replay even when SQL is unchanged',()=>{
+ const result=analyze({files:['.github/workflows/database-verification.yml'],dirty:false},baseIndex,config);
+ assert(result.requiredChecks.includes('database-replay-and-rls'));
+ assert(result.requiredChecks.includes('ci-workflow-security-review'));
+});
+test('dependency edits demand lock review rather than just a green typecheck',()=>{
+ for (const file of ['packages/kernel/package.json','pnpm-lock.yaml','pnpm-workspace.yaml']) {
+  const result=analyze({files:[file],dirty:false},baseIndex,config);
+  assert(result.requiredChecks.includes('dependency-and-lock-review'));
+ }
+});
+test('integration changes require provider evidence',()=>{
+ const result=analyze({files:['integrations/enode/src/webhook.ts'],dirty:false},baseIndex,config);
+ assert(result.requiredChecks.includes('provider-contract-and-sandbox-tests'));
+ assert.notEqual(result.risk,'LOW');
+});
+
+test('workspace subpath parsing respects exact package boundaries',async()=>{
+ const {workspacePackageName,workspaceExportTarget}=await import('./index-core.mjs');
+ const manifest={name:'@flexexa/domain',exports:{'.':'./src/index.ts','./connect':'./src/connect.ts'}};
+ assert.equal(workspacePackageName('@flexexa/domain/connect'),'@flexexa/domain');
+ assert.equal(workspaceExportTarget('@flexexa/domain/connect',manifest),'./src/connect.ts');
+ assert.equal(workspaceExportTarget('@flexexa/domain/unknown',manifest),null);
+ assert.equal(workspaceExportTarget('@flexexa/domain-extra/connect',manifest),null);
+ assert.equal(workspaceExportTarget('@flexexa/domain',{name:manifest.name,exports:{'.':{import:'./a.ts',require:'./b.js'}}}),null);
+});

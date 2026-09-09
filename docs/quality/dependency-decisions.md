@@ -10,3 +10,15 @@
 - Regenerate the lock in the read-only resolution job; review it and rerun frozen install before merge.
 
 Primary references: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0 ; https://eslint.org/version-support/ ; https://github.com/vercel/next.js/blob/v16.3.4/packages/eslint-config-next/package.json ; https://pnpm.io/settings/build#allowbuilds
+
+
+## Connect workspace extension — 2026-09-09
+
+The original `lock-provenance.json` describes the upstream generated lock, not
+the extended current file. `connect-lock-extension.json` records the new checksum
+and the separate structural verification: only `integrations/enode` is added as
+an importer; no registry resolution, existing importer, pinned dependency version
+or package-manager document is changed. The new package uses the existing
+TypeScript toolchain and `@flexexa/domain` workspace link. Run pnpm 12.3.4
+`install --frozen-lockfile --ignore-scripts` and the normal CI jobs before merge.
+Structural parsing and local Node 22 tests do not replace that check.

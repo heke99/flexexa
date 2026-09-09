@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import {workspacePackageName,workspaceExportTarget} from './index-core.mjs';
 const root=process.cwd(),outDir=path.join(root,'.flexexa','index');
 const sourceExts=new Set(['.ts','.tsx','.js','.jsx','.mjs','.cjs']);
 const indexExts=new Set([...sourceExts,'.sql','.json','.yaml','.yml','.toml','.tf','.tfvars']);
@@ -21,7 +22,7 @@ for(const name of [...new Set(fileNames)].sort()){
 const indexedFiles=allFiles.filter(p=>indexExts.has(path.extname(p)));
 const packages=[],packageByName=new Map();
 for(const file of allFiles.filter(p=>path.basename(p)==='package.json')){
- try{const value=JSON.parse(read(file));if(!value.name)continue;const item={name:value.name,path:rel(path.dirname(file)),dependencies:{...(value.dependencies??{}),...(value.devDependencies??{}),...(value.peerDependencies??{})}};packages.push(item);packageByName.set(item.name,item);}catch{unknowns.push(rel(file)+': malformed package manifest');}
+ try{const value=JSON.parse(read(file));if(!value.name)continue;const item={name:value.name,path:rel(path.dirname(file)),exports:value.exports??null,dependencies:{...(value.dependencies??{}),...(value.devDependencies??{}),...(value.peerDependencies??{})}};packages.push(item);packageByName.set(item.name,item);}catch{unknowns.push(rel(file)+': malformed package manifest');}
 }
 function resolveRelative(importer,spec){
  if(!spec.startsWith('.'))return null;
@@ -38,7 +39,21 @@ for(const file of allFiles){
   const content=read(file);let m;
   if(/\b(?:import|require)\s*\(\s*(?!["'])(?:\S)/u.test(content))unknowns.push(rp+': dynamic module resolution');
   const importRegex=/(?:from\s*|import\s*\(\s*|require\s*\(\s*|import\s+)["']([^"']+)["']/gu;
-  while((m=importRegex.exec(content))){const target=resolveRelative(file,m[1]);imports.push({from:rp,specifier:m[1],to:target,package:target?null:(packageByName.has(m[1])?m[1]:null)});}
+  while((m=importRegex.exec(content))){
+   let target=resolveRelative(file,m[1]);
+   const workspaceName=workspacePackageName(m[1]),workspace=packageByName.get(workspaceName);
+   if(workspace){
+    const exportTarget=workspaceExportTarget(m[1],workspace);
+    if(exportTarget){
+     const directory=path.resolve(root,workspace.path),absolute=path.resolve(directory,exportTarget);
+     if(absolute.startsWith(directory+path.sep)&&fs.existsSync(absolute)&&fs.lstatSync(absolute).isFile())target=rel(absolute);
+    }
+    if(!target)unknowns.push(rp+': unresolved workspace export '+m[1]);
+    const owner=packages.filter(p=>p.path!==''&&rp.startsWith(p.path+'/')).sort((a,b)=>b.path.length-a.path.length)[0];
+    if(owner&&owner.name!==workspaceName&&!Object.hasOwn(owner.dependencies,workspaceName))unknowns.push(rp+': undeclared workspace dependency '+workspaceName);
+   }
+   imports.push({from:rp,specifier:m[1],to:target,package:workspace?workspaceName:null});
+  }
   const envRegex=/(?:process\.env\.|import\.meta\.env\.)([A-Z][A-Z0-9_]*)/gu;
   while((m=envRegex.exec(content)))envUsage.push({file:rp,key:m[1]});
   const eventRegex=/(?:eventType|event_type)\s*[:=]\s*["']([^"']+)["']|(?:publish|emit)\s*\(\s*["']([^"']+)["']/gu;
@@ -62,7 +77,7 @@ for(const file of indexedFiles){
 }
 const packageGraph=packages.map(p=>({...p,localDependencies:Object.keys(p.dependencies).filter(d=>packageByName.has(d))}));
 for(const edge of imports){
- if(edge.specifier.startsWith('@flexexa/')&&!packageByName.has(edge.specifier))unknowns.push(edge.from+': unresolved workspace subpath '+edge.specifier);
+ if(edge.specifier.startsWith('@flexexa/')&&!packageByName.has(workspacePackageName(edge.specifier)))unknowns.push(edge.from+': unresolved workspace subpath '+edge.specifier);
  if(!edge.to&&(edge.specifier.startsWith('.')||edge.specifier.startsWith('@/')))unknowns.push(edge.from+': '+edge.specifier);
 }
 const manifest={coverage:{mode:'syntactic-conservative',unknowns:[...new Set(unknowns)].sort(),limitations:['Source extraction is not complete semantic indexing','SQL/event/provider dependencies require dedicated tests','Changed workspace packages expand to declared reverse dependents']},generatedAt:new Date().toISOString(),commit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),fileCount:indexedFiles.length,packageCount:packages.length,importEdgeCount:imports.length,sqlObjectCount:sqlObjects.length,eventOccurrenceCount:events.length,testCount:tests.length};

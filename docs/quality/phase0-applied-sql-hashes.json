@@ -1,0 +1,13 @@
+{
+  "source_commit": "a41dfdfac2377bc5e6b999c0470334627761cc94",
+  "source_scope": "reviewed repository snapshot; this file alone is not a live database parity check",
+  "files": {
+    "supabase/migrations/20260909104034_phase0_identity_tenancy_rbac.sql": "7ff71974a20be3fb73e1a3dddeb5d2855eb1d65973f48f3198cab0348d6161b2",
+    "supabase/migrations/20260909104116_phase0_authorization_helpers_rls.sql": "39b57eef587d4facb7ef14569fccfea9b20dfab4099405f9c19e5cdb39335c29",
+    "supabase/migrations/20260909104210_phase0_harden_authorization_helpers.sql": "7050604ff1429f60cb7baa16aba004939da201b77886005d8783059551fcc8b5",
+    "supabase/migrations/20260909111942_phase0_customer_site_asset_core.sql": "de14ea6a7e123f50276c5aa4f75083190beedbca6a4dc8dee6ddbdf2fed7757d",
+    "supabase/migrations/20260909112319_phase0_authorization_invariants.sql": "b6fc8259f91b7fff722a2ffd3f6c270fdb3ed39568c6315ccd1b07670b881b9b",
+    "supabase/migrations/20260909122536_phase0_canonical_core_v1.sql": "ffd5ae27dc138b1a7f3ae96a430af342075f0d5c616c21e36963fb99ae68289e",
+    "supabase/migrations/20260909131159_phase0_tenant_roles_temporal.sql": "42d8ba2dbc940f59baef1bb58bb3a427185f8d43207f9b5626a658ce465591d1"
+  }
+}

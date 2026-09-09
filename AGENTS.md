@@ -178,5 +178,15 @@ OpenTofu remains the IaC authority through `flexexa-aws-opentofu`. AWS CDK/Cloud
 
 Codex Security is not a dependency. Security review must remain executable with repository-local rules and normal CI.
 
+## Flexexa Connect — mandatory continuation context
+
+Read `docs/architecture/connect-adapter-boundary.md` and
+`docs/progress/phase0-connect-handoff.md` before provider/integration work.
+Flexexa builds its own Enode-like connectivity layer; Enode is optional, not the
+canonical data model or default control authority. Preserve first-party adapter support.
+Keep provider schemas in integrations, canonical IDs/contracts in shared domain and
+route/policy evaluation in Kernel. Never treat routing unit tests as distributed command
+idempotency, physical safety, an OAuth connection or completed phase readiness.
+
 ## Flexexa Connect ownership mandate
 Read `docs/architecture/ADR-0001-flexexa-connect.md` and `docs/progress/BUILD_STATUS.md` before continuing implementation. Flexexa must be an independent Enode-like connectivity platform **and** support Enode as one replaceable adapter. Canonical tenant/customer/site/asset identity, consent and control ownership remain in Flexexa. Never build an Enode-only backend, expose provider IDs as canonical identity, or activate competing control routes. Do not mark a later phase complete from skeletons, mock calls or a green frontend build alone.

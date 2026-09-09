@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - 'integrations/*'
 # Keep unreviewed lifecycle scripts fail-closed. Native optional prebuilt
 # packages provide the resolver; no postinstall fallback download is allowed.
 strictDepBuilds: true

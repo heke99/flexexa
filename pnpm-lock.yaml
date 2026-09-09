@@ -156,6 +156,19 @@ importers:
         specifier: npm:@typescript/typescript6@6.0.2
         version: '@typescript/typescript6@6.0.2'
 
+  integrations/enode:
+    dependencies:
+      '@flexexa/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@typescript/native':
+        specifier: npm:typescript@7.0.2
+        version: typescript@7.0.2
+      typescript:
+        specifier: npm:@typescript/typescript6@6.0.2
+        version: '@typescript/typescript6@6.0.2'
+
   packages/api-contracts:
     dependencies:
       '@flexexa/domain':
