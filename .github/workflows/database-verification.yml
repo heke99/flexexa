@@ -16,28 +16,30 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0
-      - name: Check tracked local configuration
+      - name: Check tracked configuration
+        run: test -f supabase/config.toml
+      - name: Materialize proposed migration with Supabase CLI
+        shell: bash
         run: |
-          supabase --version
-          test -f supabase/config.toml
-          test -n "$(find supabase/migrations -name '*_phase0_authorization_invariants.sql')"
+          set -euo pipefail
+          supabase migration new phase0_canonical_core_v1
+          target=$(find supabase/migrations -name '*_phase0_canonical_core_v1.sql' | sort | tail -n 1)
+          cp supabase/proposals/phase0_canonical_core_v1.sql "$target"
       - name: Start isolated Supabase
         run: supabase start
       - name: Clean migration replay
         run: supabase db reset --local
-      - name: Real PostgreSQL RLS and authorization tests
+      - name: Real PostgreSQL RLS and canonical tests
         run: supabase test db
-      - name: Retain source-controlled replay inputs
+      - name: Retain replay inputs for promotion
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: flexexa-db-replay-inputs
-          path: |
-            supabase/config.toml
-            supabase/migrations/*_phase0_authorization_invariants.sql
+          path: supabase/migrations/*_phase0_canonical_core_v1.sql
           if-no-files-found: error
           retention-days: 7
-      - name: Retain tracked source snapshot for review
+      - name: Retain tracked source snapshot
         if: always()
         run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
       - uses: actions/upload-artifact@v4
@@ -59,12 +61,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Install pinned package manager and dependencies
+      - name: Install pinned dependencies
         run: |
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
           pnpm install --frozen-lockfile
-      - name: Index and verify changed scope
+      - name: Verify application and impact regression tests
         env:
           IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
-        run: pnpm verify:affected -- --base "$IMPACT_BASE"
+        run: pnpm verify:affected -- --application-only --base "$IMPACT_BASE"
