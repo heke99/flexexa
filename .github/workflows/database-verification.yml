@@ -1,0 +1,70 @@
+name: Supabase replay and authorization tests
+on:
+  pull_request:
+    branches: [main, phase/0-foundation]
+permissions:
+  contents: read
+concurrency:
+  group: db-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Check tracked local configuration
+        run: |
+          supabase --version
+          test -f supabase/config.toml
+          test -n "$(find supabase/migrations -name '*_phase0_authorization_invariants.sql')"
+      - name: Start isolated Supabase
+        run: supabase start
+      - name: Clean migration replay
+        run: supabase db reset --local
+      - name: Real PostgreSQL RLS and authorization tests
+        run: supabase test db
+      - name: Retain source-controlled replay inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flexexa-db-replay-inputs
+          path: |
+            supabase/config.toml
+            supabase/migrations/*_phase0_authorization_invariants.sql
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain tracked source snapshot for review
+        if: always()
+        run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flexexa-reviewed-source
+          path: /tmp/flexexa-reviewed-source.tar
+          retention-days: 1
+      - name: Stop local services
+        if: always()
+        run: supabase stop --no-backup
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned package manager and dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile
+      - name: Index and verify changed scope
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: pnpm verify:affected -- --base "$IMPACT_BASE"
