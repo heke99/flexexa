@@ -13,6 +13,35 @@ permissions:
   id-token: write
 
 jobs:
+  diagnose-oidc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture non-secret GitHub OIDC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          export OIDC_TOKEN="$(python -c 'import json,sys; print(json.loads(sys.stdin.read())["value"])' <<<"$RESPONSE")"
+          python - <<'PY'
+          import base64, json, os
+          token = os.environ["OIDC_TOKEN"]
+          payload = token.split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload.encode()))
+          allow = ["iss","aud","sub","repository","repository_owner","ref","event_name","job_workflow_ref"]
+          safe = {k: claims.get(k) for k in allow}
+          print(json.dumps(safe, sort_keys=True))
+          with open("/tmp/oidc-claims.json","w",encoding="utf-8") as fh:
+              json.dump(safe, fh, sort_keys=True, indent=2)
+          PY
+          unset OIDC_TOKEN RESPONSE
+      - name: Upload OIDC claim evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: flexexa-oidc-claims
+          path: /tmp/oidc-claims.json
+          if-no-files-found: error
+
   plan-dev:
     runs-on: ubuntu-latest
     steps:
@@ -49,7 +78,7 @@ jobs:
           allowed-account-ids: 938095765653
           role-session-name: flexexa-pr-plan-${{ github.run_id }}
           retry-max-attempts: 3
-          action-timeout-s: 60
+          action-timeout-s: 10
 
       - name: Check formatting
         run: tofu fmt -check -recursive infra/opentofu
