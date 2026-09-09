@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { normalizeEnodeSoc } from '../src/normalize-soc.ts';
 import { verifyEnodeDelivery } from '../src/webhook-integrity.ts';
 const id=n=>`a0000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-const scope={tenant_id:id(1),asset_id:id(2)};
+const scope={tenant_id:id(1),asset_id:id(2),environment:'sandbox'};
 const binding={...scope,connection_id:id(3),provider_id:id(4),provider_account_id:id(5),provider_key:'enode',external_asset_id:'vehicle-7'};
 const now='2026-09-09T12:00:00Z';
 const vehicle={id:'vehicle-7',userId:'opaque-enode-user',isReachable:true,lastSeen:now,chargeState:{batteryLevel:38,lastUpdated:'2026-09-09T11:00:00Z'}};

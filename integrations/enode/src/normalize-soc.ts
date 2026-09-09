@@ -1,13 +1,13 @@
 import { DomainError, entityId, record, utcInstant } from "@flexexa/domain";
 import { externalIdentifier, parseProviderBinding } from "@flexexa/domain/connect";
-import type { AssetScope, CanonicalSocObservation } from "@flexexa/domain/connect";
+import type { ConnectionScope, CanonicalSocObservation } from "@flexexa/domain/connect";
 
 /** Only documented chargeState.batteryLevel/lastUpdated and cloud connectivity are mapped.
  * Other EV fields stay unimplemented until their versioned Enode schema is verified.
  * Input must be a full fetched vehicle, not a partial webhook patch.
  */
 export function normalizeEnodeSoc(
-  inputValue: unknown, bindingValue: unknown, scope: AssetScope, expectedEnodeUserId: string, receivedAt: unknown,
+  inputValue: unknown, bindingValue: unknown, scope: ConnectionScope, expectedEnodeUserId: string, receivedAt: unknown,
 ): CanonicalSocObservation {
   const input = record(inputValue), source = parseProviderBinding(bindingValue, scope);
   if (source.provider_key !== "enode") throw new DomainError("VALIDATION_ERROR");

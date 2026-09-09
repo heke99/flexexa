@@ -1,7 +1,7 @@
 import { DomainError, entityId, exactKeys, record, utcInstant } from "@flexexa/domain";
 import { connectCapability, parseConnectionRoute } from "@flexexa/domain/connect";
 import type { CanonicalEntityId } from "@flexexa/domain";
-import type { AssetScope, ConnectionRouteSnapshot } from "@flexexa/domain/connect";
+import type { ConnectionScope, ConnectionRouteSnapshot } from "@flexexa/domain/connect";
 
 export interface RoutingPolicy {
   readonly policy_set_version_id: CanonicalEntityId;
@@ -35,7 +35,7 @@ function fresh(at: string | null, now: number, maxAge: number): boolean {
  * connection and policy version with the command/outbox before any external I/O.
  */
 export function selectConnectionRoute(
-  scope: AssetScope, capability: unknown, effectiveAt: unknown, candidates: readonly unknown[], policyInput: unknown,
+  scope: ConnectionScope, capability: unknown, effectiveAt: unknown, candidates: readonly unknown[], policyInput: unknown,
 ) {
   const required = connectCapability(capability), at = utcInstant(effectiveAt);
   const policy = parseRoutingPolicy(policyInput), now = Date.parse(at);
