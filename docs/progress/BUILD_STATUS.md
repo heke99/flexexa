@@ -14,7 +14,7 @@ Updated: 2026-09-09. This is an evidence ledger, not a percentage-complete estim
 | Provider account transactions | PR #10 merged as `24318e420ff9db0e7d3a4ce322050f31384de632`; run `34373803112` passed all ten migrations, 246 DB assertions, 144 shared contract cases and 92 concurrent calls. Exact migration `20260909155618` verified in development. |
 | Typed mutation transport | PR #11 merged as `9dc79da2477955f9d47c2e355621928316c8053a`; final run `34374858422` passed application and database round trips. |
 | Published local Connect recovery | PR #12 merged as `4f66e2305eed804ef8903a831da709aedcab3057`; corrected clean-source ESM bootstrap and preserved all ten migrations. Final run `34386537689` passed both jobs. Prior local work is published/reconciled, not every planned phase implemented. |
-| Machine authorization | Next isolated proposal: session-derived service/API-client binding, explicit tenant/environment grants and no human-role fallback. Not yet applied or production-ready. |
+| Machine authorization | PR #13: isolated proposal run `34389012242` passed. Exact SQL promoted to development as `20260909183109`, checksum read back. Final tracked-only CI/merge remains required. Session-derived service/API-client binding and explicit tenant/environment grants only; no identity provisioning or resource-control API. |
 | Rules/policy | Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |
