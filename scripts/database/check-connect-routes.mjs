@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { tenantId, entityId } from '../../packages/domain/src/index.ts';
 import { connectEnvironment, parseConnectionRoute } from '../../packages/domain/src/connect.ts';
+import { connectionRouteReadRpc, parseConnectionRouteReadResult } from '../../packages/api-contracts/src/connect-registry.ts';
 // Receives actual authenticated SQL output from the disposable database runner.
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const scope = {tenant_id:tenantId(input.scope.tenant_id), asset_id:entityId(input.scope.asset_id), environment:connectEnvironment(input.scope.environment)};
 assert.equal(scope.environment, 'sandbox');
 assert.equal(input.routes.length, 2);
-const routes = input.routes.map(route => parseConnectionRoute(route, scope));
+const call = connectionRouteReadRpc(scope, scope);
+assert.deepEqual(call, {function_name:'flexexa_get_connection_routes', args:{p_tenant_id:scope.tenant_id, p_asset_id:scope.asset_id, p_environment:'sandbox'}});
+const routes = parseConnectionRouteReadResult(input.routes, scope);
 assert.deepEqual(routes.map(route => route.provider_key).sort(), ['enode', 'ocpp']);
 for (const route of routes) {
   assert.equal(route.environment, 'sandbox');
