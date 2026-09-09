@@ -16,28 +16,18 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0
-      - name: Initialize local-only config when absent
+      - name: Check tracked local configuration
         run: |
           supabase --version
-          supabase init --help
-          test -f supabase/config.toml || supabase init
-      - name: Generate proposal migration using CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          if test -f supabase/proposals/phase0_authorization_invariants.sql; then
-            supabase migration new phase0_authorization_invariants
-            target=$(find supabase/migrations -name '*_phase0_authorization_invariants.sql' | sort | tail -n 1)
-            test -n "$target"
-            cp supabase/proposals/phase0_authorization_invariants.sql "$target"
-          fi
+          test -f supabase/config.toml
+          test -n "$(find supabase/migrations -name '*_phase0_authorization_invariants.sql')"
       - name: Start isolated Supabase
         run: supabase start
       - name: Clean migration replay
         run: supabase db reset --local
       - name: Real PostgreSQL RLS and authorization tests
         run: supabase test db
-      - name: Retain generated config and migration for source-controlled promotion
+      - name: Retain source-controlled replay inputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -47,7 +37,7 @@ jobs:
             supabase/migrations/*_phase0_authorization_invariants.sql
           if-no-files-found: error
           retention-days: 7
-      - name: Retain exact tracked source snapshot for connector-based review
+      - name: Retain tracked source snapshot for review
         if: always()
         run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
       - uses: actions/upload-artifact@v4
