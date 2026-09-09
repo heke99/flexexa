@@ -33,7 +33,11 @@ export function analyze(diff,index,config) {
   if(index.coverage.unknowns.length){risk='HIGH';reasons.push('Index has unresolved/dynamic dependencies; use full verification.');}
   if(diff.files.some(f=>/^supabase\//u.test(f))){risk='HIGH';reasons.push('SQL dependencies require database replay, not import-graph inference.');}
   const requiredChecks=['application'];
-  if(diff.files.some(f=>/^supabase\//u.test(f) || f === '.github/workflows/database-verification.yml')) requiredChecks.push('database-replay-and-rls');
+  const sqlContractChange=diff.files.some(f=>/^(supabase|scripts\/database)\//u.test(f)
+    || /^packages\/(domain|events|api-contracts|kernel)\//u.test(f));
+  if(sqlContractChange || diff.files.includes('.github/workflows/database-verification.yml')) requiredChecks.push('database-replay-and-rls');
+  if(sqlContractChange) requiredChecks.push('rpc-contract-and-concurrency-tests');
+  if(diff.files.some(f=>/^supabase\/proposals\//u.test(f))) requiredChecks.push('proposal-materialization-and-postgres-tests');
   if(diff.files.some(f=>/^\.github\/workflows\//u.test(f))) requiredChecks.push('ci-workflow-security-review');
   if(diff.files.some(f=>/(^|\/)package\.json$/u.test(f) || ['pnpm-lock.yaml','pnpm-workspace.yaml'].includes(f))) requiredChecks.push('dependency-and-lock-review');
   if(diff.files.some(f=>/^integrations\//u.test(f))) requiredChecks.push('provider-contract-and-sandbox-tests');

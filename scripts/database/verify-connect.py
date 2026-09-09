@@ -77,7 +77,9 @@ def main() -> None:
       select jsonb_build_object('scope',jsonb_build_object('tenant_id','{tenant}','asset_id','{selected_asset}','environment','sandbox'),
         'routes',public.flexexa_get_connection_routes('{tenant}','{selected_asset}','sandbox')); rollback;""")
     checked = subprocess.run(["node","--experimental-strip-types",str(ROOT / 'scripts/database/check-connect-routes.mjs')],
-        input=json.dumps(actual),text=True,capture_output=True,timeout=15,check=True)
+        input=json.dumps(actual),text=True,capture_output=True,timeout=15,check=False)
+    if checked.returncode:
+        raise RuntimeError(f"Canonical route checker failed: {checked.stderr[-4000:]}")
     parity = json.loads(checked.stdout)
     if parity.get('authenticated_sql_routes_validated') != 2:
         raise RuntimeError('Canonical parser did not validate the actual SQL route output')

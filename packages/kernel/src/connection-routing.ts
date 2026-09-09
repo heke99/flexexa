@@ -1,5 +1,5 @@
 import { DomainError, entityId, exactKeys, record, utcInstant } from "@flexexa/domain";
-import { connectCapability, parseConnectionRoute } from "@flexexa/domain/connect";
+import { connectCapability, parseConnectionRoute, connectEnvironment } from "@flexexa/domain/connect";
 import type { CanonicalEntityId } from "@flexexa/domain";
 import type { ConnectionScope, ConnectionRouteSnapshot } from "@flexexa/domain/connect";
 
@@ -37,6 +37,7 @@ function fresh(at: string | null, now: number, maxAge: number): boolean {
 export function selectConnectionRoute(
   scope: ConnectionScope, capability: unknown, effectiveAt: unknown, candidates: readonly unknown[], policyInput: unknown,
 ) {
+  entityId(scope.tenant_id); entityId(scope.asset_id); connectEnvironment(scope.environment);
   const required = connectCapability(capability), at = utcInstant(effectiveAt);
   const policy = parseRoutingPolicy(policyInput), now = Date.parse(at);
   const readsState = ["read_soc", "read_power", "read_energy", "solar_read"].includes(required);

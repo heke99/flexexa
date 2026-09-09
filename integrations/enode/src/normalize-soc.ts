@@ -26,10 +26,10 @@ export function normalizeEnodeSoc(
   if ((observed !== null && observed > received_at) || (lastSeen !== null && lastSeen > received_at)) throw new DomainError("VALIDATION_ERROR");
   if (input.isReachable != null && typeof input.isReachable !== "boolean") throw new DomainError("VALIDATION_ERROR");
   const soc = level == null ? null : level as number;
-  return Object.freeze({ tenant_id: scope.tenant_id, asset_id: entityId(scope.asset_id), asset_type: "ev",
+  return Object.freeze({ tenant_id: scope.tenant_id, asset_id: entityId(scope.asset_id), environment: source.environment, asset_type: "ev",
     soc_percent: soc, state_observed_at: observed, received_at,
     provider_cloud_reachable: input.isReachable == null ? null : input.isReachable as boolean,
-    provider_last_seen_at: lastSeen, source, normalizer_version: "enode-soc/1",
+    provider_last_seen_at: lastSeen, source, normalizer_version: "enode-soc/2",
     quality: soc !== null && observed !== null ? "reported" : "unknown",
   });
 }

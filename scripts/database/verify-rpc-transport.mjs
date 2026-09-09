@@ -1,21 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { ensureSourceWorkspace } from './source-workspace.mjs';
 
 // This is a test bridge to disposable PostgreSQL, NOT an application transport.
 for(const [key,value] of Object.entries({ALLOW_ISOLATED_DB_TESTS:'1',PGHOST:'127.0.0.1',PGPORT:'54322',PGUSER:'postgres',PGDATABASE:'postgres'})){
   if(process.env[key]!==value)throw Error('Refusing non-disposable RPC transport verification');
 }
-const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
-// Source-only workspace links: no downloaded dependency or arbitrary resolver override.
-for(const name of ['domain','api-contracts']){
-  const link=resolve(root,'node_modules/@flexexa',name),target=resolve(root,'packages',name);
-  if(existsSync(link))assert.equal(realpathSync(link),realpathSync(target));
-  else{mkdirSync(dirname(link),{recursive:true});symlinkSync(target,link,'dir');}
-}
+ensureSourceWorkspace();
 const {tenantId}=await import('../../packages/domain/src/index.ts');
 const {createFlexexaMutationApi}=await import('../../packages/api-contracts/src/rpc.ts');
 const literal=value=>"'"+value.replaceAll("'","''")+"'";

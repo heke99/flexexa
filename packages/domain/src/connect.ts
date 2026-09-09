@@ -80,7 +80,7 @@ export function parseConnectionRoute(value: unknown, scope: ConnectionScope): Co
   exactKeys(input, ["tenant_id", "asset_id", "connection_id", "provider_id", "provider_account_id",
     "provider_key", "environment", "external_asset_id", "priority", "connection_status", "account_status", "provider_status",
     "health", "capabilities", "capabilities_verified_at", "last_seen_at", "state_observed_at", "valid_from", "valid_until"]);
-  if (!Number.isSafeInteger(input.priority) || Number(input.priority) < 0) throw new DomainError("VALIDATION_ERROR");
+  if (!Number.isSafeInteger(input.priority) || Number(input.priority) < 0 || Number(input.priority) > 2147483647) throw new DomainError("VALIDATION_ERROR");
   if (!Array.isArray(input.capabilities) || input.capabilities.length > CONNECT_CAPABILITIES.length) {
     throw new DomainError("VALIDATION_ERROR");
   }
@@ -102,7 +102,7 @@ export function parseConnectionRoute(value: unknown, scope: ConnectionScope): Co
   });
 }
 /** A partial observation never implies that unknown EV fields equal zero or false. */
-export interface CanonicalSocObservation extends AssetScope {
+export interface CanonicalSocObservation extends ConnectionScope {
   readonly asset_type: "ev";
   readonly soc_percent: number | null;
   readonly state_observed_at: UtcInstant | null;
