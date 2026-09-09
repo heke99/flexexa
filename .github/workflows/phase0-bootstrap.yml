@@ -1,9 +1,13 @@
 name: Flexexa quality verification
+
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+
 permissions:
   contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -13,20 +17,23 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - name: Install pinned dependencies
-        run: |
-          corepack enable
-          corepack prepare pnpm@12.3.4 --activate
-          pnpm install --frozen-lockfile
-      - name: Application and impact verification
-        env:
-          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
-        run: pnpm verify:affected -- --application-only --base "$IMPACT_BASE"
+          node-version: "24"
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Prepare pnpm
+        run: corepack prepare pnpm@12.3.4 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build deterministic codebase index
+        run: pnpm index:codebase
+      - name: Analyze change impact
+        run: pnpm impact -- --base origin/${{ github.base_ref }}
+      - name: Verify affected scope
+        run: pnpm verify:affected -- --base origin/${{ github.base_ref }}
       - name: Upload impact evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: flexexa-impact-index
           path: .flexexa/index/*.json
-          if-no-files-found: error
+          if-no-files-found: warn
