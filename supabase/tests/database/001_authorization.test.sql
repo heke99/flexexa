@@ -2,8 +2,6 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path=public,extensions;
 select plan(21);
-
--- Synthetic, transaction-scoped fixtures. Never committed to the remote DB.
 insert into auth.users(id,email) values
  ('a0000000-0000-4000-8000-000000000001','flexexa-ci-a@example.invalid'),
  ('a0000000-0000-4000-8000-000000000002','flexexa-ci-b@example.invalid'),
@@ -18,18 +16,16 @@ insert into public.memberships(id,tenant_id,user_id) values
  ('d0000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000001'),
  ('d0000000-0000-4000-8000-000000000002','c0000000-0000-4000-8000-000000000002','a0000000-0000-4000-8000-000000000002');
 insert into public.membership_roles(tenant_id,membership_id,role_id)
-select 'c0000000-0000-4000-8000-000000000001','d0000000-0000-4000-8000-000000000001',id from public.roles where role_key='operator';
+select 'c0000000-0000-4000-8000-000000000001','d0000000-0000-4000-8000-000000000001',id from public.roles where role_key='operator' and tenant_id='c0000000-0000-4000-8000-000000000001';
 insert into public.platform_memberships(id,user_id) values
  ('e0000000-0000-4000-8000-000000000003','a0000000-0000-4000-8000-000000000003');
 insert into public.platform_membership_roles(platform_membership_id,role_id)
 select 'e0000000-0000-4000-8000-000000000003',id from public.roles where role_key='platform_admin';
-
 select ok(not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='private' and p.proname like 'flexexa_%' and has_function_privilege('anon',p.oid,'execute')), 'anon has no explicit helper execute grants');
 select ok(not has_schema_privilege('anon','private','usage'),'anon cannot resolve private schema');
 select throws_ok($$insert into public.membership_roles(tenant_id,membership_id,role_id) select 'c0000000-0000-4000-8000-000000000001','d0000000-0000-4000-8000-000000000001',id from public.roles where role_key='superadmin'$$,'23514','ROLE_SCOPE_MISMATCH','platform role cannot be assigned to tenant membership');
 select throws_ok($$insert into public.platform_membership_roles(platform_membership_id,role_id) select 'e0000000-0000-4000-8000-000000000003',id from public.roles where role_key='viewer'$$,'23514','ROLE_SCOPE_MISMATCH','tenant role cannot be assigned as platform role');
 select throws_ok($$insert into public.membership_roles(tenant_id,membership_id,role_id) select 'c0000000-0000-4000-8000-000000000002','d0000000-0000-4000-8000-000000000001',id from public.roles where role_key='viewer'$$,'23503',null,'composite FK blocks tenant mismatch');
-
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"a0000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',true);
 select ok(private.flexexa_is_tenant_member('c0000000-0000-4000-8000-000000000001'),'active own membership accepted');
@@ -44,7 +40,7 @@ insert into public.membership_permission_overrides(tenant_id,membership_id,permi
 select 'c0000000-0000-4000-8000-000000000001','d0000000-0000-4000-8000-000000000001',id,'deny' from public.permissions where permission_key='control.execute';
 set local role authenticated;
 select ok(not private.flexexa_has_permission('c0000000-0000-4000-8000-000000000001','control.execute'),'explicit deny overrides role allow');
-select ok(not exists(select 1 from private.flexexa_effective_permissions('c0000000-0000-4000-8000-000000000001') p where p='control.execute'),'effective permission list agrees with deny decision');
+select ok(not exists(select 1 from private.flexexa_effective_permissions('c0000000-0000-4000-8000-000000000001') p where p='assets.control'),'effective canonical permission list agrees with deny decision');
 reset role;
 update public.tenants set status='suspended' where id='c0000000-0000-4000-8000-000000000001';
 set local role authenticated;

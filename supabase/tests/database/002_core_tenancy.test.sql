@@ -21,7 +21,7 @@ insert into public.memberships(id,tenant_id,user_id) values
  ('d1000000-0000-4000-8000-000000000001','c1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000001'),
  ('d1000000-0000-4000-8000-000000000002','c1000000-0000-4000-8000-000000000002','a1000000-0000-4000-8000-000000000002');
 insert into public.membership_roles(tenant_id,membership_id,role_id)
-select m.tenant_id,m.id,r.id from public.memberships m cross join public.roles r
+select m.tenant_id,m.id,r.id from public.memberships m join public.roles r on r.tenant_id=m.tenant_id
 where m.id in ('d1000000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000002') and r.role_key='tenant_admin';
 insert into public.customers(id,tenant_id,customer_type,display_name,external_customer_id) values
  ('e1000000-0000-4000-8000-000000000001','c1000000-0000-4000-8000-000000000001','person','A1','shared-external-id'),

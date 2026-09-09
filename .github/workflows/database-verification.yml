@@ -24,7 +24,7 @@ jobs:
         run: supabase db reset --local
       - name: Real PostgreSQL RLS and canonical tests
         run: supabase test db
-      - name: Retain tracked replay inputs
+      - name: Retain replay inputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
