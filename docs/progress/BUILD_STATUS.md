@@ -15,7 +15,7 @@ Updated: 2026-09-09. This is an evidence ledger, not a percentage-complete estim
 | Typed mutation transport | PR #11 merged as `9dc79da2477955f9d47c2e355621928316c8053a`; final run `34374858422` passed application and database round trips. |
 | Published local Connect recovery | PR #12 merged as `4f66e2305eed804ef8903a831da709aedcab3057`; corrected clean-source ESM bootstrap and preserved all ten migrations. Final run `34386537689` passed both jobs. Prior local work is published/reconciled, not every planned phase implemented. |
 | Machine authorization | PR #13 merged as `fb8d081b3a042d836837ddbcc10d3191173c769e`; final tracked run `34389879469` passed. Migration `20260909183109` verified in development. 307 SQL assertions and current-session preflight are active; no credential issuer. |
-| Audited API identity administration | Candidate: dedicated pre-attested Auth subject enrollment and terminal local binding revocation. Requires real isolated tests and exact development promotion; no live Auth provisioning or credentials. |
+| Audited API identity administration | PR #14: candidate run `34392561152` passed; exact migration `20260909190638` applied/read back in dev. Permanent final CI required before merge. Dedicated pre-attested subject only; no live Auth provisioning or credentials. |
 | Rules/policy | Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |

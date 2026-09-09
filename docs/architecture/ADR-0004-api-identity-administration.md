@@ -1,6 +1,6 @@
 # ADR-0004 — Audited dedicated API-client identity enrollment
 
-Status: candidate; not applied or accepted until exact final CI and development read-back.
+Status: exact candidate SQL applied in development; final tracked-only CI required before merge.
 
 ## Scope and separation
 A tenant administrator may enroll an existing dedicated Auth subject into an existing
