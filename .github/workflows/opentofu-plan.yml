@@ -31,6 +31,8 @@ jobs:
           aws-region: eu-north-1
           allowed-account-ids: 938095765653
           role-session-name: flexexa-pr-plan-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 60
 
       - name: Check formatting
         run: tofu fmt -check -recursive infra/opentofu
