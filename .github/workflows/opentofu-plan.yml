@@ -13,6 +13,24 @@ permissions:
   id-token: write
 
 jobs:
+  format-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - name: Format copy
+        run: tofu fmt -recursive infra/opentofu
+      - name: Upload formatted HCL
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flexexa-opentofu-formatted
+          path: infra/opentofu
+          if-no-files-found: error
+
   plan-dev:
     runs-on: ubuntu-latest
     steps:
