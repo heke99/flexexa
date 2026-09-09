@@ -17,13 +17,15 @@ export interface MutationRpcClient {
   rpc(name: FlexexaMutationRpc, args: RpcArguments): PromiseLike<{ data: unknown; error: unknown | null }>;
 }
 const SAFE_DATABASE_ERRORS = new Set<ErrorCode>(["VALIDATION_ERROR", "TENANT_MISMATCH", "IDEMPOTENCY_CONFLICT", "INVALID_STATE_TRANSITION", "PERMISSION_DENIED"]);
-function databaseError(value: unknown): DomainError {
+/** Database diagnostics may contain private identifiers or credentials. Never forward them. */
+export function databaseError(value: unknown): DomainError {
   if (typeof value !== "object" || value === null) return new DomainError("INTERNAL_ERROR");
   const error = value as Record<string, unknown>;
   if (error.code === "42501") return new DomainError("PERMISSION_DENIED");
   if (error.code === "P0001" && typeof error.message === "string" && SAFE_DATABASE_ERRORS.has(error.message as ErrorCode)) return new DomainError(error.message as ErrorCode);
   return new DomainError("INTERNAL_ERROR");
 }
+
 function coreReceipt(value: unknown, request: MutationRequest<unknown>, kind: CoreResourceType): MutationReceipt {
   const p = record(value);
   exactKeys(p, ["tenant_id", "resource_type", "resource_id", "correlation_id", "idempotency_key", "status"]);

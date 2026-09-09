@@ -2,6 +2,7 @@ import { DomainError, assertSameTenant, entityId, exactKeys, record, tenantId } 
 import { connectEnvironment } from "@flexexa/domain/connect";
 import { parseMutation } from "@flexexa/api-contracts";
 import type { MachinePermissionScope } from "@flexexa/api-contracts/machine-authorization";
+import { databaseError } from "@flexexa/api-contracts/rpc";
 
 export type IdentityAdministration = "enroll" | "revoke";
 export function identityAdministrationRpc(kind: IdentityAdministration, value: unknown, scope: MachinePermissionScope) {
@@ -38,4 +39,31 @@ export function parseIdentityAdministrationReceipt(value: unknown, call: ReturnT
   return Object.freeze({ tenant_id: call.args.p_tenant_id, resource_type: "machine_principal" as const, resource_id,
     correlation_id: entityId(p.correlation_id), idempotency_key: call.args.p_idempotency_key,
     environment: call.args.p_payload.environment, status: expected });
+}
+
+type IdentityCall = ReturnType<typeof identityAdministrationRpc>;
+/** An existing MFA administrator session; never the privileged Auth provisioning client. */
+export interface IdentityAdministrationClient {
+  rpc(name: IdentityCall["function_name"], args: IdentityCall["args"]): PromiseLike<{ data: unknown; error: unknown | null }>;
+}
+/**
+ * Enrollment/revocation only. Does not create Auth users, deliver credentials or grant rights.
+ * Scope is copied from trusted context. SQL rechecks current authority on every invocation.
+ * Ambiguous network failures are never automatically retried or compensated by deleting users.
+ */
+export function createIdentityAdministrationApi(client: IdentityAdministrationClient, expectedScope: MachinePermissionScope) {
+  const scope = Object.freeze({ tenant_id: tenantId(expectedScope.tenant_id), environment: connectEnvironment(expectedScope.environment) });
+  async function invoke(kind: IdentityAdministration, value: unknown) {
+    const call = identityAdministrationRpc(kind, value, scope);
+    let result: unknown;
+    try { result = await client.rpc(call.function_name, call.args); }
+    catch { throw new DomainError("INTERNAL_ERROR"); }
+    const response = record(result);
+    if (response.error !== null && response.error !== undefined) throw databaseError(response.error);
+    return parseIdentityAdministrationReceipt(response.data, call);
+  }
+  return Object.freeze({
+    enroll: (value: unknown) => invoke("enroll", value),
+    revoke: (value: unknown) => invoke("revoke", value),
+  });
 }

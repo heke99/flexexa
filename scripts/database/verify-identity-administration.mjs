@@ -7,7 +7,7 @@ for(const [key,value] of Object.entries({ALLOW_ISOLATED_DB_TESTS:'1',PGHOST:'127
  if(process.env[key]!==value) throw Error('Refusing non-disposable identity administration verification');
 }
 ensureSourceWorkspace();
-const {identityAdministrationRpc,parseIdentityAdministrationReceipt}=await import('../../packages/api-contracts/src/identity-administration.ts');
+const {createIdentityAdministrationApi}=await import('../../packages/api-contracts/src/identity-administration.ts');
 const q=v=>"'"+v.replaceAll("'","''")+"'";
 const args=['-h','127.0.0.1','-p','54322','-U','postgres','-d','postgres','-XAtq','--set=ON_ERROR_STOP=1','--command'];
 const opts={encoding:'utf8',timeout:30000,maxBuffer:1024*1024};
@@ -33,17 +33,24 @@ let calls=0;
 async function race(kind,payloads,keys) {
  return Promise.all(payloads.map(async(payload,index)=>{
   const request={tenant_id:tenant,payload,idempotency_key:keys[index],correlation_id:randomUUID()};
-  const call=identityAdministrationRpc(kind,request,scope), a=call.args;
-  assert(['flexexa_enroll_api_client_identity','flexexa_revoke_api_client_identity'].includes(call.function_name));
-  calls++;
-  let output;
-  try {
-   output=await asyncSql('psql',[...args,`begin; set local statement_timeout='25s'; set local role authenticated;
+  const api=createIdentityAdministrationApi({rpc:async(name,a)=>{
+   assert(['flexexa_enroll_api_client_identity','flexexa_revoke_api_client_identity'].includes(name));
+   calls++;
+   let output;
+   try {
+    output=await asyncSql('psql',[...args,`begin; set local statement_timeout='25s'; set local role authenticated;
     set local request.jwt.claims=${claims};
-    select public.${call.function_name}(${q(a.p_tenant_id)},${q(JSON.stringify(a.p_payload))}::jsonb,${q(a.p_idempotency_key)},${q(a.p_correlation_id)});
+    select public.${name}(${q(a.p_tenant_id)},${q(JSON.stringify(a.p_payload))}::jsonb,${q(a.p_idempotency_key)},${q(a.p_correlation_id)});
     select pg_sleep(0.05); commit;`],opts);
-  } catch(error) {return {error:String(error.stderr??'execution failure')};}
-  return {receipt:parseIdentityAdministrationReceipt(JSON.parse(output.stdout.trim()),call)};
+   } catch(error) {
+    const match=String(error.stderr??'').match(/ERROR:\s+(IDEMPOTENCY_CONFLICT|INVALID_STATE_TRANSITION|PERMISSION_DENIED|VALIDATION_ERROR|TENANT_MISMATCH)\s*(?:\n|$)/u);
+    if(!match)throw Error('Unexpected isolated database failure');
+    return {data:null,error:{code:'P0001',message:match[1]}};
+   }
+   return {data:JSON.parse(output.stdout.trim()),error:null};
+  }},scope);
+  try {return {receipt:await api[kind](request)};}
+  catch(error) {return {error:error.code??'INTERNAL_ERROR'};}
  }));
 }
 function check(results,winners,errorCode) {
