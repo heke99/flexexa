@@ -20,13 +20,27 @@ are intentionally not part of this database/contract change.
 - Registration does not authorize control. Revoked state remains visible to the Kernel
   for rejection; actual consent, control authority and durable command fencing come later.
 
-## Verification discipline
-All eight previous migrations and all earlier tests are retained. The temporary
-proposal workflow uses a CLI-generated migration in disposable Supabase only.
-The permanent database workflow must remain tracked-only; it is expected to fail
-until the exact verified migration is promoted/committed and the proposal removed.
-Do not merge on proposal evidence alone. Final pinned application + tracked replay
-and live dev read-back are mandatory.
+## Executed verification
+- Proposal source `1c0552f3331ec0f948665ada3c67721a499a82b0`.
+- Run `34368966710`: clean isolated Supabase replay, all 201 pgTAP assertions,
+  82 shared core SQL/TypeScript fixtures, 32 core RPC race calls and 12 registry
+  binding race calls passed. One external-binding winner, eleven rejected overlaps.
+- Actual authenticated SQL route results for Enode and first-party OCPP were parsed
+  by the canonical TypeScript parser; original observation timestamp was preserved.
+- Run `34368966657` application job passed frozen install, lint, typecheck, source
+  tests and Next.js build. The proposal-stage tracked-only DB job correctly failed
+  before the new migration was committed; it was not bypassed or called green.
+- Reviewed artifact `10111165054`, SQL SHA256
+  `27ebf4b9e3fa4028ddd07103a8db60260ef7ce62d7b442ccde3b4098f13af9a6`.
+- Exact SQL applied to Stockholm development; authoritative version
+  `20260909151938`. Read-back matched all 13,973 bytes and the SHA256.
+- Live read-back: all three registry tables RLS enabled, six FKs, one temporal
+  exclusion, invoker route RPC, no anon EXECUTE, no browser credential-reference
+  SELECT, no customer/account/connection rows persisted. Providers stay suspended.
+- Security advisor: no new WARN/ERROR. Two existing INFO entries for intentionally
+  private outbox/idempotency tables with no browser policy remain; do not open them.
+- Temporary proposal SQL/workflow removed. Final tracked-only replay of this exact
+  committed migration and all canonical/concurrency checks is required before merge.
 
 Sources reviewed: Supabase Database Functions and RLS documentation, PostgreSQL 17
 constraints/exclusion constraints; locked V1 sections 35–39. No new provider API behavior

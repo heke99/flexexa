@@ -8,6 +8,12 @@
     "supabase/migrations/20260909111942_phase0_customer_site_asset_core.sql": "de14ea6a7e123f50276c5aa4f75083190beedbca6a4dc8dee6ddbdf2fed7757d",
     "supabase/migrations/20260909112319_phase0_authorization_invariants.sql": "b6fc8259f91b7fff722a2ffd3f6c270fdb3ed39568c6315ccd1b07670b881b9b",
     "supabase/migrations/20260909122536_phase0_canonical_core_v1.sql": "ffd5ae27dc138b1a7f3ae96a430af342075f0d5c616c21e36963fb99ae68289e",
-    "supabase/migrations/20260909131159_phase0_tenant_roles_temporal.sql": "42d8ba2dbc940f59baef1bb58bb3a427185f8d43207f9b5626a658ce465591d1"
-  }
+    "supabase/migrations/20260909131159_phase0_tenant_roles_temporal.sql": "42d8ba2dbc940f59baef1bb58bb3a427185f8d43207f9b5626a658ce465591d1",
+    "supabase/migrations/20260909135947_phase0_core_mutations.sql": "a63e6434eb93f2fab9674c73c620bd617b56024a9afd2d00527afa05f9850ed3",
+    "supabase/migrations/20260909151938_phase0_connect_registry.sql": "27ebf4b9e3fa4028ddd07103a8db60260ef7ce62d7b442ccde3b4098f13af9a6"
+  },
+  "appended_dev_verified_versions": [
+    "20260909135947",
+    "20260909151938"
+  ]
 }
