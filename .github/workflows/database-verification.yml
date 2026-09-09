@@ -1,0 +1,61 @@
+name: Supabase replay and authorization tests
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: db-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Initialize local-only config when absent
+        run: |
+          supabase --version
+          supabase init --help
+          test -f supabase/config.toml || supabase init
+      - name: Generate proposal migration using CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f supabase/proposals/phase0_authorization_invariants.sql; then
+            supabase migration new phase0_authorization_invariants
+            target=$(find supabase/migrations -name '*_phase0_authorization_invariants.sql' | sort | tail -n 1)
+            test -n "$target"
+            cp supabase/proposals/phase0_authorization_invariants.sql "$target"
+          fi
+      - name: Start isolated Supabase
+        run: supabase start
+      - name: Clean migration replay
+        run: supabase db reset --local
+      - name: Real PostgreSQL RLS and authorization tests
+        run: supabase test db
+      - name: Retain generated config and migration for source-controlled promotion
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flexexa-db-replay-inputs
+          path: |
+            supabase/config.toml
+            supabase/migrations/*_phase0_authorization_invariants.sql
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain exact tracked source snapshot for connector-based review
+        if: always()
+        run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flexexa-reviewed-source
+          path: /tmp/flexexa-reviewed-source.tar
+          retention-days: 1
+      - name: Stop local services
+        if: always()
+        run: supabase stop --no-backup
