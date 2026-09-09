@@ -190,3 +190,11 @@ idempotency, physical safety, an OAuth connection or completed phase readiness.
 
 ## Flexexa Connect ownership mandate
 Read `docs/architecture/ADR-0001-flexexa-connect.md` and `docs/progress/BUILD_STATUS.md` before continuing implementation. Flexexa must be an independent Enode-like connectivity platform **and** support Enode as one replaceable adapter. Canonical tenant/customer/site/asset identity, consent and control ownership remain in Flexexa. Never build an Enode-only backend, expose provider IDs as canonical identity, or activate competing control routes. Do not mark a later phase complete from skeletons, mock calls or a green frontend build alone.
+
+## Complete master-plan traceability
+Before a non-trivial change, run `pnpm plan:check` and read the relevant source points in
+`.flexexa/index/masterplan-report.json` alongside BUILD_STATUS. Preserve every locked
+section and phase. Coverage integrity is not implementation or production approval.
+Record only actually reviewed evidence for the exact scope and current source snapshot.
+Run `pnpm plan:ready` before claiming the entire plan complete; a failing readiness check
+must not be hidden by a green application, coverage or simulator job.

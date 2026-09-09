@@ -22,7 +22,8 @@ permanent paths. Ordinary database verification must run all twelve migrations, 
 307 and 48 new pgTAP assertions, existing 144 contract cases and 92 race calls, 40 new
 concurrent identity calls, existing typed mutation bridge and machine preflight checks.
 The identity test proves the same machine session loses permission after committed revocation.
-Final tracked-only CI and review are required on the final source head before merge.
+Final tracked-only run `34393440885` passed both jobs on head `6be0e820c5fa840377431970043c51eeece5a015`.
+PR #14 was reviewed and merged into foundation as `55db456dce07c0620f4f2d6138d5ab6590692b10`.
 
 ## Limits and follow-on
 No Auth user creation, secret delivery, service-principal enrollment, public HTTP endpoint,

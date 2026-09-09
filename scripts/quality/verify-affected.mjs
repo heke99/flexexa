@@ -10,6 +10,7 @@ function run(command,args){
  if(result.error) throw result.error;
  if(result.status!==0)process.exit(result.status??1);
 }
+run(process.execPath,['scripts/quality/masterplan-report.mjs','--check']);
 run(process.execPath,['scripts/quality/impact-analysis.mjs','--base',base]);
 const report=JSON.parse(fs.readFileSync(path.join(root,'.flexexa/index/impact-report.json'),'utf8'));
 const qualityTests=fs.readdirSync(path.join(root,'scripts/quality')).filter(file=>file.endsWith('.test.mjs')).map(file=>path.join('scripts/quality',file)).sort();
