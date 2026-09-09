@@ -14,7 +14,9 @@
     "test:quality": "node --test scripts/quality/*.test.mjs",
     "index:codebase": "node scripts/quality/build-codebase-index.mjs",
     "impact": "node scripts/quality/impact-analysis.mjs",
-    "verify:affected": "node scripts/quality/verify-affected.mjs"
+    "verify:affected": "node scripts/quality/verify-affected.mjs",
+    "plan:check": "node scripts/quality/masterplan-report.mjs --check",
+    "plan:ready": "node scripts/quality/masterplan-report.mjs --require-ready"
   },
   "devDependencies": {
     "turbo": "2.10.12",
