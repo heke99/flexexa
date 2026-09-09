@@ -1,0 +1,38 @@
+name: Prepare reviewed Connect lock blob
+on:
+  push:
+    branches: [feat/phase0-connect-foundation]
+    paths: [.github/workflows/prepare-connect-lock.yml]
+permissions:
+  contents: read
+jobs:
+  publish-reviewed-data:
+    if: github.repository == 'heke99/flexexa' && github.ref == 'refs/heads/feat/phase0-connect-foundation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish exact reviewed lock data only (no checkout, scripts, commits or ref updates)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request
+          base='https://api.github.com/repos/heke99/flexexa'
+          source='https://raw.githubusercontent.com/heke99/flexexa/bdd0b2674aed026196d69a3349225ea1f2d8577d/pnpm-lock.yaml'
+          with urllib.request.urlopen(source, timeout=30) as response:
+              data=response.read()
+          assert hashlib.sha256(data).hexdigest() == '00e0193c88925b58ce9d69192c925c7ff6989f05c78f51b6cca6783fced0de5b'
+          marker=b'  packages/api-contracts:\n'
+          assert data.count(marker) == 1
+          addition="  integrations/enode:\n    dependencies:\n      '@flexexa/domain':\n        specifier: workspace:*\n        version: link:../../packages/domain\n    devDependencies:\n      '@typescript/native':\n        specifier: npm:typescript@7.0.2\n        version: typescript@7.0.2\n      typescript:\n        specifier: npm:@typescript/typescript6@6.0.2\n        version: '@typescript/typescript6@6.0.2'\n\n".encode()
+          result=data.replace(marker, addition+marker)
+          assert hashlib.sha256(result).hexdigest() == '8249df0e19a3e37c4af5edb6cb86ff549da490234333a856154a602366b4fade'
+          request=urllib.request.Request(base+'/git/blobs',data=json.dumps({'content':result.decode(),'encoding':'utf-8'}).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},method='POST')
+          with urllib.request.urlopen(request, timeout=30) as response:
+              published=json.load(response)
+          assert published['sha'] == '4683184fc18b942b8cc583afa276cd41b2b2e352'
+          print('Reviewed blob:', published['sha'])
+          print('No dependencies changed; only the workspace importer was added. No refs updated.')
+          PY
