@@ -1,3 +1,5 @@
+import { connectEnvironment, providerKey } from "@flexexa/domain/connect";
+import type { ConnectEnvironment } from "@flexexa/domain/connect";
 import { DomainError, entityId, tenantId, assertSameTenant, record, text, exactKeys, assetType, decimalString, ianaTimezone } from "@flexexa/domain";
 import type { TenantId, CanonicalEntityId, ErrorCode, AssetType, DecimalString } from "@flexexa/domain";
 export interface ApiError { readonly code: ErrorCode; readonly message: string; readonly correlation_id: CanonicalEntityId }
@@ -101,4 +103,53 @@ export const parseCreateAssetRequest = (v: unknown, t: TenantId): MutationReques
 export function publicError(error: unknown, correlationId: unknown): ApiError {
   const code = error instanceof DomainError ? error.code : "INTERNAL_ERROR";
   return { code, message: code, correlation_id: entityId(correlationId) };
+}
+
+/** Inventory registration never grants consent, connects credentials or sends commands. */
+export interface RegisterProviderAccountPayload {
+  readonly customer_id: CanonicalEntityId;
+  readonly provider_key: string;
+  readonly environment: ConnectEnvironment;
+}
+export interface RevokeProviderAccountPayload {
+  readonly provider_account_id: CanonicalEntityId;
+  readonly environment: ConnectEnvironment;
+  readonly reason_code: "customer_request" | "security" | "administrative";
+}
+export interface ProviderAccountReceipt {
+  readonly tenant_id: TenantId;
+  readonly resource_type: "provider_account";
+  readonly resource_id: CanonicalEntityId;
+  readonly correlation_id: CanonicalEntityId;
+  readonly idempotency_key: string;
+  readonly environment: ConnectEnvironment;
+  readonly status: "registered" | "revoked";
+}
+export function parseRegisterProviderAccountPayload(value: unknown): RegisterProviderAccountPayload {
+  const p = record(value);
+  exactKeys(p, ["customer_id", "provider_key", "environment"]);
+  return Object.freeze({ customer_id: entityId(p.customer_id), provider_key: providerKey(p.provider_key), environment: connectEnvironment(p.environment) });
+}
+export function parseRevokeProviderAccountPayload(value: unknown): RevokeProviderAccountPayload {
+  const p = record(value);
+  exactKeys(p, ["provider_account_id", "environment", "reason_code"]);
+  if (p.reason_code !== "customer_request" && p.reason_code !== "security" && p.reason_code !== "administrative") throw new DomainError("VALIDATION_ERROR");
+  return Object.freeze({ provider_account_id: entityId(p.provider_account_id), environment: connectEnvironment(p.environment), reason_code: p.reason_code });
+}
+export const parseRegisterProviderAccountRequest = (v: unknown, t: TenantId): MutationRequest<RegisterProviderAccountPayload> => parseMutation(v, t, parseRegisterProviderAccountPayload);
+export const parseRevokeProviderAccountRequest = (v: unknown, t: TenantId): MutationRequest<RevokeProviderAccountPayload> => parseMutation(v, t, parseRevokeProviderAccountPayload);
+/** Receipts describe historical outcomes, not current connectivity or remote revocation. */
+export function parseProviderAccountReceipt(value: unknown, request: MutationRequest<RegisterProviderAccountPayload> | MutationRequest<RevokeProviderAccountPayload>): ProviderAccountReceipt {
+  const p = record(value);
+  exactKeys(p, ["tenant_id", "resource_type", "resource_id", "correlation_id", "idempotency_key", "environment", "status"]);
+  assertSameTenant(request.tenant_id, p.tenant_id);
+  const resource = entityId(p.resource_id);
+  const environment = connectEnvironment(p.environment);
+  const revocation = "provider_account_id" in request.payload;
+  if (environment !== request.payload.environment || p.idempotency_key !== request.idempotency_key ||
+      p.resource_type !== "provider_account" || p.status !== (revocation ? "revoked" : "registered") ||
+      (revocation && resource !== request.payload.provider_account_id)) throw new DomainError("VALIDATION_ERROR");
+  // A replay correctly retains the ORIGINAL correlation ID; it need not match this retry.
+  return Object.freeze({ tenant_id: tenantId(p.tenant_id), resource_type: "provider_account", resource_id: resource,
+    correlation_id: entityId(p.correlation_id), idempotency_key: request.idempotency_key, environment, status: revocation ? "revoked" : "registered" });
 }
