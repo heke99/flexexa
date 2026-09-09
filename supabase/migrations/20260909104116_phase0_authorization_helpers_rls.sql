@@ -1,0 +1,234 @@
+create schema if not exists private;
+
+revoke all on schema private from public;
+revoke all on all tables in schema private from public;
+revoke all on all functions in schema private from public;
+
+create or replace function private.flexexa_current_membership_id(p_tenant_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, auth, pg_temp
+as $$
+  select m.id
+  from public.memberships m
+  where m.tenant_id = p_tenant_id
+    and m.user_id = auth.uid()
+    and m.status = 'active'
+  limit 1
+$$;
+
+revoke all on function private.flexexa_current_membership_id(uuid) from public;
+grant execute on function private.flexexa_current_membership_id(uuid) to authenticated;
+
+create or replace function public.flexexa_is_tenant_member(p_tenant_id uuid)
+returns boolean language sql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+  select exists (
+    select 1 from public.memberships m
+    where m.tenant_id = p_tenant_id and m.user_id = auth.uid() and m.status = 'active'
+  )
+$$;
+
+revoke all on function public.flexexa_is_tenant_member(uuid) from public;
+grant execute on function public.flexexa_is_tenant_member(uuid) to authenticated;
+
+create or replace function public.flexexa_has_role(p_tenant_id uuid, p_role_key text)
+returns boolean language sql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.memberships m
+    join public.membership_roles mr on mr.tenant_id=m.tenant_id and mr.membership_id=m.id
+    join public.roles r on r.id=mr.role_id
+    where m.tenant_id=p_tenant_id and m.user_id=auth.uid() and m.status='active'
+      and r.role_key=lower(p_role_key) and r.scope='tenant'
+  )
+$$;
+
+revoke all on function public.flexexa_has_role(uuid, text) from public;
+grant execute on function public.flexexa_has_role(uuid, text) to authenticated;
+
+create or replace function public.flexexa_is_platform_admin()
+returns boolean language sql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.platform_memberships pm
+    join public.platform_membership_roles pmr on pmr.platform_membership_id=pm.id
+    join public.roles r on r.id=pmr.role_id
+    where pm.user_id=auth.uid() and pm.status='active'
+      and r.role_key in ('superadmin','platform_admin') and r.scope='platform'
+  )
+$$;
+
+revoke all on function public.flexexa_is_platform_admin() from public;
+grant execute on function public.flexexa_is_platform_admin() to authenticated;
+
+create or replace function public.flexexa_is_superadmin()
+returns boolean language sql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.platform_memberships pm
+    join public.platform_membership_roles pmr on pmr.platform_membership_id=pm.id
+    join public.roles r on r.id=pmr.role_id
+    where pm.user_id=auth.uid() and pm.status='active'
+      and r.role_key='superadmin' and r.scope='platform'
+  )
+$$;
+
+revoke all on function public.flexexa_is_superadmin() from public;
+grant execute on function public.flexexa_is_superadmin() to authenticated;
+
+create or replace function public.flexexa_has_permission(p_tenant_id uuid, p_permission_key text)
+returns boolean language sql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+  with current_membership as (
+    select m.id from public.memberships m
+    where m.tenant_id=p_tenant_id and m.user_id=auth.uid() and m.status='active' limit 1
+  ),
+  target_permission as (
+    select p.id from public.permissions p where p.permission_key=lower(p_permission_key) limit 1
+  ),
+  override_effect as (
+    select mpo.effect
+    from current_membership cm
+    join target_permission tp on true
+    join public.membership_permission_overrides mpo
+      on mpo.tenant_id=p_tenant_id and mpo.membership_id=cm.id and mpo.permission_id=tp.id
+    limit 1
+  ),
+  role_allow as (
+    select exists (
+      select 1 from current_membership cm
+      join public.membership_roles mr on mr.tenant_id=p_tenant_id and mr.membership_id=cm.id
+      join public.role_permissions rp on rp.role_id=mr.role_id
+      join target_permission tp on tp.id=rp.permission_id
+    ) as allowed
+  )
+  select case
+    when public.flexexa_is_platform_admin() then true
+    when exists (select 1 from override_effect where effect='deny') then false
+    when exists (select 1 from override_effect where effect='allow') then true
+    else coalesce((select allowed from role_allow), false)
+  end
+$$;
+
+revoke all on function public.flexexa_has_permission(uuid, text) from public;
+grant execute on function public.flexexa_has_permission(uuid, text) to authenticated;
+
+create or replace function public.flexexa_effective_permissions(p_tenant_id uuid)
+returns setof text language sql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+  with current_membership as (
+    select m.id from public.memberships m
+    where m.tenant_id=p_tenant_id and m.user_id=auth.uid() and m.status='active' limit 1
+  ),
+  role_perms as (
+    select distinct p.permission_key, p.id
+    from current_membership cm
+    join public.membership_roles mr on mr.tenant_id=p_tenant_id and mr.membership_id=cm.id
+    join public.role_permissions rp on rp.role_id=mr.role_id
+    join public.permissions p on p.id=rp.permission_id
+  ),
+  allows as (
+    select p.permission_key, p.id
+    from current_membership cm
+    join public.membership_permission_overrides mpo
+      on mpo.tenant_id=p_tenant_id and mpo.membership_id=cm.id and mpo.effect='allow'
+    join public.permissions p on p.id=mpo.permission_id
+  ),
+  denies as (
+    select mpo.permission_id
+    from current_membership cm
+    join public.membership_permission_overrides mpo
+      on mpo.tenant_id=p_tenant_id and mpo.membership_id=cm.id and mpo.effect='deny'
+  ),
+  combined as (
+    select * from role_perms
+    union
+    select * from allows
+  )
+  select c.permission_key
+  from combined c
+  where not exists (select 1 from denies d where d.permission_id=c.id)
+  union
+  select p.permission_key from public.permissions p where public.flexexa_is_platform_admin()
+$$;
+
+revoke all on function public.flexexa_effective_permissions(uuid) from public;
+grant execute on function public.flexexa_effective_permissions(uuid) to authenticated;
+
+create or replace function public.flexexa_assert_permission(p_tenant_id uuid, p_permission_key text)
+returns void language plpgsql stable security definer
+set search_path = public, auth, pg_temp
+as $$
+begin
+  if not public.flexexa_has_permission(p_tenant_id, p_permission_key) then
+    raise exception using errcode='42501', message='PERMISSION_DENIED',
+      detail=format('permission=%s tenant=%s',p_permission_key,p_tenant_id);
+  end if;
+end
+$$;
+
+revoke all on function public.flexexa_assert_permission(uuid, text) from public;
+grant execute on function public.flexexa_assert_permission(uuid, text) to authenticated;
+
+create policy organizations_platform_read on public.organizations
+for select to authenticated using (public.flexexa_is_platform_admin());
+
+create policy tenants_member_or_platform_read on public.tenants
+for select to authenticated using (public.flexexa_is_tenant_member(id) or public.flexexa_is_platform_admin());
+
+create policy permissions_authenticated_read on public.permissions
+for select to authenticated using (true);
+
+create policy roles_authenticated_read on public.roles
+for select to authenticated using (true);
+
+create policy role_permissions_authenticated_read on public.role_permissions
+for select to authenticated using (true);
+
+create policy memberships_self_or_authorized_read on public.memberships
+for select to authenticated using (
+  user_id=auth.uid() or public.flexexa_has_permission(tenant_id,'membership.read') or public.flexexa_is_platform_admin()
+);
+
+create policy membership_roles_authorized_read on public.membership_roles
+for select to authenticated using (public.flexexa_is_tenant_member(tenant_id) or public.flexexa_is_platform_admin());
+
+create policy membership_overrides_authorized_read on public.membership_permission_overrides
+for select to authenticated using (public.flexexa_has_permission(tenant_id,'role.read') or public.flexexa_is_platform_admin());
+
+create policy platform_memberships_self_or_platform_read on public.platform_memberships
+for select to authenticated using (user_id=auth.uid() or public.flexexa_is_platform_admin());
+
+create policy platform_membership_roles_platform_read on public.platform_membership_roles
+for select to authenticated using (public.flexexa_is_platform_admin());
+
+create policy service_identities_platform_read on public.service_identities
+for select to authenticated using (public.flexexa_is_platform_admin());
+
+create policy service_identity_grants_platform_read on public.service_identity_tenant_grants
+for select to authenticated using (public.flexexa_is_platform_admin());
+
+create policy api_clients_authorized_read on public.api_clients
+for select to authenticated using (public.flexexa_has_permission(tenant_id,'developer.api') or public.flexexa_is_platform_admin());
+
+create policy api_client_permissions_authorized_read on public.api_client_permissions
+for select to authenticated using (public.flexexa_has_permission(tenant_id,'developer.api') or public.flexexa_is_platform_admin());
+
+grant select on public.permissions, public.roles, public.role_permissions to authenticated;
+grant select on public.tenants, public.memberships, public.membership_roles,
+  public.membership_permission_overrides, public.platform_memberships,
+  public.platform_membership_roles, public.service_identities,
+  public.service_identity_tenant_grants, public.api_clients,
+  public.api_client_permissions, public.organizations to authenticated;
