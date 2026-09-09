@@ -17,7 +17,7 @@ Created and read-back verified:
 - GitHub OIDC provider: `token.actions.githubusercontent.com`
   - audience: `sts.amazonaws.com`
 - PR plan role: `arn:aws:iam::938095765653:role/flexexa-github-plan`
-  - trust limited to `repo:heke99/flexexa:pull_request`
+  - trust limited to `repo:heke99/flexexa:*`; the role itself is read-only and has no state-write permission
   - AWS managed `ReadOnlyAccess`
   - custom state policy `FlexexaTofuStateReadOnly`
 - Root MFA verified enabled before bootstrap.
