@@ -18,13 +18,6 @@ jobs:
           version: 2.117.0
       - name: Check tracked configuration
         run: test -f supabase/config.toml
-      - name: Materialize proposed RBAC migration
-        shell: bash
-        run: |
-          set -euo pipefail
-          supabase migration new phase0_tenant_roles_temporal
-          target=$(find supabase/migrations -name '*_phase0_tenant_roles_temporal.sql' | sort | tail -n 1)
-          cp supabase/proposals/phase0_tenant_roles_temporal.sql "$target"
       - name: Start isolated Supabase
         run: supabase start
       - name: Clean migration replay
