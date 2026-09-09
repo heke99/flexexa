@@ -1,4 +1,4 @@
-name: Phase 0 bootstrap verification
+name: Phase 0 verification
 
 on:
   pull_request:
@@ -6,15 +6,13 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  bootstrap:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -22,19 +20,8 @@ jobs:
         run: corepack enable
       - name: Prepare pnpm
         run: corepack prepare pnpm@12.3.4 --activate
-      - name: Generate lockfile and install
-        run: pnpm install --no-frozen-lockfile
-      - name: Commit lockfile when generated
-        run: |
-          if git diff --quiet -- pnpm-lock.yaml && git ls-files --error-unmatch pnpm-lock.yaml >/dev/null 2>&1; then
-            echo "pnpm-lock.yaml already committed"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add pnpm-lock.yaml
-            git commit -m "chore: lock Phase 0 dependencies"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
+      - name: Install
+        run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
       - name: Build
