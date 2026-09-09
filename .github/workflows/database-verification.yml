@@ -44,6 +44,7 @@ jobs:
           python3 scripts/database/verify-connect.py
           python3 scripts/database/verify-provider-accounts.py
           node --experimental-strip-types scripts/database/verify-rpc-transport.mjs
+          node --experimental-strip-types scripts/database/verify-machine-authorization.mjs
       - name: Retain exact migration replay inputs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
