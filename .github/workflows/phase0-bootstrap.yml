@@ -1,0 +1,35 @@
+name: Phase 0 bootstrap verification
+
+on:
+  push:
+    branches:
+      - phase/0-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Prepare pnpm
+        run: corepack prepare pnpm@12.3.4 --activate
+      - name: Generate lockfile and install
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+      - name: Upload generated lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-pnpm-lock
+          path: pnpm-lock.yaml
+          if-no-files-found: error
