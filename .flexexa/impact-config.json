@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "risk": {
+    "highPrefixes": [
+      "packages/domain/",
+      "packages/kernel/",
+      "packages/events/",
+      "packages/api-contracts/",
+      "supabase/migrations/",
+      "infra/",
+      "opentofu/",
+      ".github/workflows/"
+    ],
+    "highTerms": [
+      "rls",
+      "rbac",
+      "rules",
+      "policy",
+      "optimizer",
+      "dispatch",
+      "settlement",
+      "ledger",
+      "reservation",
+      "flex"
+    ]
+  },
+  "generatedIndexDirectory": ".flexexa/index",
+  "note": "Generated JSON is not committed; regenerate with pnpm index:codebase."
+}
