@@ -87,7 +87,7 @@ export function parseCreateAssetPayload(value: unknown): CreateAssetPayload {
     rated_power_kw: boundedDecimal(p.rated_power_kw, 9), energy_capacity_kwh: boundedDecimal(p.energy_capacity_kwh, 11) });
 }
 /** expectedTenant is authenticated server context; the RPC reauthorizes independently. */
-function parseMutation<T>(value: unknown, expectedTenant: TenantId, parsePayload: (value: unknown) => T): MutationRequest<T> {
+export function parseMutation<T>(value: unknown, expectedTenant: TenantId, parsePayload: (value: unknown) => T): MutationRequest<T> {
   const input = record(value);
   exactKeys(input, ["tenant_id", "idempotency_key", "correlation_id", "payload"]);
   assertSameTenant(expectedTenant, input.tenant_id);
