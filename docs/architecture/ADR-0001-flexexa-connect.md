@@ -8,7 +8,7 @@ Flexexa is both an Enode customer/integration and an independent connectivity pl
 Flexexa owns tenant/customer/site/asset identity, consent, permissions, capabilities, normalized state, verified command history, pricing/optimization, external APIs, SDKs and webhooks. Each provider owns only its adapter-local credentials, external identifiers and protocol translation. One physical device can have multiple read sources but only one authorized active control route for a control scope. Never issue the same action through both Enode and a direct provider.
 
 ## Mandatory boundaries
-- `providers` is a versioned platform registry. `provider_accounts` and asset links are tenant owned, with composite tenant/owner foreign keys. Provider external IDs are scoped by provider account, not globally assumed unique.
+- `integration_providers` is the canonical versioned platform registry (V1 §36). `provider_accounts` and asset links are tenant owned, with composite tenant/owner foreign keys. Provider external IDs are scoped by provider account, not globally assumed unique.
 - A provider connection cannot invent or move the canonical customer/site/asset owner. Linking/relinking is an authorized transactional RPC with audit, consent and idempotency. Provider-discovered data is untrusted input.
 - Discovery must reconcile against existing asset links. Stable canonical asset IDs survive provider migration and disconnection. No fuzzy cross-tenant or VIN-only automatic ownership merge.
 - Normalize units, timestamps, quality, freshness, capabilities and provenance at adapter boundaries. Provider acknowledgement is not verified physical execution. Manual nameplate data never grants controllability.

@@ -25,12 +25,6 @@ jobs:
           test -f supabase/config.toml
           test -n "$(find supabase/migrations -name '*_phase0_authorization_invariants.sql')"
           test -f supabase/migrations/20260909111942_phase0_customer_site_asset_core.sql
-      - name: Materialize proposed core migration
-        run: |
-          set -euo pipefail
-          supabase migration new phase0_core_mutations
-          target=$(find supabase/migrations -name '*_phase0_core_mutations.sql' | sort | tail -n 1)
-          cp supabase/proposals/phase0_core_mutations.sql "$target"
       - name: Start isolated Supabase
         run: supabase start
       - name: Clean migration replay
