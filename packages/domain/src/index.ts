@@ -17,7 +17,7 @@ export function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 export function text(value: unknown, max = 200): string {
-  if (typeof value !== "string" || value.length > max || value.trim().length === 0 || /[\u0000-\u001f\u007f]/u.test(value)) throw new DomainError("VALIDATION_ERROR");
+  if (typeof value !== "string" || Array.from(value).length > max || value.trim().length === 0 || /[\uD800-\uDFFF]/u.test(value) || /[\u0000-\u001f\u007f]/u.test(value)) throw new DomainError("VALIDATION_ERROR");
   return value.trim();
 }
 export function exactKeys(value: Record<string, unknown>, keys: readonly string[]): void {
@@ -25,7 +25,7 @@ export function exactKeys(value: Record<string, unknown>, keys: readonly string[
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 export function entityId(value: unknown): CanonicalEntityId {
-  if (typeof value !== "string" || !UUID.test(value)) throw new DomainError("VALIDATION_ERROR");
+  if (typeof value !== "string" || value.length !== 36 || !UUID.test(value)) throw new DomainError("VALIDATION_ERROR");
   return value.toLowerCase() as CanonicalEntityId;
 }
 export function tenantId(value: unknown): TenantId { return entityId(value) as string as TenantId; }
@@ -51,7 +51,7 @@ export function interval(startsAt: unknown, endsAt: unknown): { starts_at: UtcIn
   return { starts_at, ends_at };
 }
 export function decimalString(value: unknown, scale = 6, allowNegative = false): DecimalString {
-  if (!Number.isInteger(scale) || scale < 0 || scale > 18 || typeof value !== "string" || value.length > 80 || !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(value)) throw new DomainError("VALIDATION_ERROR");
+  if (!Number.isInteger(scale) || scale < 0 || scale > 18 || typeof value !== "string" || value.trim() !== value || value.length > 80 || !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(value)) throw new DomainError("VALIDATION_ERROR");
   const negative = value.startsWith("-"), absolute = negative ? value.slice(1) : value;
   const [whole = "0", fraction = ""] = absolute.split(".");
   if (fraction.length > scale || (negative && !allowNegative)) throw new DomainError("VALIDATION_ERROR");
