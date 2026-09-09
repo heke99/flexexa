@@ -12,6 +12,7 @@
   "workspace_dependency_graph": "acyclic",
   "current_lock_sha256": "8249df0e19a3e37c4af5edb6cb86ff549da490234333a856154a602366b4fade",
   "current_lock_bytes": 139373,
-  "frozen_install": "NOT_RUN_PNPM_UNAVAILABLE",
-  "note": "Structural consistency is not an authoritative pnpm frozen-install or build result."
+  "frozen_install": "PASS_CI_RUN_34360583310",
+  "note": "The original structural review is supplemented by the pinned frozen install; future changes require a fresh run.",
+  "verified_commit": "b7dd6571d5ab5dc31e8144528b0dad7d2527bf79"
 }

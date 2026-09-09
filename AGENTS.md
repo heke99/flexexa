@@ -180,7 +180,7 @@ Codex Security is not a dependency. Security review must remain executable with 
 
 ## Flexexa Connect — mandatory continuation context
 
-Read `docs/architecture/ADR-0001-flexexa-connect.md` and
+Read `docs/architecture/connect-adapter-boundary.md` and
 `docs/progress/phase0-connect-handoff.md` before provider/integration work.
 Flexexa builds its own Enode-like connectivity layer; Enode is optional, not the
 canonical data model or default control authority. Preserve first-party adapter support.

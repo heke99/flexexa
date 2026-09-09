@@ -12,7 +12,7 @@ export async function verifyEnodeDelivery(
     throw new DomainError("VALIDATION_ERROR");
   }
   if (typeof secret !== "string" || secret.length === 0 || secret.length > 4096) throw new DomainError("VALIDATION_ERROR");
-  if (typeof signature !== "string" || !/^sha1=[0-9a-f]{40}$/u.test(signature)) throw new DomainError("PERMISSION_DENIED");
+  if (typeof signature !== "string" || signature.length !== 45 || !/^sha1=[0-9a-f]{40}$/u.test(signature)) throw new DomainError("PERMISSION_DENIED");
   // Snapshot before the first await: mutation by a caller cannot swap verified bytes.
   const payload = new Uint8Array(rawBody), expected = new Uint8Array(20);
   for (let i = 0; i < expected.length; i++) expected[i] = Number.parseInt(signature.slice(5 + i * 2, 7 + i * 2), 16);

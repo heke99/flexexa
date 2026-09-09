@@ -14,4 +14,4 @@ persist deduplication. Its output must feed the future transactional inbox and
 versioned event decoder; a signed body is not itself permission to control a device.
 
 Run package tests through `pnpm --filter @flexexa/enode-adapter test` in the pinned
-workspace toolchain. See ADR-0001 for security invariants and remaining implementation.
+workspace toolchain. See docs/architecture/connect-adapter-boundary.md for security invariants and remaining implementation.

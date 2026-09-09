@@ -1,4 +1,4 @@
-# ADR-0001 — Flexexa Connect owns connectivity; Enode is optional
+# Flexexa Connect — provider-neutral adapter boundary
 
 Status: accepted product direction, implementation partial. User reaffirmed 2026-09-09.
 Baseline: `FLEXEXA_MASTER_BUILD_PROMPT_V1.md` §§3, 35–39, 66–70, 83–87.

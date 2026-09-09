@@ -1,6 +1,7 @@
 # Phase 0 Connect — tested local implementation and exact handoff
 
-Date: 2026-09-09. **Not pushed, not merged, not deployed. Phase 0 remains incomplete.**
+Historical local handoff, 2026-09-09. The local-only statements below describe the earlier delivery.
+**Current publication/verification status is maintained in `phase0-connect-promotion.md`.**
 
 ## Product requirement (binding)
 
@@ -8,7 +9,7 @@ Flexexa must support Enode AND operate as its own provider-neutral connectivity
 platform. The canonical inventory, customer/site/asset identity, policy, control,
 optimizer and settlement belong to Flexexa. Enode is replaceable; first-party
 OCPP/OEM/Edge routes must work without an Enode account. Read
-`docs/architecture/ADR-0001-flexexa-connect.md` before extending this code.
+`docs/architecture/connect-adapter-boundary.md` before extending this code.
 The locked V1 master document is unchanged.
 
 ## Source and synchronization
