@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { tenantId } from '@flexexa/domain';
+import { parseTenantEvent } from '../src/index.ts';
+const A=tenantId('a0000000-0000-4000-8000-000000000001');
+const base=()=>({event_id:A,event_type:'asset.connected',event_version:1,occurred_at:'2026-09-09T12:00:00Z',received_at:'2026-09-09T12:00:01Z',tenant_id:A,organization_id:null,correlation_id:A,causation_id:null,source:'mock',payload:{power_kw:11}});
+test('tenant event preserves provenance and canonical UTC',()=>{const v=parseTenantEvent(base(),A);assert.equal(v.tenant_id,A);assert.equal(v.event_type,'asset.connected');assert.equal(v.occurred_at,'2026-09-09T12:00:00.000Z');});
+test('event cannot cross tenant or become a platform event',()=>{assert.throws(()=>parseTenantEvent({...base(),tenant_id:'b0000000-0000-4000-8000-000000000001'},A),{code:'TENANT_MISMATCH'});assert.throws(()=>parseTenantEvent({...base(),tenant_id:null},A));});
+test('envelope rejects malformed versions and missing provenance',()=>{for(const event_version of [0,-1,1.1,'1',NaN])assert.throws(()=>parseTenantEvent({...base(),event_version},A));assert.throws(()=>parseTenantEvent({...base(),is_admin:true},A));const input=base();delete input.source;assert.throws(()=>parseTenantEvent(input,A));});
+test('payload rejects non-JSON, prototype keys, cycles and excessive depth',()=>{for(const payload of [undefined,()=>1,{x:NaN},JSON.parse('{"__proto__":{"admin":true}}')])assert.throws(()=>parseTenantEvent({...base(),payload},A));const cycle={};cycle.self=cycle;assert.throws(()=>parseTenantEvent({...base(),payload:cycle},A));let deep={};for(let i=0;i<40;i++)deep={child:deep};assert.throws(()=>parseTenantEvent({...base(),payload:deep},A));});
