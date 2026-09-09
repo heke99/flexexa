@@ -21,3 +21,7 @@ OpenTofu is the authoritative IaC layer for Flexexa AWS infrastructure.
 7. Apply only after read-back verification.
 
 Do not create ECS, Amazon MQ, Valkey, S3 application buckets, KMS keys or networking manually in the console.
+
+
+## Current live bootstrap
+See `bootstrap/README.md`. PR planning uses no stored AWS keys.

@@ -1,0 +1,66 @@
+name: OpenTofu AWS plan
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/opentofu/**"
+      - ".github/workflows/opentofu-plan.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan-dev:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-plan
+          aws-region: eu-north-1
+          allowed-account-ids: 938095765653
+          role-session-name: flexexa-pr-plan-${{ github.run_id }}
+
+      - name: Check formatting
+        run: tofu fmt -check -recursive infra/opentofu
+
+      - name: Initialize dev backend
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          cat > /tmp/flexexa-backend.hcl <<'EOF'
+          bucket = "flexexa-tofu-state-938095765653"
+          key    = "flexexa/dev/foundation.tfstate"
+          region = "eu-north-1"
+          EOF
+          tofu init -input=false -backend-config=/tmp/flexexa-backend.hcl
+
+      - name: Validate dev configuration
+        working-directory: infra/opentofu/environments/dev
+        run: tofu validate
+
+      - name: Plan dev foundation
+        working-directory: infra/opentofu/environments/dev
+        run: tofu plan -input=false -lock=false -no-color -out=tfplan
+
+      - name: Render plan
+        working-directory: infra/opentofu/environments/dev
+        run: tofu show -no-color tfplan > tfplan.txt
+
+      - name: Upload plan evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: flexexa-opentofu-dev-plan
+          path: infra/opentofu/environments/dev/tfplan.txt
+          if-no-files-found: error
