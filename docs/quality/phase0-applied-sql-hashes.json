@@ -10,10 +10,12 @@
     "supabase/migrations/20260909122536_phase0_canonical_core_v1.sql": "ffd5ae27dc138b1a7f3ae96a430af342075f0d5c616c21e36963fb99ae68289e",
     "supabase/migrations/20260909131159_phase0_tenant_roles_temporal.sql": "42d8ba2dbc940f59baef1bb58bb3a427185f8d43207f9b5626a658ce465591d1",
     "supabase/migrations/20260909135947_phase0_core_mutations.sql": "a63e6434eb93f2fab9674c73c620bd617b56024a9afd2d00527afa05f9850ed3",
-    "supabase/migrations/20260909151938_phase0_connect_registry.sql": "27ebf4b9e3fa4028ddd07103a8db60260ef7ce62d7b442ccde3b4098f13af9a6"
+    "supabase/migrations/20260909151938_phase0_connect_registry.sql": "27ebf4b9e3fa4028ddd07103a8db60260ef7ce62d7b442ccde3b4098f13af9a6",
+    "supabase/migrations/20260909155618_phase0_provider_account_lifecycle.sql": "e2bd33a61de22d7e41a04f02eb695ecb9d72954dab41875fc22189a857c5738e"
   },
   "appended_dev_verified_versions": [
     "20260909135947",
-    "20260909151938"
+    "20260909151938",
+    "20260909155618"
   ]
 }

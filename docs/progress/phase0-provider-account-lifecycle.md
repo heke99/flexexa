@@ -29,3 +29,25 @@ This is NOT OAuth linking, user consent, service-client authentication or physic
 
 Next: consent/link/discovery transactions and authenticated provider event ingestion, then
 safe device shadow/control. Enode and direct OCPP/OEM paths use the same canonical ownership.
+
+## Executed proposal and development evidence
+- Source head `c0b7e9a42101779f5ab64788fa3e1ac7222cb38d`.
+- Pinned application job `102538686598`, run `34373010841`: SUCCESS.
+- Isolated proposal job `102538686862`, run `34373011041`: all migration replay,
+  PostgreSQL tests and core/registry/account concurrency checks passed.
+- CLI generated `20260909155147_phase0_provider_account_lifecycle.sql` during testing.
+- Reviewed artifact `10112779761` exactly matched all 8,512 SQL bytes; SHA256
+  `e2bd33a61de22d7e41a04f02eb695ecb9d72954dab41875fc22189a857c5738e`.
+- Applied that exact SQL to Stockholm development. Supabase assigned authoritative
+  version `20260909155618`; fresh read-back matched byte length and SHA256.
+- Live catalog read-back: two public invoker wrappers, one guarded private definer;
+  all four functions have empty search_path; anonymous EXECUTE denied on all four;
+  internal normalizer also denied to authenticated callers.
+- Post-change security advisor has no WARN/ERROR; the same two INFO notices for
+  intentionally private receipt/outbox tables remain. Do not add browser policies.
+- No business fixtures or provider HTTP calls executed in development.
+- Temporary proposal workflow/SQL removed. All ten tracked migrations and permanent
+  contract/concurrency gates must pass on the final head. Final result is recorded in PR #10.
+
+Skills: Supabase, Postgres best practices, codebase index/impact, security review and
+verification. No UI behavior, AWS runtime or external provider transport changed.
