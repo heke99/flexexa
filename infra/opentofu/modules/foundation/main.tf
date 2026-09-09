@@ -1,5 +1,5 @@
 locals {
-  name_prefix = "${var.project}-${var.environment}"
+  name_prefix  = "${var.project}-${var.environment}"
   selected_azs = slice(var.availability_zones, 0, 2)
 
   public_subnets = {
