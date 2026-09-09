@@ -1,18 +1,1 @@
-{
-  "name": "@flexexa/kernel",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "test": "node -e \"console.log('kernel tests pending')\""
-  },
-  "devDependencies": {
-    "typescript": "7.0.2"
-  }
-}
+{"name":"@flexexa/kernel","version":"0.0.0","private":true,"type":"module","exports":{".":"./src/index.ts"},"scripts":{"build":"tsc --noEmit","lint":"eslint src","typecheck":"tsc --noEmit","test":"node --experimental-strip-types --test test/*.test.mjs"},"dependencies":{"@flexexa/domain":"workspace:*"},"devDependencies":{"typescript":"7.0.2"}}

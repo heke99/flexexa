@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0
@@ -21,26 +21,17 @@ jobs:
           supabase --version
           test -f supabase/config.toml
           test -n "$(find supabase/migrations -name '*_phase0_authorization_invariants.sql')"
+          test -f supabase/migrations/20260909111942_phase0_customer_site_asset_core.sql
       - name: Start isolated Supabase
         run: supabase start
       - name: Clean migration replay
         run: supabase db reset --local
       - name: Real PostgreSQL RLS and authorization tests
         run: supabase test db
-      - name: Retain source-controlled replay inputs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flexexa-db-replay-inputs
-          path: |
-            supabase/config.toml
-            supabase/migrations/*_phase0_authorization_invariants.sql
-          if-no-files-found: error
-          retention-days: 7
       - name: Retain tracked source snapshot for review
         if: always()
         run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: flexexa-reviewed-source
@@ -51,12 +42,12 @@ jobs:
         run: supabase stop --no-backup
   application:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
       - name: Install pinned package manager and dependencies
@@ -64,7 +55,13 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
           pnpm install --frozen-lockfile
-      - name: Index and verify changed scope
+      - name: Verify application scope (database and infrastructure are separate gates)
         env:
           IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
-        run: pnpm verify:affected -- --base "$IMPACT_BASE"
+        run: pnpm verify:affected -- --base "$IMPACT_BASE" --application-only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-application-verification
+          path: .flexexa/index/*.json
+          retention-days: 7

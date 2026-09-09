@@ -1,27 +1,26 @@
-import fs from "node:fs";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 const root=process.cwd();
-function arg(name,fallback){const i=process.argv.indexOf(name);return i>=0&&process.argv[i+1]?process.argv[i+1]:fallback;}
-function run(cmd,args){
-  console.log("> "+cmd+" "+args.join(" "));
-  const r=spawnSync(cmd,args,{cwd:root,stdio:"inherit",shell:process.platform==="win32"});
-  if(r.status!==0) process.exit(r.status??1);
+const applicationOnly=process.argv.includes('--application-only');
+const i=process.argv.indexOf('--base'),base=i<0?(process.env.IMPACT_BASE||'origin/main'):process.argv[i+1];
+function run(command,args){
+ console.log(`> ${command} ${args.join(' ')}`);
+ const result=spawnSync(command,args,{cwd:root,stdio:'inherit',shell:false});
+ if(result.error) throw result.error;
+ if(result.status!==0)process.exit(result.status??1);
 }
-const base=arg("--base",process.env.IMPACT_BASE||"origin/main");
-run(process.execPath,[path.join(root,"scripts/quality/build-codebase-index.mjs")]);
-run(process.execPath,[path.join(root,"scripts/quality/impact-analysis.mjs"),"--base",base]);
-const report=JSON.parse(fs.readFileSync(path.join(root,".flexexa","index","impact-report.json"),"utf8"));
-
-if(report.fullSuiteRequired){
-  run("pnpm",["typecheck"]);
-  run("pnpm",["test"]);
-  run("pnpm",["build"]);
-}else{
-  run("pnpm",["exec","turbo","typecheck","test","build","--affected"]);
+run(process.execPath,['scripts/quality/impact-analysis.mjs','--base',base]);
+const report=JSON.parse(fs.readFileSync(path.join(root,'.flexexa/index/impact-report.json'),'utf8'));
+run(process.execPath,['--test','scripts/quality/impact.test.mjs']);
+const tasks=['lint','typecheck','test','build'];
+if(report.fullSuiteRequired){for(const task of tasks)run('pnpm',[task]);}
+else run('pnpm',['exec','turbo','run',...tasks,...report.impactedPackages.map(p=>`--filter=${p}`)]);
+const pending=report.requiredChecks.filter(c=>!['application','canonical-contract-tests'].includes(c));
+const result={head:report.head,mergeBase:report.mergeBase,scope:'application',applicationPassed:true,pendingSpecializedChecks:pending,fullyVerified:pending.length===0};
+fs.writeFileSync(path.join(root,'.flexexa/index/verification-report.json'),JSON.stringify(result,null,2)+'\n');
+console.log('Application checks passed (lint, typecheck, real tests, build).');
+if(pending.length){
+ console.log(`NOT full verification. Separate checks still required: ${pending.join(', ')}`);
+ if(!applicationOnly)process.exit(2);
 }
-console.log("Flexexa affected verification passed at risk "+report.risk+".");
-const basic=new Set(["index","impact","full-typecheck","full-test","full-build","turbo-affected"]);
-const specialized=report.requiredChecks.filter(x=>!basic.has(x));
-if(specialized.length) console.log("Domain-specific checks required by review policy: "+specialized.join(", "));

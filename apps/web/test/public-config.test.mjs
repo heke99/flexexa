@@ -1,0 +1,4 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { publicConnectionConfig } from '../src/lib/public-config.ts';
+test('public config accepts publishable keys and secure/local origins only',()=>{assert.equal(publicConnectionConfig('https://example.supabase.co','sb_publishable_fixture').url,'https://example.supabase.co');assert.equal(publicConnectionConfig('http://127.0.0.1:54321','sb_publishable_fixture').url,'http://127.0.0.1:54321');for(const key of ['sb_secret_fixture','eyJhbGciOi...','',null])assert.throws(()=>publicConnectionConfig('https://example.supabase.co',key));for(const url of ['http://example.com','https://user:pass@example.com','https://example.com?x=y','https://example.com/path'])assert.throws(()=>publicConnectionConfig(url,'sb_publishable_fixture'));});
