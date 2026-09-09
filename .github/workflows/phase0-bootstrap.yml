@@ -1,9 +1,9 @@
 name: Phase 0 bootstrap verification
 
 on:
-  push:
+  pull_request:
     branches:
-      - phase/0-foundation
+      - main
 
 permissions:
   contents: read
