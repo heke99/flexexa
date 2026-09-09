@@ -30,3 +30,15 @@ Created and read-back verified:
 State storage and the initial GitHub OIDC plan identity are a deliberate chicken-and-egg exception: they must exist before OpenTofu CI can authenticate and use remote state. Normal application infrastructure is managed through OpenTofu.
 
 A separate main-branch apply role will be created only after the actual AWS foundation plan is reviewed and its least-privilege permissions can be derived from concrete resource types.
+
+
+## Prepared apply identity
+
+After the 52-resource dev foundation plan returned `0 change / 0 destroy`, AWS IAM Access Analyzer validated the apply policy with zero findings.
+
+- Apply role: `arn:aws:iam::938095765653:role/flexexa-github-apply-dev`
+- Managed policy: `arn:aws:iam::938095765653:policy/FlexexaFoundationApplyDev`
+- Trust subject: `repo:heke99@129280077/flexexa@1362385793:ref:refs/heads/main`
+- Trigger: manual `workflow_dispatch` only
+- Required confirmation input: `APPLY_DEV`
+- No automatic apply on pull request, push, or merge.

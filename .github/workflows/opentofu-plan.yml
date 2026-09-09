@@ -7,6 +7,7 @@ on:
     paths:
       - "infra/opentofu/**"
       - ".github/workflows/opentofu-plan.yml"
+      - ".github/workflows/opentofu-apply.yml"
 
 permissions:
   contents: read
