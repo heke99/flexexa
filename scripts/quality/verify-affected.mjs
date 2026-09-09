@@ -12,12 +12,13 @@ function run(command,args){
 }
 run(process.execPath,['scripts/quality/impact-analysis.mjs','--base',base]);
 const report=JSON.parse(fs.readFileSync(path.join(root,'.flexexa/index/impact-report.json'),'utf8'));
-run(process.execPath,['--test','scripts/quality/impact.test.mjs']);
+const qualityTests=fs.readdirSync(path.join(root,'scripts/quality')).filter(file=>file.endsWith('.test.mjs')).map(file=>path.join('scripts/quality',file)).sort();
+run(process.execPath,['--test',...qualityTests]);
 const tasks=['lint','typecheck','test','build'];
 if(report.fullSuiteRequired){for(const task of tasks)run('pnpm',[task]);}
 else run('pnpm',['exec','turbo','run',...tasks,...report.impactedPackages.map(p=>`--filter=${p}`)]);
 const pending=report.requiredChecks.filter(c=>!['application','canonical-contract-tests'].includes(c));
-const result={head:report.head,mergeBase:report.mergeBase,scope:'application',applicationPassed:true,pendingSpecializedChecks:pending,fullyVerified:pending.length===0};
+const result={head:report.head,mergeBase:report.mergeBase,scope:'application',applicationPassed:true,pendingSpecializedChecks:pending,fullyVerified:!applicationOnly&&!report.dirty&&pending.length===0,sourceState:report.dirty?'working-tree':'commit'};
 fs.writeFileSync(path.join(root,'.flexexa/index/verification-report.json'),JSON.stringify(result,null,2)+'\n');
 console.log('Application checks passed (lint, typecheck, real tests, build).');
 if(pending.length){

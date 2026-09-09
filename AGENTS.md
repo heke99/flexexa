@@ -177,3 +177,13 @@ OpenTofu remains the IaC authority through `flexexa-aws-opentofu`. AWS CDK/Cloud
 - `flexexa-performance-review`
 
 Codex Security is not a dependency. Security review must remain executable with repository-local rules and normal CI.
+
+## Flexexa Connect — mandatory continuation context
+
+Read `docs/architecture/ADR-0001-flexexa-connect.md` and
+`docs/progress/phase0-connect-handoff.md` before provider/integration work.
+Flexexa builds its own Enode-like connectivity layer; Enode is optional, not the
+canonical data model or default control authority. Preserve first-party adapter support.
+Keep provider schemas in integrations, canonical IDs/contracts in shared domain and
+route/policy evaluation in Kernel. Never treat routing unit tests as distributed command
+idempotency, physical safety, an OAuth connection or completed phase readiness.

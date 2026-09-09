@@ -16,7 +16,7 @@ export function changedFiles(root, requestedBase) {
 export function classify(file,config) {
   if (config.highFiles.includes(file)||config.highPrefixes.some(p=>file.startsWith(p))||/\.tf$/u.test(file)) return 'HIGH';
   if (/^services\/[^/]*(?:optimizer|flex|dispatch|settlement|ledger|policy|rules|control|auth)[^/]*\//u.test(file)) return 'HIGH';
-  return /^(?:apps|packages|services|scripts)\//u.test(file)?'MEDIUM':'LOW';
+  return /^(?:apps|packages|services|integrations|scripts)\//u.test(file)?'MEDIUM':'LOW';
 }
 export function analyze(diff,index,config) {
   const reverse=new Map();
@@ -33,7 +33,10 @@ export function analyze(diff,index,config) {
   if(index.coverage.unknowns.length){risk='HIGH';reasons.push('Index has unresolved/dynamic dependencies; use full verification.');}
   if(diff.files.some(f=>/^supabase\//u.test(f))){risk='HIGH';reasons.push('SQL dependencies require database replay, not import-graph inference.');}
   const requiredChecks=['application'];
-  if(diff.files.some(f=>/^supabase\//u.test(f))) requiredChecks.push('database-replay-and-rls');
+  if(diff.files.some(f=>/^supabase\//u.test(f) || f === '.github/workflows/database-verification.yml')) requiredChecks.push('database-replay-and-rls');
+  if(diff.files.some(f=>/^\.github\/workflows\//u.test(f))) requiredChecks.push('ci-workflow-security-review');
+  if(diff.files.some(f=>/(^|\/)package\.json$/u.test(f) || ['pnpm-lock.yaml','pnpm-workspace.yaml'].includes(f))) requiredChecks.push('dependency-and-lock-review');
+  if(diff.files.some(f=>/^integrations\//u.test(f))) requiredChecks.push('provider-contract-and-sandbox-tests');
   if(diff.files.some(f=>/^packages\/(domain|kernel|events|api-contracts)\//u.test(f))) requiredChecks.push('canonical-contract-tests');
   if(diff.files.some(f=>/^infra\//u.test(f)||/\.tf$/u.test(f))) requiredChecks.push('infra-plan-and-iam-review');
   if(diff.files.some(f=>/^apps\/[^/]+\/src\/app\//u.test(f))) requiredChecks.push('browser-e2e');
