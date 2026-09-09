@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { tenantId, entityId } from '../../packages/domain/src/index.ts';
-import { connectEnvironment, parseConnectionRoute } from '../../packages/domain/src/connect.ts';
-import { connectionRouteReadRpc, parseConnectionRouteReadResult } from '../../packages/api-contracts/src/connect-registry.ts';
+import { ensureSourceWorkspace } from './source-workspace.mjs';
+// Dynamic imports are intentional: workspace links must exist before ESM resolution.
+ensureSourceWorkspace();
+const { tenantId, entityId } = await import('../../packages/domain/src/index.ts');
+const { connectEnvironment, parseConnectionRoute } = await import('../../packages/domain/src/connect.ts');
+const { connectionRouteReadRpc, parseConnectionRouteReadResult } = await import('../../packages/api-contracts/src/connect-registry.ts');
 // Receives actual authenticated SQL output from the disposable database runner.
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const scope = {tenant_id:tenantId(input.scope.tenant_id), asset_id:entityId(input.scope.asset_id), environment:connectEnvironment(input.scope.environment)};
