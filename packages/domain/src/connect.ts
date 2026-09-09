@@ -10,7 +10,13 @@ export const CONNECT_CAPABILITIES = Object.freeze([
 export type ConnectCapability = typeof CONNECT_CAPABILITIES[number];
 export type ConnectionHealth = "healthy" | "degraded" | "unavailable" | "unknown";
 export interface AssetScope { readonly tenant_id: TenantId; readonly asset_id: CanonicalEntityId }
-export interface ProviderBinding extends AssetScope {
+export type ConnectEnvironment = "sandbox" | "production";
+export interface ConnectionScope extends AssetScope { readonly environment: ConnectEnvironment }
+export function connectEnvironment(value: unknown): ConnectEnvironment {
+  if (value !== "sandbox" && value !== "production") throw new DomainError("VALIDATION_ERROR");
+  return value;
+}
+export interface ProviderBinding extends ConnectionScope {
   readonly connection_id: CanonicalEntityId;
   readonly provider_id: CanonicalEntityId;
   readonly provider_account_id: CanonicalEntityId;
@@ -47,13 +53,15 @@ export function providerKey(value: unknown): string {
   if (result !== value || !/^[a-z][a-z0-9_]*$/u.test(result)) throw new DomainError("VALIDATION_ERROR");
   return result;
 }
-export function parseProviderBinding(value: unknown, scope: AssetScope): ProviderBinding {
+export function parseProviderBinding(value: unknown, scope: ConnectionScope): ProviderBinding {
   const input = record(value);
   assertSameTenant(scope.tenant_id, input.tenant_id);
+  const environment = connectEnvironment(input.environment);
+  if (environment !== connectEnvironment(scope.environment)) throw new DomainError("PERMISSION_DENIED");
   const asset_id = entityId(input.asset_id);
   if (asset_id !== entityId(scope.asset_id)) throw new DomainError("PERMISSION_DENIED");
   return Object.freeze({
-    tenant_id: scope.tenant_id, asset_id, connection_id: entityId(input.connection_id),
+    tenant_id: scope.tenant_id, asset_id, environment, connection_id: entityId(input.connection_id),
     provider_id: entityId(input.provider_id), provider_account_id: entityId(input.provider_account_id),
     provider_key: providerKey(input.provider_key), external_asset_id: externalIdentifier(input.external_asset_id),
   });
@@ -61,16 +69,16 @@ export function parseProviderBinding(value: unknown, scope: AssetScope): Provide
 /** Provider IDs cannot replace canonical asset IDs; external IDs are account-scoped. */
 export function providerExternalIdentity(binding: ProviderBinding): string {
   const clean = parseProviderBinding(binding, binding);
-  return JSON.stringify([clean.tenant_id, clean.provider_id, clean.provider_account_id, clean.external_asset_id]);
+  return JSON.stringify([clean.tenant_id, clean.provider_id, clean.provider_account_id, clean.environment, clean.external_asset_id]);
 }
 function choice<T extends string>(value: unknown, options: readonly T[]): T {
   if (typeof value !== "string" || !options.includes(value as T)) throw new DomainError("VALIDATION_ERROR");
   return value as T;
 }
-export function parseConnectionRoute(value: unknown, scope: AssetScope): ConnectionRouteSnapshot {
+export function parseConnectionRoute(value: unknown, scope: ConnectionScope): ConnectionRouteSnapshot {
   const input = record(value);
   exactKeys(input, ["tenant_id", "asset_id", "connection_id", "provider_id", "provider_account_id",
-    "provider_key", "external_asset_id", "priority", "connection_status", "account_status", "provider_status",
+    "provider_key", "environment", "external_asset_id", "priority", "connection_status", "account_status", "provider_status",
     "health", "capabilities", "capabilities_verified_at", "last_seen_at", "state_observed_at", "valid_from", "valid_until"]);
   if (!Number.isSafeInteger(input.priority) || Number(input.priority) < 0) throw new DomainError("VALIDATION_ERROR");
   if (!Array.isArray(input.capabilities) || input.capabilities.length > CONNECT_CAPABILITIES.length) {
