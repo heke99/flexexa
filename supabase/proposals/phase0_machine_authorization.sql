@@ -24,7 +24,7 @@ create table private.flexexa_machine_principals (
   (valid_until is null or (isfinite(valid_until) and valid_until>valid_from)))
 );
 create index machine_principal_service_idx on private.flexexa_machine_principals(service_identity_id) where service_identity_id is not null;
-create index machine_principal_client_idx on private.flexexa_machine_principals(tenant_id,api_client_id) where api_client_id is not null;
+create index machine_principal_client_idx on private.flexexa_machine_principals(tenant_id,api_client_id);
 alter table private.flexexa_machine_principals enable row level security;
 revoke all on private.flexexa_machine_principals from public,anon,authenticated;
 comment on table private.flexexa_machine_principals is
