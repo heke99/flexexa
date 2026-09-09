@@ -18,25 +18,18 @@ jobs:
           version: 2.117.0
       - name: Check tracked configuration
         run: test -f supabase/config.toml
-      - name: Materialize proposed migration with Supabase CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          supabase migration new phase0_canonical_core_v1
-          target=$(find supabase/migrations -name '*_phase0_canonical_core_v1.sql' | sort | tail -n 1)
-          cp supabase/proposals/phase0_canonical_core_v1.sql "$target"
       - name: Start isolated Supabase
         run: supabase start
       - name: Clean migration replay
         run: supabase db reset --local
       - name: Real PostgreSQL RLS and canonical tests
         run: supabase test db
-      - name: Retain replay inputs for promotion
+      - name: Retain tracked replay inputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: flexexa-db-replay-inputs
-          path: supabase/migrations/*_phase0_canonical_core_v1.sql
+          path: supabase/migrations/*.sql
           if-no-files-found: error
           retention-days: 7
       - name: Retain tracked source snapshot
@@ -66,7 +59,7 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
           pnpm install --frozen-lockfile
-      - name: Verify application and impact regression tests
+      - name: Verify application scope
         env:
           IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
         run: pnpm verify:affected -- --application-only --base "$IMPACT_BASE"
