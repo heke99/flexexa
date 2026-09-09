@@ -123,11 +123,13 @@ join public.permissions p on p.permission_key=k;
 -- PostgreSQL exclusions atomically reject overlapping grants for the same pair.
 create extension if not exists btree_gist with schema extensions;
 alter table public.role_permissions drop constraint role_permissions_pkey;
-alter table public.role_permissions add constraint role_permissions_pkey primary key using index role_permissions_id_key;
+alter table public.role_permissions drop constraint role_permissions_id_key;
+alter table public.role_permissions add constraint role_permissions_pkey primary key(id);
 alter table public.role_permissions add constraint role_permission_no_overlap exclude using gist
  (role_id with =,permission_id with =,tstzrange(valid_from,valid_until,'[)') with &&);
 alter table public.membership_roles drop constraint membership_roles_pkey;
-alter table public.membership_roles add constraint membership_roles_pkey primary key using index membership_roles_id_key;
+alter table public.membership_roles drop constraint membership_roles_id_key;
+alter table public.membership_roles add constraint membership_roles_pkey primary key(id);
 alter table public.membership_roles add constraint membership_role_no_overlap exclude using gist
  (membership_id with =,role_id with =,tstzrange(valid_from,valid_until,'[)') with &&);
 do $$ declare c record; begin
