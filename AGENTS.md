@@ -12,7 +12,7 @@ This repository implements the locked architecture in `FLEXEXA_MASTER_BUILD_PROM
 6. Preserve canonical models, tenant isolation and architecture boundaries.
 7. Verify the complete changed flow before reporting completion.
 
-## Installed skill inventory — 18
+## Installed skill inventory — 40
 
 ### Critical
 1. `supabase`
@@ -123,3 +123,57 @@ Run all gates relevant to the change:
 Flex reservations must prove no oversubscription under concurrency.
 Settlement/ledger changes must prove idempotency and debit=credit balance.
 No phase is complete until its relevant master-plan Definition of Done is green.
+
+
+## Mandatory codebase index and change-impact flow
+
+For every non-trivial code, schema, contract, event or infrastructure change:
+
+1. Run `pnpm index:codebase`.
+2. Run `pnpm impact -- --base <target-ref>`.
+3. Read `.flexexa/index/impact-report.json` before editing dependent areas.
+4. Review direct and transitive consumers, not only changed files.
+5. Run `pnpm verify:affected -- --base <target-ref>`.
+6. Run every domain-specific check named by the impact report.
+
+### HIGH-risk changes
+
+These always require full verification, not affected-only optimization:
+- `packages/domain/**`
+- `packages/kernel/**`
+- `packages/events/**`
+- `packages/api-contracts/**`
+- `supabase/migrations/**`
+- RLS/RBAC/policy/rules
+- optimizer/flex/reservations
+- dispatch
+- settlement/ledger
+- OpenTofu/IAM/workflows
+
+### Additional AWS/system skills
+
+Use the matching local skill before AWS work:
+- `aws-signing-in`
+- `aws-iam`
+- `aws-containers`
+- `aws-messaging-and-streaming`
+- `aws-database`
+- `aws-secrets-manager`
+- `aws-observability`
+- `aws-billing`
+- `aws-sdk-js`
+- `aws-sdk-python`
+
+OpenTofu remains the IaC authority through `flexexa-aws-opentofu`. AWS CDK/CloudFormation guidance may explain AWS semantics but must not silently replace OpenTofu.
+
+### Flexexa quality/security skills
+
+- `flexexa-codebase-index`
+- `flexexa-impact-analysis`
+- `flexexa-affected-verification`
+- `flexexa-code-review`
+- `flexexa-security-review`
+- `flexexa-test-strategy`
+- `flexexa-performance-review`
+
+Codex Security is not a dependency. Security review must remain executable with repository-local rules and normal CI.

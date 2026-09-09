@@ -10,7 +10,10 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "index:codebase": "node scripts/quality/build-codebase-index.mjs",
+    "impact": "node scripts/quality/impact-analysis.mjs",
+    "verify:affected": "node scripts/quality/verify-affected.mjs"
   },
   "devDependencies": {
     "turbo": "2.10.12",
