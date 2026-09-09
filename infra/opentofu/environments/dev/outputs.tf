@@ -11,3 +11,31 @@ output "aws_region" {
 output "environment" {
   value = var.environment
 }
+
+output "vpc_id" {
+  value = module.foundation.vpc_id
+}
+
+output "public_subnet_ids" {
+  value = module.foundation.public_subnet_ids
+}
+
+output "private_subnet_ids" {
+  value = module.foundation.private_subnet_ids
+}
+
+output "ecs_cluster_name" {
+  value = module.foundation.ecs_cluster_name
+}
+
+output "ecr_repository_urls" {
+  value = module.foundation.ecr_repository_urls
+}
+
+output "storage_buckets" {
+  value = module.foundation.storage_buckets
+}
+
+output "log_groups" {
+  value = module.foundation.log_groups
+}

@@ -1,13 +1,14 @@
-locals {
-  name_prefix = "${var.project}-${var.environment}"
-
-  common_tags = {
-    Project     = var.project
-    Environment = var.environment
-    ManagedBy   = "opentofu"
-  }
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
-# Phase 0 intentionally contains no application resources yet.
-# Networking, ECR/ECS, S3/KMS/Secrets Manager, Amazon MQ and Valkey
-# are introduced as reviewed modules after state + identity bootstrap.
+module "foundation" {
+  source = "../../modules/foundation"
+
+  project            = var.project
+  environment        = var.environment
+  aws_region         = var.aws_region
+  account_id         = data.aws_caller_identity.current.account_id
+  availability_zones = data.aws_availability_zones.available.names
+  vpc_cidr           = "10.40.0.0/16"
+}
