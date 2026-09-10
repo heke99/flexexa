@@ -43,7 +43,8 @@ export function analyze(diff,index,config) {
   if(diff.files.some(f=>/(^|\/)package\.json$/u.test(f) || ['pnpm-lock.yaml','pnpm-workspace.yaml'].includes(f))) requiredChecks.push('dependency-and-lock-review');
   if(diff.files.some(f=>/^integrations\//u.test(f))) requiredChecks.push('provider-contract-and-sandbox-tests');
   if(diff.files.some(f=>/^packages\/(domain|kernel|events|api-contracts)\//u.test(f))) requiredChecks.push('canonical-contract-tests');
-  if(diff.files.some(f=>/^infra\//u.test(f)||/\.tf$/u.test(f))) requiredChecks.push('infra-plan-and-iam-review');
+  if(diff.files.some(f=>/^infra\/opentofu\//u.test(f)||/\.tf$/u.test(f))) requiredChecks.push('infra-plan-and-iam-review');
+  if(diff.files.some(f=>/^(infra\/docker|scripts\/runtime)\//u.test(f))) requiredChecks.push('runtime-protocol-and-container-security-tests');
   if(diff.files.some(f=>/^apps\/[^/]+\/src\/app\//u.test(f))) requiredChecks.push('browser-e2e');
   return {...diff,risk,fullSuiteRequired:risk==='HIGH'||diff.dirty||packages.size===0,changedFiles:diff.files,impactedFiles:[...touched].sort(),impactedPackages:[...packages].sort(),requiredChecks,reasons,coverage:index.coverage};
 }

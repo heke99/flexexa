@@ -1,0 +1,30 @@
+# Disposable protocol verification only. AWS remains the production runtime authority.
+services:
+  valkey:
+    image: valkey/valkey:9.1.2-alpine3.24@sha256:a0dbf4c1d5708782907c10e2c72deff317518518b5288a58416981d9db95d30b
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
+    command: [valkey-server, /etc/valkey/valkey.conf]
+    environment:
+      VALKEYCLI_AUTH: ${FLEXEXA_VALKEY_HEALTH_PASSWORD:?ephemeral health password required}
+    volumes:
+      - ./valkey/valkey.conf:/etc/valkey/valkey.conf:ro
+      - ${FLEXEXA_VALKEY_ACL_FILE:?ephemeral ACL file required}:/etc/valkey/users.acl:ro
+    tmpfs:
+      - /data:uid=65532,gid=65532,mode=0700,size=16m
+      - /tmp:uid=65532,gid=65532,mode=0700,size=4m
+    healthcheck:
+      test: [CMD-SHELL, "valkey-cli -e --user health ping | grep -qx PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+    networks: [runtime]
+networks:
+  runtime:
+    internal: true
