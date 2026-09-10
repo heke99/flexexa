@@ -37,7 +37,7 @@ export async function startIdentityContainer(config){
   const reservation=tcpServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
   const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
   const env={SUPABASE_URL:'https://127.0.0.1:'+proxy.address().port,SUPABASE_PUBLISHABLE_KEY:config.publishableKey,
-   SUPABASE_AUTH_ADMIN_KEY:config.adminKey,FLEXEXA_ENVIRONMENT:config.environment,PORT:String(port),NODE_EXTRA_CA_CERTS:'/run/fixture-ca.pem'};
+   SUPABASE_AUTH_ADMIN_KEY:config.adminKey,FLEXEXA_ENVIRONMENT:config.environment,PORT:String(port),OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:config.telemetryEndpoint,FLEXEXA_TRACE_SAMPLE_RATIO:'1',NODE_EXTRA_CA_CERTS:'/run/fixture-ca.pem'};
   assert(Object.values(env).every(v=>typeof v==='string'&&!/[\r\n]/u.test(v)));
   writeFileSync(join(temp,'runtime.env'),Object.entries(env).map(([k,v])=>k+'='+v).join('\n'),{mode:0o600});
   container=docker(['run','-d','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--memory=256m','--cpus=1',

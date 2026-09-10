@@ -57,6 +57,9 @@ jobs:
         run: supabase start
       - name: Build identity runtime from tracked source
         run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile --prod --ignore-scripts --filter @flexexa/identity-service...
           identity_base_image=$(sed -n 's/^ARG IDENTITY_BASE_IMAGE=//p' apps/identity-service/Dockerfile)
           docker pull "$identity_base_image"
           identity_base_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$identity_base_image")

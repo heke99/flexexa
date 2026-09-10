@@ -18,6 +18,7 @@ export function createIdentityServer(config:Connection & {publishableKey:string;
  let active=0;
  const server=createServer(async(req,res)=>{
   const observation=observeRequest(req,res,config.logSink);
+  return observation.run(async()=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.setHeader('X-Content-Type-Options','nosniff');
   const reply=(status:number,data:unknown)=>{res.statusCode=status;res.end(JSON.stringify(data));};
   if(req.method==='GET'&&req.url==='/health/live'){reply(200,{status:'alive'});return;}
@@ -42,6 +43,7 @@ export function createIdentityServer(config:Connection & {publishableKey:string;
     code==='INVALID_STATE_TRANSITION'||code==='IDEMPOTENCY_CONFLICT'?409:502;
    reply(status,{error:code});
   }finally{active--;}
+  });
  });
  server.requestTimeout=10000;server.headersTimeout=10000;server.keepAliveTimeout=5000;server.maxHeadersCount=30;
  return server;
