@@ -78,7 +78,7 @@ returns jsonb language plpgsql volatile security definer set search_path='' as $
 declare principal uuid; event public.outbox_events%rowtype; prior public.inbox_events%rowtype;
  expected jsonb; h text; policy uuid; version public.policy_set_versions%rowtype;
  outcome text:='processed'; blockers jsonb:='["SANDBOX_ONLY"]'; min_kw numeric; max_kw numeric; denies boolean;
- receipt uuid; service uuid; response jsonb;
+ receipt uuid; service uuid; response jsonb; audit uuid;
 begin
  principal:=private.flexexa_assert_event_worker(p_tenant_id,p_environment,'events.consume');
  if p_event is null or jsonb_typeof(p_event)<>'object' or octet_length(p_event::text)>262144 then raise exception using errcode='P0001',message='VALIDATION_ERROR'; end if;
@@ -123,7 +123,9 @@ begin
  insert into public.idempotency_records(tenant_id,actor_type,actor_id,operation_key,idempotency_key,request_hash,correlation_id)
   values(p_tenant_id,'service',service,'consume_policy_publication',event.id::text,h,event.correlation_id) returning id into receipt;
  insert into public.audit_events(tenant_id,actor_type,actor_id,action,resource_type,resource_id,correlation_id,idempotency_record_id,metadata_json)
-  values(p_tenant_id,'service',service,'policy_readiness_evaluated','policy_set_version',version.id,event.correlation_id,receipt,jsonb_build_object('event_id',event.id,'environment',p_environment,'outcome',outcome));
+  values(p_tenant_id,'service',service,'policy_readiness_evaluated','policy_set_version',version.id,event.correlation_id,receipt,jsonb_build_object('event_id',event.id,'environment',p_environment,'outcome',outcome)) returning id into audit;
+ insert into public.outbox_events(tenant_id,organization_id,audit_event_id,event_type,correlation_id,causation_id,source,payload_json)
+  values(p_tenant_id,event.organization_id,audit,'policy.readiness.evaluated',event.correlation_id,event.id,'flexexa.policy',jsonb_build_object('environment',p_environment,'policy_set_version_id',version.id,'consumer_status',outcome));
  insert into public.inbox_events(tenant_id,organization_id,event_id,environment,consumer_key,principal_id,session_id,idempotency_record_id,request_hash,status,response_json)
   values(p_tenant_id,event.organization_id,event.id,p_environment,'policy_readiness.v1',principal,(auth.jwt()->>'session_id')::uuid,receipt,h,outcome,response);
  update public.idempotency_records set status='completed',response_reference=event.id,response_json=response where id=receipt;

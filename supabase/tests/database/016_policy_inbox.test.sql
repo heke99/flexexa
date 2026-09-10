@@ -86,6 +86,7 @@ select is((select body->>'status' from policies where name='consumed'),'processe
 select is(pg_temp.consume(),(select body from policies where name='consumed'),'duplicate returns stored result');
 reset role;
 select is((select count(*) from public.inbox_events),1::bigint,'one inbox entry');
+select is((select count(*) from public.outbox_events where event_type='policy.readiness.evaluated' and causation_id=((select body from messages where name='first')->>'event_id')::uuid),1::bigint,'one causal follow-up event despite duplicate');
 select is((select count(*) from public.audit_events where action='policy_readiness_evaluated'),1::bigint,'one audited business effect');
 select is((select status from public.tenant_policy_readiness where tenant_id=pg_temp.pid(20)),'blocked','sandbox readiness evaluated without production authority');
 select throws_ok($$delete from public.inbox_events$$,'23514','AUDIT_IMMUTABLE','consumer evidence is append-only');

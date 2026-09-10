@@ -102,6 +102,20 @@ await invoke(2,'publish',newerOtherVersion,'other-new-publish');
 sql(`insert into public.service_identity_tenant_grants(service_identity_id,tenant_id,permission_id,scope_json) select '${consumerService}','${otherTenant}',id,'{"environment":"sandbox"}' from public.permissions where permission_key='events.consume'`);
 assert.equal(await consumePolicyPublication({tenant_id:otherTenant,environment:'sandbox'},captureEvent(otherVersion.policy_set_version_id,otherTenant),inbox,{acknowledge:async()=>{}}),'superseded');
 assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${otherTenant}' and policy_set_version_id='${newerOtherVersion.policy_set_version_id}'`),'pending');
+// Revocation by wall-clock expiry while an inbox duplicate waits on its event.
+const inboxBlockerName='inbox-lock-'+randomUUID();
+const inboxBlocker=asyncSql(`set application_name=${q(inboxBlockerName)};begin;select id from public.outbox_events where id='${event.event_id}' for update;select pg_sleep(3);commit;`);
+let inboxLocked=false;
+for(let attempt=0;attempt<100;attempt++){
+ if(sql(`select count(*) from pg_stat_activity where application_name=${q(inboxBlockerName)} and wait_event='PgSleep'`)==='1'){inboxLocked=true;break;}
+ await new Promise(resolve=>setTimeout(resolve,20));
+}
+assert.equal(inboxLocked,true);
+sql(`update public.service_identity_tenant_grants set valid_until=clock_timestamp()+interval '1 second' where service_identity_id='${consumerService}' and tenant_id='${tenant}'`);
+let expiredAck=0;
+await assert.rejects(consumePolicyPublication(scope,event,inbox,{acknowledge:async()=>{expiredAck++;}}),/PERMISSION_DENIED/);
+await inboxBlocker;assert.equal(expiredAck,0);
+assert.equal(sql(`select count(*) from public.inbox_events where tenant_id='${tenant}'`),'1');
 // A real blocking lock lets the session expire after initial authorization.
 const second=await invoke(1,'create',payload,'create-second');
 const secondVersion={policy_set_version_id:second.policy_set_version_id};

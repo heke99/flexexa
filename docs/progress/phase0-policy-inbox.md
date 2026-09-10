@@ -3,7 +3,7 @@
 Scope: locked §§14, 20, 31 and Phase 0 transactional event handling. The checked
 consumer compares the entire received envelope with the immutable canonical outbox
 fact, verifies tenant/environment and current service/session/grant, then commits the
-readiness effect, audit, idempotency receipt and inbox row in one PostgreSQL transaction.
+readiness effect, audit, causal follow-up outbox event, idempotency receipt and inbox row in one PostgreSQL transaction.
 The consumer key is fixed to `policy_readiness.v1`; this is not an arbitrary handler API.
 
 A shared private event-worker assertion retains the existing publisher authorization
