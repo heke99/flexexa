@@ -38,3 +38,8 @@ test('caller RPC uses caller JWT and refuses generic RPC dispatch',async()=>{
  assert.deepEqual(await rpc.rpc('flexexa_check_identity_execution_lease',{}),{data:null,error:{code:'42501'}});
  assert.equal(calls[0].headers.Authorization,'Bearer TEST_CALLER_JWT');assert.equal(calls[0].headers.apikey,'TEST_PUBLISHABLE_KEY');
 });
+test('Auth-admin transport propagates only validated correlation metadata',async()=>{
+ const calls=[];const api=createReservedAuthAdmin({url:'https://example.supabase.co',correlationId:id(7),fetcher:async(url,init)=>{calls.push(init);return json(user());}},key);
+ await api.find(identity);assert.equal(calls[0].headers['X-Correlation-Id'],id(7));
+ assert.throws(()=>createReservedAuthAdmin({url:'https://example.supabase.co',correlationId:'private@example.invalid'},key));
+});
