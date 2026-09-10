@@ -138,3 +138,35 @@ jobs:
           name: flexexa-application-verification
           path: .flexexa/index/*.json
           retention-days: 7
+  runtime-valkey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify isolated Valkey protocol, isolation and lease races
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: node scripts/runtime/verify-valkey.mjs
+      - name: Scan the exact tested Valkey image
+        run: |
+          mkdir -p /tmp/flexexa-valkey-input /tmp/flexexa-valkey-report
+          valkey_image=$(sed -n 's/^    image: //p' infra/docker/compose.yml)
+          docker save "$valkey_image" -o /tmp/flexexa-valkey-input/valkey.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-valkey-input:/images:ro -v /tmp/flexexa-valkey-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/valkey.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --format json --output /reports/trivy.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-valkey-runtime
+          path: |
+            .flexexa/index/valkey-runtime.json
+            /tmp/flexexa-valkey-report/trivy.json
+          if-no-files-found: error
+          retention-days: 7
