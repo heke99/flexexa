@@ -1,6 +1,6 @@
-# Phase 0 policy registry — candidate, not complete
+# Phase 0 policy registry — verified sandbox increment
 
-Scope: master §§10–14. The candidate adds canonical immutable rules, policy versions,
+Scope: master §§10–14. This increment adds canonical immutable rules, policy versions,
 tests, tenant bindings/readiness and evaluation tables. Bounded power rules accept
 numeric limits and reason codes, never SQL, JavaScript or an LLM expression. Limits
 and requests are 0–1,000,000 kW with at most six decimal places; this bounded
@@ -31,9 +31,22 @@ use platform scope with null tenant; no synthetic tenant and no duplicate audit 
 A scope FK prevents platform audit from borrowing tenant receipts. Tenant RLS cannot
 read global evidence. This is not permission to make tenant business rows ownerless.
 
-Pending verification: isolated migration replay, pgTAP negative/flow tests, real races,
-full application/runtime CI, exact applied SQL hash and fresh catalog parity. Do not
-apply the candidate or mark this increment complete before these checks pass.
+Candidate run `34488450642` passed all six application/database/runtime jobs: 606
+pgTAP assertions, 16 simultaneous creates, 16 simultaneous publications, 12 persisted
+SQL/Kernel comparison cases, unrelated-tenant publication currency and session expiry
+after a real lock wait. All previous Auth/container/outbox checks remain green.
+
+Development migration `20260910142645` was applied from exactly that tested SQL:
+49,150 bytes, SHA-256 `9ef425da9994645678b7c8292f090b88e4852d7f06cacd993a4644ac1ba350a1`.
+All 18 migration entries and 1,284 application catalog objects match; no schema differences.
+The final filename/pin commit must also pass CI; final tracked run and merge evidence
+are recorded in PR #35. No Phase 0 completion or production policy readiness is claimed.
+
+Review: no new dependencies, CI credentials or permissions. Workflow change adds only
+the isolated concurrency/Kernel check. Inputs and fanout are bounded; parent/definition
+locks serialize changes and indexed FK/read paths preserve scope. The initial failed
+run exposed denied readiness reads: explicit live platform reads and fixture-only
+`rules.read` grants fixed it without expanding tenant role templates.
 
 Remaining policy work includes production shadow attestation, additional languages/
 domains and scopes, binding administration, production publication/readiness criteria,
