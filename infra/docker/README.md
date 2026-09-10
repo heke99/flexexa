@@ -19,14 +19,18 @@ is an advisory single-node primitive only: it does not provide distributed fenci
 failover durability, business idempotency or physical-control authorization.
 Postgres remains authoritative. Restart deliberately loses cache state.
 
-CI scans the exact tested image, fails on every HIGH/CRITICAL finding without
-ignoring unfixed issues, and retains the runtime and scan reports. This is isolated
+CI checks the server binary version and scans the exact tested image, failing on every detected HIGH/CRITICAL package finding without
+ignoring unfixed issues, and retains the runtime and scan reports. Trivy detects the
+23 Alpine packages in this image; it reports no language-specific manifests and does
+not establish vulnerability coverage of the source-built Valkey binary. Publisher
+release/advisory review remains separate from the OS-package scan. This is isolated
 protocol verification, not an AWS service, production credentials or app integration.
 Production needs TLS, managed authentication, failover verification, networking,
 monitoring and an authorized deployment through OpenTofu. RabbitMQ, ClickHouse,
 CitrineOS and simulators remain separate foundation work.
 
 Sources:
+- https://github.com/valkey-io/valkey/releases/tag/9.1.2
 - https://valkey.io/download/
 - https://hub.docker.com/v2/repositories/valkey/valkey/tags/9.1.2-alpine3.24
 - https://valkey.io/commands/set/

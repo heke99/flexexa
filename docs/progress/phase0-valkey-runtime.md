@@ -10,10 +10,16 @@ Valkey health/auth, namespace ACLs, advisory lease races/expiry/owner-safe relea
 cache loss on restart and clean shutdown. Secrets exist only for that test run;
 no production values are requested or used. No ports are published.
 
-Validation pending: full application and existing database/Auth/container gates,
-new real Valkey runtime gate and its zero-HIGH/CRITICAL vulnerability scan.
-No Docker daemon is available in the editing workspace; syntax/static checks
-are not substitutes for the isolated GitHub runtime result.
+Candidate run `34463315330`: the real Valkey job `102825973606` passed all
+runtime checks. Artifact `10146481892` was read back: 23 Alpine 3.24.1 OS
+packages, zero HIGH/CRITICAL findings. Trivy reports no language manifests;
+coverage does not include the source-built Valkey binary. The official 9.1.2
+security release and publisher digest were reviewed separately. The runner now
+also asserts server version and actual Docker internal-network isolation.
+
+Final full application, database/Auth/container and Valkey CI evidence is in PR #26.
+No Docker daemon is available in the editing workspace; real runtime evidence
+comes from the isolated GitHub job, not local static checks.
 
 Remaining: application client integration, production TLS/ACL identity and
 failover, managed AWS provisioning, runtime monitoring, RabbitMQ/ClickHouse,

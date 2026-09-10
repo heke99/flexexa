@@ -24,7 +24,7 @@ async function run(args,overrides={},allowFailure=false){
  catch(error){const result={status:error.code||1,stdout:sanitize(String(error.stdout||'')),stderr:sanitize(String(error.stderr||''))};if(allowFailure)return result;throw Error('VALKEY_RUNTIME_FAILED: '+result.stderr);}
 }
 async function cli(user,args,{password=secrets[user],fail=false}={}){
- return run([...compose,'exec','-T','-e','VALKEYCLI_AUTH','valkey','valkey-cli','-e','--json','--user',user,...args],{VALKEYCLI_AUTH:password},fail);
+ return run([...compose,'exec','-T','-e','VALKEYCLI_AUTH','valkey','valkey-cli','-e','-2','--json','--user',user,...args],{VALKEYCLI_AUTH:password},fail);
 }
 async function command(user,...args){return JSON.parse((await cli(user,args)).stdout);}
 const release=readFileSync(resolve(root,'infra/docker/valkey/release-lease.lua'),'utf8');
@@ -35,8 +35,13 @@ try{
  const config=JSON.parse((await run(['inspect','--format','{{json .HostConfig}}',container])).stdout);
  assert.equal(config.ReadonlyRootfs,true);assert(config.CapDrop.includes('ALL'));assert(config.SecurityOpt.some(v=>v.startsWith('no-new-privileges')));
  assert.equal(Object.keys(config.PortBindings||{}).length,0);
+ const networks=JSON.parse((await run(['inspect','--format','{{json .NetworkSettings.Networks}}',container])).stdout);
+ assert.equal(Object.keys(networks).length,1);
+ for(const network of Object.keys(networks))assert.equal((await run(['network','inspect','--format','{{.Internal}}',network])).stdout,'true');
  assert.equal((await run([...compose,'exec','-T','valkey','id','-u'])).stdout,'65532');
  assert.notEqual((await run([...compose,'exec','-T','valkey','touch','/readonly-probe'],{},true)).status,0);
+ const version=(await run([...compose,'exec','-T','valkey','valkey-server','--version'])).stdout;
+ assert.match(version,/v=9\.1\.2(?:\s|$)/u);
  assert.equal(await command('health','PING'),'PONG');
  for(const [user,args,password] of [
   ['default',['PING'],''],['tenant_a',['PING'],'wrong-ephemeral-password'],
@@ -68,7 +73,7 @@ try{
  assert.equal(await command('tenant_a','GET',key),null,'cache restart must not pretend to preserve business state');
  await run([...compose,'stop','--timeout','10','valkey']);
  assert.equal((await run(['inspect','--format','{{.State.ExitCode}}',container])).stdout,'0');
- const report={image,healthy:true,non_root_uid:65532,read_only:true,published_ports:0,acl_negative_cases:9,
+ const report={image,server_version:version,healthy:true,non_root_uid:65532,read_only:true,published_ports:0,internal_network:true,acl_negative_cases:9,
   concurrent_lease_calls:24,unique_lease_winner:true,expired_owner_cannot_release_replacement:true,
   cache_restart_loses_state:true,clean_shutdown:true,production_deployed:false,physical_commands_sent:0};
  mkdirSync(resolve(root,'.flexexa/index'),{recursive:true});writeFileSync(resolve(root,'.flexexa/index/valkey-runtime.json'),JSON.stringify(report,null,2)+'\n');
