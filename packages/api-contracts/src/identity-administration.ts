@@ -1,4 +1,4 @@
-import { DomainError, assertSameTenant, entityId, exactKeys, record, tenantId } from "@flexexa/domain";
+import { DomainError, assertSameTenant, entityId, exactKeys, record, tenantId, utcInstant } from "@flexexa/domain";
 import { connectEnvironment } from "@flexexa/domain/connect";
 import { parseMutation } from "@flexexa/api-contracts";
 import type { MachinePermissionScope } from "@flexexa/api-contracts/machine-authorization";
@@ -108,4 +108,95 @@ export function createIdentityProvisioningRequestApi(client: IdentityProvisionin
     if (response.error !== null && response.error !== undefined) throw databaseError(response.error);
     return parseIdentityProvisioningRequestReceipt(response.data, call);
   } });
+}
+
+/** PostgreSQL UTC JSON timestamps retain microseconds; never round a lease deadline forward. */
+function leaseExpiry(value: unknown): string {
+  if (typeof value !== "string") throw new DomainError("VALIDATION_ERROR");
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?:Z|\+00:00)$/u.exec(value);
+  if (!match) throw new DomainError("VALIDATION_ERROR");
+  const fraction = (match[2] ?? "").padEnd(6, "0");
+  utcInstant(`${match[1]}.${fraction.slice(0, 3)}Z`);
+  return `${match[1]}.${fraction}Z`;
+}
+function leaseGeneration(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > 2147483647) throw new DomainError("VALIDATION_ERROR");
+  return value;
+}
+export function identityExecutionLeaseRpc(value: unknown, expectedScope: MachinePermissionScope) {
+  const tenant = tenantId(expectedScope.tenant_id), environment = connectEnvironment(expectedScope.environment);
+  const request = parseMutation(value, tenant, raw => {
+    const p = record(raw);
+    exactKeys(p, ["request_id", "environment"]);
+    if (connectEnvironment(p.environment) !== environment) throw new DomainError("PERMISSION_DENIED");
+    return Object.freeze({ request_id: entityId(p.request_id), environment });
+  });
+  return Object.freeze({ function_name: "flexexa_acquire_identity_execution_lease" as const,
+    args: Object.freeze({ p_tenant_id: request.tenant_id, p_payload: request.payload,
+      p_idempotency_key: request.idempotency_key, p_correlation_id: request.correlation_id }) });
+}
+type LeaseCall = ReturnType<typeof identityExecutionLeaseRpc>;
+/** A parsed receipt still requires a fresh database check before continuation. */
+export function parseIdentityExecutionLeaseReceipt(value: unknown, call: LeaseCall) {
+  const p = record(value);
+  exactKeys(p, ["tenant_id", "resource_type", "resource_id", "request_id", "generation", "api_client_id", "intended_auth_user_id",
+    "environment", "expires_at", "correlation_id", "idempotency_key", "status"]);
+  assertSameTenant(call.args.p_tenant_id, p.tenant_id);
+  if (p.resource_type !== "identity_execution_lease" || p.status !== "leased" || p.idempotency_key !== call.args.p_idempotency_key ||
+      entityId(p.request_id) !== call.args.p_payload.request_id || connectEnvironment(p.environment) !== call.args.p_payload.environment) throw new DomainError("VALIDATION_ERROR");
+  return Object.freeze({ tenant_id: call.args.p_tenant_id, resource_type: "identity_execution_lease" as const, resource_id: entityId(p.resource_id),
+    request_id: call.args.p_payload.request_id, generation: leaseGeneration(p.generation), api_client_id: entityId(p.api_client_id),
+    intended_auth_user_id: entityId(p.intended_auth_user_id), environment: call.args.p_payload.environment, expires_at: leaseExpiry(p.expires_at),
+    correlation_id: entityId(p.correlation_id), idempotency_key: call.args.p_idempotency_key, status: "leased" as const });
+}
+export function identityExecutionLeaseCheckRpc(value: unknown, expectedScope: MachinePermissionScope) {
+  const p = record(value);
+  const call = identityExecutionLeaseRpc({ tenant_id: p.tenant_id, idempotency_key: p.idempotency_key, correlation_id: p.correlation_id,
+    payload: { request_id: p.request_id, environment: p.environment } }, expectedScope);
+  const expected = parseIdentityExecutionLeaseReceipt(p, call);
+  return Object.freeze({ function_name: "flexexa_check_identity_execution_lease" as const,
+    args: Object.freeze({ p_tenant_id: expected.tenant_id, p_lease_id: expected.resource_id }), expected });
+}
+type LeaseCheckCall = ReturnType<typeof identityExecutionLeaseCheckRpc>;
+export function parseIdentityExecutionLeaseCheck(value: unknown, call: LeaseCheckCall) {
+  const p = record(value);
+  exactKeys(p, ["tenant_id", "lease_id", "request_id", "generation", "api_client_id", "intended_auth_user_id", "environment", "expires_at"]);
+  assertSameTenant(call.args.p_tenant_id, p.tenant_id);
+  const result = Object.freeze({ tenant_id: call.args.p_tenant_id, lease_id: entityId(p.lease_id), request_id: entityId(p.request_id),
+    generation: leaseGeneration(p.generation), api_client_id: entityId(p.api_client_id), intended_auth_user_id: entityId(p.intended_auth_user_id),
+    environment: connectEnvironment(p.environment), expires_at: leaseExpiry(p.expires_at) });
+  if (result.lease_id !== call.expected.resource_id) throw new DomainError("VALIDATION_ERROR");
+  for (const key of ["request_id", "generation", "api_client_id", "intended_auth_user_id", "environment", "expires_at"] as const) {
+    if (result[key] !== call.expected[key]) throw new DomainError("VALIDATION_ERROR");
+  }
+  return result;
+}
+export interface IdentityExecutionLeaseClient {
+  rpc(name: LeaseCall["function_name"] | LeaseCheckCall["function_name"], args: LeaseCall["args"] | LeaseCheckCall["args"]): PromiseLike<{ data: unknown; error: unknown | null }>;
+}
+/**
+ * Coordination only: no worker, credential, Auth administration or enrollment capability.
+ * Every check calls SQL again. Local time, cached receipts and generations never grant authority.
+ * Ambiguous errors are not retried, released or compensated by this transport.
+ */
+export function createIdentityExecutionLeaseApi(client: IdentityExecutionLeaseClient, expectedScope: MachinePermissionScope) {
+  const scope = Object.freeze({ tenant_id: tenantId(expectedScope.tenant_id), environment: connectEnvironment(expectedScope.environment) });
+  async function invoke(call: LeaseCall | LeaseCheckCall) {
+    let result: unknown;
+    try { result = await client.rpc(call.function_name, call.args); }
+    catch { throw new DomainError("INTERNAL_ERROR"); }
+    const response = record(result);
+    if (response.error !== null && response.error !== undefined) throw databaseError(response.error);
+    return response.data;
+  }
+  return Object.freeze({
+    async acquire(value: unknown) {
+      const call = identityExecutionLeaseRpc(value, scope);
+      return parseIdentityExecutionLeaseReceipt(await invoke(call), call);
+    },
+    async check(value: unknown) {
+      const call = identityExecutionLeaseCheckRpc(value, scope);
+      return parseIdentityExecutionLeaseCheck(await invoke(call), call);
+    },
+  });
 }
