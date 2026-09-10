@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         channel.basic_publish('flexexa.retry','asset.connected',body,props,mandatory=True)
         for attempt in range(3):
             method,received,message=wait_message(channel,'flexexa.retry.q')
-            assert received.headers.get('x-delivery-count',0)==attempt
+            assert (received.headers or {}).get('x-delivery-count',0)==attempt
             channel.basic_reject(method.delivery_tag,requeue=True)
         method,received,message=wait_message(channel,'flexexa.dead.q')
         assert json.loads(message)==event and received.headers['x-death'][0]['reason']=='delivery_limit'
