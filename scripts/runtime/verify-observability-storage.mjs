@@ -66,8 +66,8 @@ try{
  await sql("CREATE ROW POLICY production_traces ON flexexa.otel_traces_v1 USING Environment='production' TO ops_production");
  for(const query of ['SELECT * FROM flexexa.otel_traces_v1','TRUNCATE TABLE flexexa.otel_traces_v1','DROP TABLE flexexa.otel_traces_v1','INSERT INTO flexexa.telemetry_v1 SELECT * FROM flexexa.telemetry_v1'])await sql(query,'trace_writer',true);
  await sql('SELECT 1','default',true);
- // Capture the actual candidate image before configuration validation, then pin it.
- await docker([...collectorCompose,'pull','collector']);
+ // Build the reviewed, checksum-locked distribution before running this verification.
+ // The same immutable local image ID is inspected here and scanned by CI.
  const candidateImage=readFileSync(resolve(root,'infra/docker/observability/compose.yml'),'utf8').match(/^    image: (.+)$/mu)[1];
  const image=JSON.parse(await docker(['image','inspect',candidateImage]))[0];
  console.log(JSON.stringify({observability_candidate_image:image.Id,repo_digests:image.RepoDigests}));
