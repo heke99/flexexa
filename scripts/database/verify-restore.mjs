@@ -21,9 +21,9 @@ const docker=(command,code,input)=>{
  try{return execFileSync('docker',['exec',...(input===undefined?[]:['-i']),'-e','PGPASSWORD',container,...command],{input,encoding:'utf8',timeout:120000,maxBuffer:1024*1024,stdio:[input===undefined?'ignore':'pipe','pipe','pipe']}).trim();}
  catch(error){
   // Never put dump contents, Auth material or failed COPY rows into CI logs.
-  const headers=String(error.stderr??'').split('\n').filter(x=>/^pg_(?:dump|restore): (?:error|warning):/u.test(x)).slice(0,8);
+  const errorCount=String(error.stderr??'').split('\n').filter(x=>/^pg_(?:dump|restore): (?:error|warning):/u.test(x)).length;
   const commandKind=String(error.stderr??'').split('\n').find(x=>x.startsWith('Command was:'))?.match(/^Command was: ([A-Z]+(?: [A-Z]+)?)/u)?.[1];
-  console.error(JSON.stringify({restoreCommand:code,headers,commandKind}));throw Error(code);
+  console.error(JSON.stringify({restoreCommand:code,errorCount,commandKind}));throw Error(code);
  }
 };
 const sourceInfo=JSON.parse(sql('postgres',"select jsonb_build_object('major',current_setting('server_version_num')::int/10000,'address',inet_server_addr(),'database',current_database())"));
@@ -62,6 +62,13 @@ try{
  const inSnapshot=s=>`begin isolation level repeatable read read only;set transaction snapshot ${quote(snapshot)};set local timezone='UTC';${s};commit;`;
  const catalogSql=fs.readFileSync('scripts/database/schema-catalog.sql','utf8');
  const sourceCatalog=JSON.parse(sql('postgres',inSnapshot(catalogSql)));
+ // A logical dump omits dropped attributes, closing internal attnum gaps.
+ // Preserve active column order and every other catalog property. The normal
+ // migration/live parity query remains byte-for-byte unchanged.
+ const positionExpression="'position',a.attnum";
+ assert.equal(catalogSql.split(positionExpression).length,2,'Restore catalog position expression changed');
+ const logicalCatalogSql=catalogSql.replace(positionExpression,"'position',(select count(*) from pg_catalog.pg_attribute live where live.attrelid=a.attrelid and live.attnum>0 and live.attnum<=a.attnum and not live.attisdropped)");
+ const sourceLogicalCatalog=JSON.parse(sql('postgres',inSnapshot(logicalCatalogSql)));
  const tables=JSON.parse(sql('postgres',inSnapshot(`select jsonb_agg(jsonb_build_object('schema',n.nspname,'name',c.relname) order by n.nspname,c.relname) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','auth','supabase_migrations') and c.relkind in ('r','p') and not exists(select 1 from pg_catalog.pg_depend d where d.classid='pg_catalog.pg_class'::regclass and d.objid=c.oid and d.deptype='e')`)));
  assert.ok(tables.length>30);
  const parts=tables.map(t=>`select ${quote(t.schema+'.'+t.name)} as relation,count(*) as rows,encode(extensions.digest(coalesce(string_agg(row_hash,'' order by row_hash),''),'sha256'),'hex') as sha256 from (select encode(extensions.digest(to_jsonb(r)::text,'sha256'),'hex') as row_hash from ${identifier(t.schema)}.${identifier(t.name)} r) data`);
@@ -102,8 +109,8 @@ try{
   assert.deepEqual(value,{value:entry[2],called:entry[3]==='true'});
  }
  assert.equal(sql(target,'select current_database()'),target);
- const restoredCatalog=JSON.parse(sql(target,catalogSql));
- const parity=compareSchemaCatalog(sourceCatalog,restoredCatalog);
+ const restoredCatalog=JSON.parse(sql(target,logicalCatalogSql));
+ const parity=compareSchemaCatalog(sourceLogicalCatalog,restoredCatalog);
  assert.equal(parity.applicationCatalogMatches,true,JSON.stringify(parity.differences));
  const restoredData=JSON.parse(sql(target,"set timezone='UTC';"+dataSql));
  assert.deepEqual(restoredData,sourceData,'Restored table contents differ from the dump snapshot');
@@ -127,7 +134,7 @@ try{
  report={kind:'isolated_logical_restore',sourceImage:inspection.Image,client:dumpVersion,archiveBytes,archiveSha256,
   applicationCatalogObjects:parity.actualObjects,dataTables:sourceData.length,dataRows:sourceData.reduce((sum,t)=>sum+Number(t.rows),0),
   authTables:sourceData.filter(t=>t.relation.startsWith('auth.')).length,migrationRows:sourceData.find(t=>t.relation==='supabase_migrations.schema_migrations').rows,
-  exactSchemaAndData:true,sequencesVerified:sequenceCount,restoredTenantIsolation:true,restoredCompositeFK:true,restoredAuditImmutability:true,restoredIdempotency:true,resumedAtomicWrites:true,sourceFixtureUnchanged:true,sourceSchemaUnchanged:true,
+  exactLogicalSchemaAndData:true,schemaComparison:'active_column_order_and_all_other_catalog_properties',sequencesVerified:sequenceCount,restoredTenantIsolation:true,restoredCompositeFK:true,restoredAuditImmutability:true,restoredIdempotency:true,resumedAtomicWrites:true,sourceFixtureUnchanged:true,sourceSchemaUnchanged:true,
   dumpMs,restoreMs,totalMs:Math.round(performance.now()-started),productionPITR:false,crossClusterRolesAndSecrets:false};
 }finally{
  if(keeper){keeper.stdin.destroy();keeper.kill('SIGTERM');keeperLines?.close();}
