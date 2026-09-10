@@ -64,3 +64,9 @@ final run `34489237479` passed all six jobs and 606 pgTAP assertions. Exact migr
 `20260910142645`, 18 history entries and 1,284 catalog objects matched development.
 Independent approval, immutable evidence and new-version readiness are verified in
 sandbox. Production shadow/criteria, binding lifecycle and hosted signing remain open.
+
+Transactional policy inbox: PR #36 merged as `38af546164df9b24b5345caf53d9a0f7724020bf`;
+final run `34492407834` passed all six jobs and 635 SQL assertions, 16 concurrent
+consumes and actual TypeScript/SQL/RabbitMQ lost-ACK recovery. Exact migration
+`20260910145540`, 19 history entries and 1,322 catalog objects matched development.
+This is a sandbox policy consumer; hosted workers and provider ingress remain pending.
