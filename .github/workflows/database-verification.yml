@@ -27,6 +27,10 @@ jobs:
           test -f supabase/migrations/20260909111942_phase0_customer_site_asset_core.sql
       - name: Start isolated Supabase
         run: supabase start
+      - name: Build identity runtime from tracked source
+        run: |
+          docker build --pull -f apps/identity-service/Dockerfile -t flexexa-identity:ci .
+          docker image inspect --format '{{json .RepoDigests}}' node:24.19.0-bookworm-slim
       - name: Clean migration replay
         run: supabase db reset --local
       - name: Capture clean application schema before test fixtures
@@ -61,6 +65,24 @@ jobs:
           node --experimental-strip-types scripts/database/verify-machine-authorization.mjs
           node --experimental-strip-types scripts/database/verify-identity-administration.mjs
           node --experimental-strip-types scripts/database/verify-auth-provisioning.mjs
+          IDENTITY_CONTAINER_IMAGE=flexexa-identity:ci node --experimental-strip-types scripts/database/verify-auth-provisioning.mjs
+      - name: Scan the tested container for high and critical vulnerabilities
+        run: |
+          mkdir -p /tmp/flexexa-image-input /tmp/flexexa-image-report
+          docker save flexexa-identity:ci -o /tmp/flexexa-image-input/identity.tar
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
+            -v /tmp/flexexa-image-input:/images:ro -v /tmp/flexexa-image-report:/reports \
+            aquasec/trivy:0.74.0 image --input /images/identity.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --format json --output /reports/trivy.json
+      - name: Retain container vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-identity-container-scan
+          path: /tmp/flexexa-image-report/trivy.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Retain exact migration replay inputs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

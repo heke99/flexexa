@@ -1,0 +1,40 @@
+# Phase 0 — identity runtime container
+
+Candidate builds the existing identity backend from an explicit source allowlist. The
+Node 24.19.0 bookworm-slim image contains only the service, canonical domain and API
+contract sources/manifests plus fixed workspace symlinks. There is no package install,
+compiler, copied lockfile, test fixture or application secret in the build context.
+The base image still includes its vendor-provided tools; this is not a distroless image.
+
+The Dockerfile runs as `node`, exposes process liveness, and directly executes the
+production Node entrypoint as PID 1. Isolated verification additionally enforces a
+read-only root filesystem, no Linux capabilities, no privilege escalation and bounded
+memory/CPU. The actual production HTTPS requirement remains enabled. An ephemeral
+loopback TLS proxy with a disposable trusted test certificate forwards to local Supabase;
+no `NODE_TLS_REJECT_UNAUTHORIZED` bypass or runtime HTTP toggle is introduced.
+
+The existing real MFA/three-subject/ambiguity/concurrency/revocation story runs both on
+the host and through the container. The proxy observes real Auth operations and simulates
+the one lost response after a real commit. It does not substitute Auth/SQL results.
+Disposable local credentials are passed through a mode-0600 temporary env file, kept
+outside the repository and image, and removed with the fixture. Only the public test
+certificate is mounted. Docker inspection output never includes runtime environment.
+The fixture verifies Docker health, non-root UID, read-only root and clean SIGTERM exit.
+
+CI scans the tested image archive using pinned Trivy 0.74.0, retains a JSON report and
+fails on HIGH/CRITICAL vulnerabilities, including unfixed findings. No ignore policy is
+added. Image scanning needs registry/advisory access and remains a real required gate.
+No Docker daemon is available in the editing workspace; container results must come
+from CI before this boundary is called verified.
+
+Activated repository Docker/local-stack, AWS containers, deployment, verification,
+index/impact, code/security review and test strategy. Master sections 77 and 83 apply.
+OpenTofu remains infrastructure authority; this change provisions no AWS resource.
+
+References checked:
+- https://github.com/aquasecurity/trivy/releases/tag/v0.74.0
+- https://trivy.dev/docs/latest/references/configuration/cli/trivy_image/
+
+Remaining: ECR publishing, least-privilege ECS runtime/secrets binding, private egress,
+TLS ingress, distributed rate limiting, observability, deployment rollback and live
+smoke verification. A green isolated container does not complete Phase 0 or deploy AWS.
