@@ -34,7 +34,7 @@ async function run(args){const r=await exec('docker',args,{cwd:root,env,timeout:
 async function waitFor(check){const end=Date.now()+15000;while(Date.now()<end){if(await check())return;await new Promise(r=>setTimeout(r,100));}throw Error('OTEL_CONDITION_TIMEOUT');}
 async function healthy(){try{return (await fetch('http://127.0.0.1:'+healthPort,{signal:AbortSignal.timeout(500)})).status===200;}catch{return false;}}
 const spans=()=>batches.flatMap(b=>b.resourceSpans.flatMap(r=>r.scopeSpans.flatMap(s=>s.spans)));
-const correlation=s=>s.attributes.find(a=>a.key==='flexexa.correlation_id')?.value?.stringValue;
+const correlation=s=>s.attributes?.find(a=>a.key==='flexexa.correlation_id')?.value?.stringValue;
 try{
  await run([...compose,'run','--rm','collector','validate','--config=/etc/otelcol/config.yaml']);
  await run([...compose,'up','--detach']);

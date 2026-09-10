@@ -29,5 +29,8 @@ Current official references: [release](https://github.com/open-telemetry/opentel
 [configuration](https://opentelemetry.io/docs/collector/configuration/),
 [OTLP HTTP exporter](https://github.com/open-telemetry/opentelemetry-collector/blob/v0.160.0/exporter/otlphttpexporter/README.md).
 
-Candidate version is resolved in CI and must be frozen to its observed registry digest
-before the final scan/merge. No guessed image digest is accepted.
+Version 0.160.0 is frozen to registry digest
+`sha256:e495787f07dbe432ce763ebaf5bc3d113850e9eee2250ade7a3da6a882d0d69a`,
+observed in initial CI run `34471548330`. That initial run exposed an optional OTLP
+attribute-array handling defect in the test; it is not final verification evidence.
+The corrected, digest-pinned source must pass all gates before merge.
