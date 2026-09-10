@@ -24,28 +24,20 @@ const project='flexexa-observe-'+randomBytes(6).toString('hex');
 const dbCompose=['compose','--project-name',project+'-db','--file',resolve(root,'infra/docker/clickhouse/compose.yml')];
 const collectorCompose=['compose','--project-name',project+'-collector','--file',resolve(root,'infra/docker/observability/compose.yml')];
 let database,collector,server,telemetry,port,report,storageOwned=false;
-async function command(binary,args){try{return (await exec(binary,args,{cwd:root,env,timeout:180000,maxBuffer:2*1024*1024})).stdout.trim();}catch{throw Error('OBSERVABILITY_COMMAND_FAILED_'+binary);}}
+async function command(binary,args){try{return (await exec(binary,args,{cwd:root,env,timeout:180000,maxBuffer:2*1024*1024})).stdout.trim();}catch(error){
+ if(binary==='docker'&&args.includes('validate')){
+  let diagnostic=String(error.stderr??'');for(const value of Object.values(passwords))diagnostic=diagnostic.replaceAll(value,'[redacted]');
+  console.error(diagnostic.slice(-3000)); // Configuration validation only, before SDK/data ingress.
+ }
+ throw Error('OBSERVABILITY_COMMAND_FAILED_'+binary);
+}}
 const docker=args=>command('docker',args);
 async function waitFor(check,label){const end=Date.now()+30000;while(Date.now()<end){if(await check())return;await new Promise(r=>setTimeout(r,100));}throw Error('OBSERVABILITY_TIMEOUT_'+label);}
 async function sql(query,user='fixture_admin',denied=false,schemaDiagnostic=false){
  const response=await fetch('http://127.0.0.1:'+port+'/',{method:'POST',headers:{'X-ClickHouse-User':user,'X-ClickHouse-Key':passwords[user]??''},body:query,signal:AbortSignal.timeout(15000)});
  const body=await response.text();
- if(denied){assert(!response.ok,'Expected SQL denial');assert.match(body,/Code: (?:164|194|195|497|516)\./u);return '';}
- if(!response.ok&&schemaDiagnostic){
-  console.error(body.slice(0,4000)); // Tracked DDL only; never row/credential SQL.
-  if(query.includes('CREATE TABLE flexexa.otel_traces_v1 (')){
-   const probeName='flexexa.otel_schema_probe',start=query.indexOf(' CONSTRAINT'),end=query.indexOf(') ENGINE=');
-   const base=query.slice(0,start).replace(/,\s*$/u,'')+'\n'+query.slice(end);
-   try{
-    await sql(base.replace('flexexa.otel_traces_v1',probeName));console.error('SCHEMA_PROBE_BASE_OK');
-    for(const part of query.slice(start,end).trim().split(/,\n (?=CONSTRAINT|INDEX)/u)){
-     const definition=part.trim().replace(/,$/u,'');
-     try{await sql('ALTER TABLE '+probeName+' ADD '+definition);console.error('SCHEMA_PROBE_OK_'+definition.split(' ')[1]);}
-     catch(e){console.error('SCHEMA_PROBE_FAILED_'+definition.split(' ')[1]+'_'+e.message);}
-    }
-   }catch(e){console.error('SCHEMA_PROBE_BASE_FAILED_'+e.message);}
-  }
- }
+ if(denied){assert(!response.ok,'Expected SQL denial');const code=Number(body.match(/Code: ([0-9]+)\./u)?.[1]);assert((Array.isArray(denied)?denied:[164,194,195,497,516]).includes(code),'UNEXPECTED_DENIAL_CODE_'+code);return '';}
+ if(!response.ok&&schemaDiagnostic)console.error(body.slice(0,4000)); // Tracked DDL only; never row/credential SQL.
  if(!response.ok)throw Error('OBSERVABILITY_SQL_FAILED_'+response.status+'_'+(body.match(/Code: ([0-9]+)/u)?.[1]??'UNKNOWN'));
  return body.trim();
 }
@@ -123,6 +115,14 @@ try{
  assert.equal(await sql('SELECT count() FROM flexexa.otel_traces_v1','unassigned'),'0');assert.equal(await sql('SELECT count() FROM flexexa.otel_traces_v1','ops_production'),'0');
  await sql('TRUNCATE TABLE flexexa.otel_traces_v1','ops_sandbox',true);
  const sample=JSON.parse(stored.split('\n')[0]);delete sample.Environment;delete sample.ReceivedAt;
+ for(const kind of ['message','state','attribute']){
+  const invalid=structuredClone(sample);invalid.TraceId=randomBytes(16).toString('hex');
+  if(kind==='message')invalid.StatusMessage=secret;
+  if(kind==='state')invalid.TraceState=secret;
+  if(kind==='attribute')invalid.SpanAttributes['private.attribute']=secret;
+  await sql('INSERT INTO flexexa.otel_traces_v1 FORMAT JSONEachRow\n'+JSON.stringify(invalid),'fixture_admin',[469]);
+  assert.equal(await traceCount(invalid.TraceId),'0');
+ }
  sample.TraceId=randomBytes(16).toString('hex');sample.ResourceAttributes['deployment.environment.name']='production';
  await sql('INSERT INTO flexexa.otel_traces_v1 FORMAT JSONEachRow\n'+JSON.stringify(sample));
  assert.equal(await traceCount(sample.TraceId),'0');assert.equal(await traceCount(sample.TraceId,'ops_production'),'1');
@@ -132,7 +132,8 @@ try{
  const queued=[];for(let i=0;i<96;i++)queued.push(await healthRequest());
  await waitFor(async()=>{const metrics=await (await fetch('http://127.0.0.1:'+metricsPort+'/metrics')).text();return metrics.split('\n').some(l=>/^otelcol_exporter_queue_size(?:\{|\s)/u.test(l)&&Number(l.split(' ').at(-1))>0);},'PERSISTENT_QUEUE');
  await docker(['kill','--signal','KILL',collector]);assert.equal(await docker(['inspect','--format','{{.State.ExitCode}}',collector]),'137');
- await docker([...dbCompose,'start','--wait','--wait-timeout','120','clickhouse']);
+ await docker([...dbCompose,'up','--no-recreate','-d','--wait','--wait-timeout','120','clickhouse']);
+ assert.equal(await docker([...dbCompose,'ps','-q','clickhouse']),database);
  assert.equal(Number((await docker([...dbCompose,'port','clickhouse','8123'])).split(':').at(-1)),port);
  await docker([...collectorCompose,'up','-d','--force-recreate']);const replacement=await docker([...collectorCompose,'ps','-q','collector']);assert.notEqual(replacement,collector);collector=replacement;
  await waitFor(healthy,'REPLACEMENT_HEALTH');
@@ -146,7 +147,7 @@ try{
  await new Promise(r=>server.close(r));server=undefined;await telemetry.shutdown();telemetry=undefined;
  await docker([...collectorCompose,'stop','--timeout','10','collector']);assert.equal(await docker(['inspect','--format','{{.State.ExitCode}}',collector]),'0');
  report={collector_image:image.Id,collector_repo_digests:image.RepoDigests,clickhouse_image:databaseInfo.Image,migration_sha256:migrations,
-  actual_sdk_collector_clickhouse:true,parentage_preserved:true,private_attributes_removed:true,free_text_and_unknown_service_dropped:4,writer_insert_only:true,unassigned_reader_denied:true,environment_reader_isolation:true,
+  actual_sdk_collector_clickhouse:true,parentage_preserved:true,private_attributes_removed:true,free_text_and_unknown_service_dropped:4,database_privacy_rejections:3,writer_insert_only:true,unassigned_reader_denied:true,environment_reader_isolation:true,
   replay_final_read_deduplicated:true,persistent_queue_after_sigkill_and_replacement:true,recovered_queued_sdk_spans:96,database_restart_preserved_rows:true,retention_hours:72,expired_row_removed:true,
   non_root_read_only:true,loopback_only:true,graceful_shutdown:true,delivery_semantics:'at_least_once_after_collector_acceptance',
   production_deployed:false,host_disk_loss_recovery:false,tenant_rbac_integration:false};

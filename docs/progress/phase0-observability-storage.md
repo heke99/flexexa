@@ -23,8 +23,11 @@ Required executed evidence: real SDK-to-Collector-to-ClickHouse storage and pare
 private values absent; insert-only writer and read/environment denials; replay reads;
 ClickHouse stop followed by queued SDK delivery, SIGKILL and replacement of Collector,
 then recovered queued span; retained database data; actual TTL removal; private/non-root
-containers and image scans. Candidate image tag must be replaced with the observed
-digest and final CI must pass before merge. No production deployment is claimed.
+containers and image scans. Collector is pinned to the digest observed in CI
+`34499789852`; final complete CI must pass before merge. No production deployment
+is claimed. The initial schema failure was isolated to empty-string equality checks;
+equivalent length-zero constraints retain the data restrictions. Negative inserts
+explicitly check that free text and unknown attributes are rejected.
 
 Skills: observability, Docker/local stack, ClickHouse, index/impact/affected verification,
 code/security review, performance and test strategy; upstream guidance applies only to

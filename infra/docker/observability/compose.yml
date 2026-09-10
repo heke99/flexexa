@@ -1,7 +1,7 @@
-# Disposable Linux sidecar fixture. Pin the candidate image digest after CI readback.
+# Disposable Linux sidecar fixture with dedicated persistent queue storage.
 services:
   collector:
-    image: otel/opentelemetry-collector-contrib:0.160.0
+    image: otel/opentelemetry-collector-contrib:0.160.0@sha256:799dc6cf12c96192af37b5bdba804da8c10b3bc563b43cb90c3f3c58d9572ad6
     user: "65532:65532"
     read_only: true
     cap_drop: [ALL]
