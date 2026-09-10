@@ -34,7 +34,7 @@ export function analyze(diff,index,config) {
   if(diff.files.some(f=>/^supabase\//u.test(f))){risk='HIGH';reasons.push('SQL dependencies require database replay, not import-graph inference.');}
   const requiredChecks=['application'];
   if(diff.files.some(f=>f==='FLEXEXA_MASTER_BUILD_PROMPT_V1.md'||f.startsWith('docs/progress/masterplan')||f.startsWith('scripts/quality/masterplan'))) requiredChecks.push('masterplan-source-and-evidence-review');
-  const sqlContractChange=diff.files.some(f=>/^(supabase|scripts\/database)\//u.test(f)
+  const sqlContractChange=diff.files.some(f=>/^(supabase|scripts\/database|country-packs|scripts\/country-packs)\//u.test(f)
     || /^packages\/(domain|events|api-contracts|kernel)\//u.test(f));
   if(sqlContractChange || diff.files.includes('.github/workflows/database-verification.yml')) requiredChecks.push('database-replay-and-rls');
   if(sqlContractChange) requiredChecks.push('rpc-contract-and-concurrency-tests');

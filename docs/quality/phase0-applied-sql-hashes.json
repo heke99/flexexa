@@ -16,7 +16,8 @@
     "supabase/migrations/20260909190638_phase0_api_identity_administration.sql": "924c8ecc1427cfbe9365d4a0b51b449b5a4658a66cee5983d5b7371b17ce47fe",
     "supabase/migrations/20260910062435_phase0_identity_provisioning_request.sql": "38586f78122ac7d784403b4dcc4f037fe20bb9450db2f99ea427b0985cc80be7",
     "supabase/migrations/20260910065545_phase0_identity_execution_lease.sql": "3030a11965917076165fb5fcfea6e2987a8be384a1d7119d1af44e7190fe08c6",
-    "supabase/migrations/20260910073558_phase0_identity_provisioning_finalization.sql": "2527bc4d3c8568101c76619fa46c634e546a9ac101c4a5dde8b7ab934f93f0b4"
+    "supabase/migrations/20260910073558_phase0_identity_provisioning_finalization.sql": "2527bc4d3c8568101c76619fa46c634e546a9ac101c4a5dde8b7ab934f93f0b4",
+    "supabase/migrations/20260910094434_phase0_country_pack_defaults.sql": "f272e7cf87e25991c46fd4586aef8c1210ab723e933d145d59cc636df744b8e9"
   },
   "appended_dev_verified_versions": [
     "20260909135947",
@@ -26,6 +27,7 @@
     "20260909190638",
     "20260910062435",
     "20260910065545",
-    "20260910073558"
+    "20260910073558",
+    "20260910094434"
   ]
 }
