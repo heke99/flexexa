@@ -170,3 +170,43 @@ jobs:
             /tmp/flexexa-valkey-report/trivy.json
           if-no-files-found: error
           retention-days: 7
+  runtime-rabbitmq:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install hash-locked AMQP test client
+        run: |
+          python3 -m venv /tmp/flexexa-amqp-venv
+          /tmp/flexexa-amqp-venv/bin/pip install --require-hashes --only-binary=:all: -r scripts/runtime/rabbitmq/requirements.txt
+      - name: Verify real AMQP delivery and isolation
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: /tmp/flexexa-amqp-venv/bin/python scripts/runtime/rabbitmq/verify.py
+      - name: Scan tested broker image and locked client
+        run: |
+          mkdir -p /tmp/flexexa-rabbit-input /tmp/flexexa-rabbit-report
+          rabbit_image=$(sed -n 's/^    image: //p' infra/docker/rabbitmq/compose.yml)
+          docker save "$rabbit_image" -o /tmp/flexexa-rabbit-input/rabbitmq.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-rabbit-input:/images:ro -v /tmp/flexexa-rabbit-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/rabbitmq.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/image.json
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v "$PWD/scripts/runtime/rabbitmq:/client:ro" -v /tmp/flexexa-rabbit-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 fs /client \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/client.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-rabbitmq-runtime
+          path: |
+            .flexexa/index/rabbitmq-runtime.json
+            /tmp/flexexa-rabbit-report/*.json
+          if-no-files-found: error
+          retention-days: 7
