@@ -318,6 +318,8 @@ begin
   or jsonb_typeof(p->'deny_reasons') is distinct from 'array' then raise exception using errcode='P0001',message='VALIDATION_ERROR'; end if;
  if (p->>'minimum_kw')::numeric<0 or (p->>'maximum_kw')::numeric<(p->>'minimum_kw')::numeric
   or (p->>'maximum_kw')::numeric>1000000
+  or round((p->>'minimum_kw')::numeric,6)<>(p->>'minimum_kw')::numeric
+  or round((p->>'maximum_kw')::numeric,6)<>(p->>'maximum_kw')::numeric
   or jsonb_array_length(p->'deny_reasons')>128 then raise exception using errcode='P0001',message='VALIDATION_ERROR'; end if;
  for reason in select value from jsonb_array_elements(p->'deny_reasons') loop
   if jsonb_typeof(reason)<>'string' or (reason#>>'{}') !~ '^[A-Z][A-Z0-9_]{0,63}$' then
@@ -329,7 +331,7 @@ revoke all on function private.flexexa_validate_power_rule(jsonb) from public,an
 create function private.flexexa_test_power_rule(expression jsonb,requested_kw numeric) returns boolean language plpgsql immutable set search_path='' as $$
 begin
  perform private.flexexa_validate_power_rule(expression);
- if requested_kw is null or requested_kw<0 or requested_kw>'1000000'::numeric then
+ if requested_kw is null or requested_kw<0 or requested_kw>'1000000'::numeric or round(requested_kw,6)<>requested_kw then
   raise exception using errcode='P0001',message='VALIDATION_ERROR'; end if;
  return requested_kw>=(expression->>'minimum_kw')::numeric and requested_kw<=(expression->>'maximum_kw')::numeric and expression->'deny_reasons'='[]'::jsonb;
 end $$;
@@ -495,12 +497,16 @@ begin
    update public.rule_versions set status='published' where id in(select rule_version_id from public.policy_set_rule_versions where policy_set_version_id=resource);
    update public.policy_set_versions set status='published' where id=resource;
   when 'readiness' then
-   if v.status<>'published' or exists(select 1 from public.policy_set_versions where policy_set_id=policy and version>v.version and status='published') then
+   if v.status<>'published' or not exists(select 1 from private.flexexa_policy_publications x where x.policy_set_version_id=resource
+    and not exists(select 1 from private.flexexa_policy_publications newer join public.policy_set_versions nv on nv.id=newer.policy_set_version_id
+     where newer.tenant_id=x.tenant_id and newer.policy_set_id=policy and nv.version>v.version)) then
     raise exception using errcode='P0001',message='POLICY_DENIED'; end if;
    select max((r.expression_json->>'minimum_kw')::numeric),min((r.expression_json->>'maximum_kw')::numeric),bool_or(r.expression_json->'deny_reasons'<>'[]'::jsonb)
     into min_kw,max_kw,denies from public.rule_versions r join public.policy_set_rule_versions m on m.rule_version_id=r.id where m.policy_set_version_id=resource;
    for target in select t.id,t.status,o.status organization_status from private.flexexa_policy_publications x join public.tenants t on t.id=x.tenant_id join public.organizations o on o.id=t.organization_id
-    where x.policy_set_version_id=resource order by t.id for share of t,o loop
+    where x.policy_set_version_id=resource and not exists(select 1 from private.flexexa_policy_publications newer
+     join public.policy_set_versions nv on nv.id=newer.policy_set_version_id where newer.tenant_id=t.id and newer.policy_set_id=policy and nv.version>v.version)
+    order by t.id for share of t,o loop
     -- Sandbox evidence is never production readiness or control authorization.
     blockers:='["SANDBOX_ONLY"]';
     if min_kw>max_kw or denies then blockers:=blockers||'"POLICY_DENIED"'::jsonb; end if;
@@ -512,6 +518,7 @@ begin
   end case;
  end if;
  perform private.flexexa_assert_policy_admin();
+ if action='publish' and v.valid_until<=clock_timestamp() then raise exception using errcode='P0001',message='POLICY_DENIED'; end if;
  response:=jsonb_build_object('policy_set_version_id',resource,'status',(select status from public.policy_set_versions where id=resource),'environment','sandbox','correlation_id',correlation);
  if action in ('test','shadow') then response:=response||jsonb_build_object('passed',all_passed,'cases_count',case_count); end if;
  insert into public.audit_events(scope_type,actor_type,actor_id,action,resource_type,resource_id,correlation_id,idempotency_record_id,metadata_json)
@@ -545,3 +552,15 @@ revoke all on function public.flexexa_evaluate_tenant_policy_readiness(jsonb,tex
 grant execute on function public.flexexa_evaluate_tenant_policy_readiness(jsonb,text,uuid) to authenticated;
 -- The legacy tenant policy must not become an alternate platform-audit path.
 alter policy audit_events_authorized_read on public.audit_events using(scope_type='tenant' and private.flexexa_has_permission(tenant_id,'audit.read'));
+create function private.flexexa_policy_reader(t uuid) returns boolean language sql volatile security definer set search_path='' as $$
+ select coalesce(auth.jwt()->>'role','')='authenticated' and coalesce(auth.jwt()->>'is_anonymous','false')='false'
+ and exists(select 1 from auth.users u join auth.sessions s on s.user_id=u.id
+  where u.id=auth.uid() and s.id::text=auth.jwt()->>'session_id' and u.deleted_at is null and u.is_anonymous=false
+   and (u.banned_until is null or u.banned_until<=clock_timestamp()) and (s.not_after is null or s.not_after>clock_timestamp()))
+ and (private.flexexa_current_policy_admin() or private.flexexa_has_permission(t,'rules.read'))
+$$;
+revoke all on function private.flexexa_policy_reader(uuid) from public,anon,authenticated,service_role;
+grant execute on function private.flexexa_policy_reader(uuid) to authenticated;
+alter policy rule_bindings_read on public.rule_bindings using(private.flexexa_policy_reader(tenant_id));
+alter policy tenant_readiness_read on public.tenant_policy_readiness using(private.flexexa_policy_reader(tenant_id));
+alter policy rule_evaluations_read on public.rule_evaluations using(private.flexexa_policy_reader(tenant_id));

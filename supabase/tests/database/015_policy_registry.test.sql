@@ -16,6 +16,8 @@ insert into public.tenants(id,organization_id,name,slug) values(pg_temp.pid(20),
 insert into public.memberships(id,tenant_id,user_id) values(pg_temp.pid(41),pg_temp.pid(20),pg_temp.pid(3)),(pg_temp.pid(42),pg_temp.pid(21),pg_temp.pid(4));
 insert into public.membership_roles(tenant_id,membership_id,role_id)
  select m.tenant_id,m.id,r.id from public.memberships m join public.roles r on r.tenant_id=m.tenant_id and r.role_key='tenant_admin' where m.id in(pg_temp.pid(41),pg_temp.pid(42));
+insert into public.role_permissions(tenant_id,role_id,permission_id)
+ select r.tenant_id,r.id,p.id from public.roles r cross join public.permissions p where r.tenant_id in(pg_temp.pid(20),pg_temp.pid(21)) and r.role_key='tenant_admin' and p.permission_key='rules.read';
 create temp table policies(name text primary key,body jsonb);
 grant all on policies to authenticated;
 create function pg_temp.payload(k text default 'policy.test') returns jsonb language sql as $$
@@ -40,8 +42,12 @@ select throws_ok($$select public.flexexa_create_policy_set_version(pg_temp.paylo
 select pg_temp.claims(1);
 select throws_ok($$select public.flexexa_create_policy_set_version(jsonb_set(pg_temp.payload(),'{rules,0,expression}','[]'),'bad',pg_temp.pid(900))$$,'P0001','VALIDATION_ERROR','array expression rejected');
 select throws_ok($$select public.flexexa_create_policy_set_version(jsonb_set(pg_temp.payload(),'{rules,0,expression,maximum_kw}','"7"'),'bad',pg_temp.pid(900))$$,'P0001','VALIDATION_ERROR','numeric strings rejected');
+select throws_ok($$select public.flexexa_create_policy_set_version(jsonb_set(pg_temp.payload(),'{rules,0,expression,minimum_kw}','0.00000001'),'bad',pg_temp.pid(900))$$,'P0001','VALIDATION_ERROR','sub-microkilowatt values rejected at language boundary');
 select throws_ok($$select public.flexexa_create_policy_set_version(jsonb_set(pg_temp.payload(),'{valid_from}','"2026-02-30T00:00:00.000Z"'),'bad',pg_temp.pid(900))$$,'P0001','VALIDATION_ERROR','impossible instant rejected');
 select throws_ok($$select public.flexexa_create_policy_set_version(pg_temp.payload()||'{"sql":"select 1"}','bad',pg_temp.pid(900))$$,'P0001','VALIDATION_ERROR','executable/unknown fields rejected');
+insert into policies values('failing',public.flexexa_create_policy_set_version(jsonb_set(pg_temp.payload('policy.failing'),'{rules,0,tests,0,expected_allowed}','false'),'create-failing',pg_temp.pid(900)));
+select is(public.flexexa_test_policy_set_version(pg_temp.version('failing'),'test-failing',pg_temp.pid(900))->>'passed','false','wrong stored expected result fails actual tests');
+select throws_ok($$select public.flexexa_shadow_policy_set_version(pg_temp.version('failing')||'{"observations":[{"requested_kw":5,"expected_allowed":true}]}','skip-failure',pg_temp.pid(900))$$,'P0001','INVALID_STATE_TRANSITION','failed automated tests cannot enter shadow');
 insert into policies values('first',public.flexexa_create_policy_set_version(pg_temp.payload(),'create',pg_temp.pid(900)));
 select is((select body->>'status' from policies where name='first'),'draft','authoring creates draft');
 select is(public.flexexa_create_policy_set_version(pg_temp.payload(),'create',pg_temp.pid(901)),(select body from policies where name='first'),'replay returns original receipt/correlation');
@@ -95,6 +101,8 @@ update auth.sessions set not_after=clock_timestamp()-interval '1 second' where i
 set local role authenticated;
 select throws_ok($$select public.flexexa_publish_policy_set_version(pg_temp.version('second'),'publish2',pg_temp.pid(900))$$,'42501','PERMISSION_DENIED','expired session cannot replay successful publication');
 select is((select count(*) from public.policy_set_versions),0::bigint,'expired session cannot read registry');
+select is((select count(*) from public.tenant_policy_readiness),0::bigint,'expired platform session cannot read tenant readiness through legacy admin shortcut');
+select is((select count(*) from public.audit_events where scope_type='platform'),0::bigint,'expired platform session cannot read global audit through tenant policy');
 reset role;
 select * from finish();
 rollback;

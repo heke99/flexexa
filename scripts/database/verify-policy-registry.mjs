@@ -34,13 +34,25 @@ const rows=JSON.parse(sql(`select jsonb_agg(jsonb_build_object('rule_version_id'
 const compiled={tenant_id:tenant,policy_set_version_id:version.policy_set_version_id,valid_from,valid_until,limits:rows,deny_reasons:[]};
 const result=intersectPowerPolicy(compiled,tenant,'2026-09-10T00:00:00.000Z');
 assert.deepEqual(result.constraints_json,{minimum_kw:2,maximum_kw:5});
-const observations=[0,1,2,3,5,6,7,8].map(requested_kw=>({requested_kw,expected_allowed:result.allowed&&requested_kw>=result.constraints_json.minimum_kw&&requested_kw<=result.constraints_json.maximum_kw}));
+const observations=[0,1,1.999999,2,2.000001,3,4.999999,5,5.000001,6,7,8].map(requested_kw=>({requested_kw,expected_allowed:result.allowed&&requested_kw>=result.constraints_json.minimum_kw&&requested_kw<=result.constraints_json.maximum_kw}));
 assert.equal((await invoke(1,'shadow',{...version,observations},'shadow')).passed,true);
 await invoke(2,'approve',version,'approve');
 const published=await Promise.all(Array.from({length:16},()=>invoke(2,'publish',version,'publish')));
 assert.ok(published.every(x=>x.status==='published'));
 assert.equal(sql(`select count(*) from public.outbox_events where tenant_id='${tenant}' and payload_json->>'policy_set_version_id'='${version.policy_set_version_id}'`),'1');
 assert.equal(sql(`select count(*) from public.tenant_policy_readiness where tenant_id='${tenant}'`),'1');
+// A newer publication for a different tenant must not invalidate this tenant.
+const otherTenant=randomUUID();
+sql(`insert into public.tenants(id,organization_id,name,slug) values('${otherTenant}','${org}','Other policy tenant','${otherTenant}')`);
+const other=await invoke(1,'create',{...payload,tenants:[otherTenant]},'other-create');
+const otherVersion={policy_set_version_id:other.policy_set_version_id};
+await invoke(1,'test',otherVersion,'other-test');
+await invoke(1,'shadow',{...otherVersion,observations},'other-shadow');
+await invoke(2,'approve',otherVersion,'other-approve');
+await invoke(2,'publish',otherVersion,'other-publish');
+await invoke(2,'readiness',version,'original-readiness');
+assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${tenant}' and policy_set_version_id='${version.policy_set_version_id}'`),'blocked');
+assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${otherTenant}'`),'pending');
 // A real blocking lock lets the session expire after initial authorization.
 const second=await invoke(1,'create',payload,'create-second');
 const secondVersion={policy_set_version_id:second.policy_set_version_id};

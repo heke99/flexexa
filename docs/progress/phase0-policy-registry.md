@@ -2,7 +2,9 @@
 
 Scope: master §§10–14. The candidate adds canonical immutable rules, policy versions,
 tests, tenant bindings/readiness and evaluation tables. Bounded power rules accept
-numeric limits and reason codes, never SQL, JavaScript or an LLM expression.
+numeric limits and reason codes, never SQL, JavaScript or an LLM expression. Limits
+and requests are 0–1,000,000 kW with at most six decimal places; this bounded
+comparison language avoids arbitrary-precision JSON values diverging from JS numbers.
 
 The checked sandbox workflow creates drafts, executes supplied expected test cases,
 records simulated shadow observations, requires a different current MFA platform
