@@ -42,3 +42,22 @@ using the reserved UUID, and fresh enrollment authorization. A timeout must not 
 creation with a different UUID, user adoption by email or deletion compensation.
 No worker may consume this event as an executable authorization ticket. Full Auth
 provisioning, live provider consent and phase readiness are still incomplete.
+
+## Candidate acceptance and development read-back
+Run `34410181534` passed both application `102662532695` and database
+`102662532898` jobs. Database logs confirm 392 pgTAP assertions, all earlier
+contract/race tests, 40 identity calls and 16 provisioning request calls.
+Exact candidate SQL (7,853 bytes, SHA256
+`38586f78122ac7d784403b4dcc4f037fe20bb9450db2f99ea427b0985cc80be7`)
+was applied to Stockholm development and recorded as `20260910062435`.
+The tracked filename is synchronized to that authoritative version without SQL
+changes or manual history repair. Read-back confirms the exact hash, required
+indexes, RLS, no browser SELECT/INSERT, no anonymous function EXECUTE, empty
+search paths and public invoker wrapper. Zero provisioning requests were created.
+Security advisors have no WARN/ERROR; four INFO-only no-policy notices describe
+intentionally default-denied evidence/private tables. No permissive policy added.
+Final tracked-only replay still required before merge.
+
+Runtime inventory: AWS account `938095765653`, eu-north-1, has zero ECS clusters
+and zero Secrets Manager entries with name prefix `flexexa` at the read-only check.
+No credential plaintext retrieved. Runtime deployment/custody is not ready.

@@ -17,7 +17,7 @@ Updated: 2026-09-09. This is an evidence ledger, not a percentage-complete estim
 | Machine authorization | PR #13 merged as `fb8d081b3a042d836837ddbcc10d3191173c769e`; final tracked run `34389879469` passed. Migration `20260909183109` verified in development. 307 SQL assertions and current-session preflight are active; no credential issuer. |
 | Audited API identity administration | PR #14 merged as `55db456dce07c0620f4f2d6138d5ab6590692b10`; final tracked run `34393440885` passed app and database. Exact dev migration `20260909190638` verified. Dedicated pre-attested subject only; no live Auth provisioning or credentials. |
 | Identity administration transport | PR #16 merged as `ed01da2e18f6579b97a37568d4fd6b7ef9e92482`; final run `34409212402` passed pinned application and complete database replay/RLS/concurrency gates. |
-| Durable identity provisioning request | Implemented candidate; isolated CI and development promotion pending. Does not issue credentials or create Auth users. |
+| Durable identity provisioning request | PR #17 candidate run `34410181534` passed 392 SQL assertions and all concurrency checks. Exact development migration `20260910062435` read-back verified; final tracked-history CI pending. No credentials or Auth users issued. |
 | Rules/policy | Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |
