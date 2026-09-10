@@ -31,7 +31,21 @@ async function sql(query,user='fixture_admin',denied=false,schemaDiagnostic=fals
  const response=await fetch('http://127.0.0.1:'+port+'/',{method:'POST',headers:{'X-ClickHouse-User':user,'X-ClickHouse-Key':passwords[user]??''},body:query,signal:AbortSignal.timeout(15000)});
  const body=await response.text();
  if(denied){assert(!response.ok,'Expected SQL denial');assert.match(body,/Code: (?:164|194|195|497|516)\./u);return '';}
- if(!response.ok&&schemaDiagnostic)console.error(body.slice(0,4000)); // Tracked DDL only; never row/credential SQL.
+ if(!response.ok&&schemaDiagnostic){
+  console.error(body.slice(0,4000)); // Tracked DDL only; never row/credential SQL.
+  if(query.includes('CREATE TABLE flexexa.otel_traces_v1 (')){
+   const probeName='flexexa.otel_schema_probe',start=query.indexOf(' CONSTRAINT'),end=query.indexOf(') ENGINE=');
+   const base=query.slice(0,start).replace(/,\s*$/u,'')+'\n'+query.slice(end);
+   try{
+    await sql(base.replace('flexexa.otel_traces_v1',probeName));console.error('SCHEMA_PROBE_BASE_OK');
+    for(const part of query.slice(start,end).trim().split(/,\n (?=CONSTRAINT|INDEX)/u)){
+     const definition=part.trim().replace(/,$/u,'');
+     try{await sql('ALTER TABLE '+probeName+' ADD '+definition);console.error('SCHEMA_PROBE_OK_'+definition.split(' ')[1]);}
+     catch(e){console.error('SCHEMA_PROBE_FAILED_'+definition.split(' ')[1]+'_'+e.message);}
+    }
+   }catch(e){console.error('SCHEMA_PROBE_BASE_FAILED_'+e.message);}
+  }
+ }
  if(!response.ok)throw Error('OBSERVABILITY_SQL_FAILED_'+response.status+'_'+(body.match(/Code: ([0-9]+)/u)?.[1]??'UNKNOWN'));
  return body.trim();
 }
@@ -93,7 +107,17 @@ try{
  const exported=await fetch('http://127.0.0.1:'+receiverPort+'/v1/traces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(probe)});assert.equal(exported.status,200);await exported.text();await waitFor(async()=>await traceCount(probeTrace)==='1','FILTERED_PROBE');
  // Exact exporter retry may duplicate a row. FINAL provides stable trace/span reads.
  const replayed=await fetch('http://127.0.0.1:'+receiverPort+'/v1/traces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(probe)});assert.equal(replayed.status,200);await replayed.text();
+ const rejectedTraces=[];
+ for(const kind of ['service','status','event','link']){
+  const bad=structuredClone(probe),span=bad.resourceSpans[0].scopeSpans[0].spans[0];span.traceId=randomBytes(16).toString('hex');rejectedTraces.push(span.traceId);
+  if(kind==='service')bad.resourceSpans[0].resource.attributes[0].value.stringValue='unknown-service';
+  if(kind==='status')span.status={code:2,message:secret};
+  if(kind==='event')span.events=[{timeUnixNano:String(now),name:secret}];
+  if(kind==='link')span.links=[{traceId:randomBytes(16).toString('hex'),spanId:randomBytes(8).toString('hex'),traceState:secret}];
+  const rejected=await fetch('http://127.0.0.1:'+receiverPort+'/v1/traces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bad)});assert.equal(rejected.status,200);await rejected.text();
+ }
  const marker=await healthRequest();await waitFor(async()=>await correlationCount(marker)==='1','REPLAY_MARKER');assert.equal(await traceCount(probeTrace),'1');
+ for(const id of rejectedTraces)assert.equal(await traceCount(id),'0');
  const stored=await sql('SELECT * FROM flexexa.otel_traces_v1 FINAL FORMAT JSONEachRow','ops_sandbox');
  for(const value of [secret,'example.supabase.co',input.lease.tenant_id,input.lease.intended_auth_user_id,'private.attribute','private.resource'])assert(!stored.includes(value));
  assert.equal(await sql('SELECT count() FROM flexexa.otel_traces_v1','unassigned'),'0');assert.equal(await sql('SELECT count() FROM flexexa.otel_traces_v1','ops_production'),'0');
@@ -122,7 +146,7 @@ try{
  await new Promise(r=>server.close(r));server=undefined;await telemetry.shutdown();telemetry=undefined;
  await docker([...collectorCompose,'stop','--timeout','10','collector']);assert.equal(await docker(['inspect','--format','{{.State.ExitCode}}',collector]),'0');
  report={collector_image:image.Id,collector_repo_digests:image.RepoDigests,clickhouse_image:databaseInfo.Image,migration_sha256:migrations,
-  actual_sdk_collector_clickhouse:true,parentage_preserved:true,private_attributes_removed:true,writer_insert_only:true,unassigned_reader_denied:true,environment_reader_isolation:true,
+  actual_sdk_collector_clickhouse:true,parentage_preserved:true,private_attributes_removed:true,free_text_and_unknown_service_dropped:4,writer_insert_only:true,unassigned_reader_denied:true,environment_reader_isolation:true,
   replay_final_read_deduplicated:true,persistent_queue_after_sigkill_and_replacement:true,recovered_queued_sdk_spans:96,database_restart_preserved_rows:true,retention_hours:72,expired_row_removed:true,
   non_root_read_only:true,loopback_only:true,graceful_shutdown:true,delivery_semantics:'at_least_once_after_collector_acceptance',
   production_deployed:false,host_disk_loss_recovery:false,tenant_rbac_integration:false};
