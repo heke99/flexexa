@@ -1,3 +1,4 @@
+import { legacyCoreV1Defaults } from "../../../country-packs/registry.ts";
 import { connectEnvironment, providerKey } from "@flexexa/domain/connect";
 import type { ConnectEnvironment } from "@flexexa/domain/connect";
 import { DomainError, entityId, tenantId, assertSameTenant, record, text, exactKeys, assetType, decimalString, ianaTimezone } from "@flexexa/domain";
@@ -64,10 +65,10 @@ export function parseCreateCustomerPayload(value: unknown): CreateCustomerPayloa
 export function parseCreateSitePayload(value: unknown): CreateSitePayload {
   const p = record(value);
   exactKeys(p, ["customer_id", "name", "external_site_id", "country_code", "timezone"]);
-  const country = p.country_code === undefined ? "SE" : p.country_code;
+  const country = p.country_code === undefined ? legacyCoreV1Defaults.country_code : p.country_code;
   if (typeof country !== "string" || country.length !== 2 || !/^[A-Z]{2}$/u.test(country)) throw new DomainError("VALIDATION_ERROR");
   return Object.freeze({ customer_id: entityId(p.customer_id), name: text(p.name), external_site_id: optionalText(p.external_site_id),
-    country_code: country, timezone: p.timezone === undefined ? "Europe/Stockholm" : ianaTimezone(p.timezone) });
+    country_code: country, timezone: p.timezone === undefined ? legacyCoreV1Defaults.timezone : ianaTimezone(p.timezone) });
 }
 export function parseCreateMeteringPointPayload(value: unknown): CreateMeteringPointPayload {
   const p = record(value);

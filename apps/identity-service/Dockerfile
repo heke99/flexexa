@@ -3,6 +3,8 @@ FROM ${IDENTITY_BASE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080
 # Explicit source allowlist: no workspace credentials, fixtures, or build dependencies.
+COPY country-packs/package.json country-packs/registry.ts ./country-packs/
+COPY country-packs/se/v1.json ./country-packs/se/v1.json
 COPY packages/domain/package.json ./packages/domain/package.json
 COPY packages/domain/src ./packages/domain/src
 COPY packages/api-contracts/package.json ./packages/api-contracts/package.json

@@ -13,3 +13,8 @@
 !apps/identity-service/package.json
 !apps/identity-service/src
 !apps/identity-service/src/**
+!country-packs
+!country-packs/package.json
+!country-packs/registry.ts
+!country-packs/se
+!country-packs/se/v1.json
