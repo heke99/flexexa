@@ -7,7 +7,7 @@ for(const [key,value] of Object.entries({ALLOW_ISOLATED_DB_TESTS:'1',PGHOST:'127
  if(process.env[key]!==value) throw Error('Refusing non-disposable identity administration verification');
 }
 ensureSourceWorkspace();
-const {createIdentityAdministrationApi,createIdentityProvisioningRequestApi,createIdentityExecutionLeaseApi}=await import('../../packages/api-contracts/src/identity-administration.ts');
+const {createIdentityAdministrationApi,createIdentityProvisioningRequestApi,createIdentityExecutionLeaseApi,createIdentityProvisioningFinalizationApi}=await import('../../packages/api-contracts/src/identity-administration.ts');
 const q=v=>"'"+v.replaceAll("'","''")+"'";
 const args=['-h','127.0.0.1','-p','54322','-U','postgres','-d','postgres','-XAtq','--set=ON_ERROR_STOP=1','--command'];
 const opts={encoding:'utf8',timeout:30000,maxBuffer:1024*1024};
@@ -135,7 +135,7 @@ const initialLease=check(await leaseRace(intent.resource_id,Array(8).fill('lease
 assert.equal(initialLease.generation,1);
 assert.equal(initialLease.intended_auth_user_id,intent.intended_auth_user_id);
 const otherIntent=sql(`select id from private.flexexa_identity_provisioning_requests where tenant_id='${tenant}' and id<>'${intent.resource_id}';`);
-check(await leaseRace(otherIntent,Array.from({length:8},(_,i)=>`lease-different-${i}`)),1,'INVALID_STATE_TRANSITION');
+const otherLease=check(await leaseRace(otherIntent,Array.from({length:8},(_,i)=>`lease-different-${i}`)),1,'INVALID_STATE_TRANSITION');
 // Simulate an expired prior attempt using a new fixture row; never disable immutability triggers.
 const expiredReceipt=randomUUID();
 sql(`insert into public.idempotency_records(id,tenant_id,actor_type,actor_id,operation_key,idempotency_key,request_hash,correlation_id)
@@ -157,3 +157,48 @@ const leaseFacts=JSON.parse(sql(`select jsonb_build_object(
 assert.deepEqual(leaseFacts,{leases:4,receipts:3,audits:3,outbox:3,unfinished_leases:0,created_auth_users:0});
 assert.equal(leaseCalls,24);
 console.log(JSON.stringify({identity_lease_concurrent_calls:leaseCalls,typed_lease_checks:2,stale_generation_rejected:true,leaseFacts,external_auth_calls:0}));
+
+// The isolated fixture stands in for trusted Auth provisioning; never report it as Auth API I/O.
+sql(`insert into auth.users(id,email,is_anonymous,raw_app_meta_data)
+ select intended_auth_user_id,'reserved-'||intended_auth_user_id::text||'@example.invalid',false,
+  jsonb_build_object('flexexa_machine_enrollment',jsonb_build_object('version',1,'tenant_id',tenant_id,'api_client_id',api_client_id,'environment',environment))
+ from private.flexexa_identity_provisioning_requests where tenant_id='${tenant}';`);
+const finalizationApi=createIdentityProvisioningFinalizationApi({rpc:async(name,a)=>{
+ assert.equal(name,'flexexa_finalize_identity_provisioning');
+ try {
+  const output=await asyncSql('psql',[...args,`begin;set local statement_timeout='25s';set local role authenticated;
+   set local request.jwt.claims=${claims};select public.${name}(${q(a.p_tenant_id)},${q(JSON.stringify(a.p_payload))}::jsonb,${q(a.p_idempotency_key)},${q(a.p_correlation_id)});
+   select pg_sleep(0.05);commit;`],opts);
+  return {data:JSON.parse(output.stdout.trim()),error:null};
+ } catch(error) {
+  const match=String(error.stderr??'').match(/ERROR:\s+(INVALID_STATE_TRANSITION|PERMISSION_DENIED|IDEMPOTENCY_CONFLICT)\s*(?:\n|$)/u);
+  if(!match)throw Error('Unexpected isolated finalization failure');
+  return {data:null,error:{code:'P0001',message:match[1]}};
+ }
+}},scope);
+const finalizationInput=(lease,key)=>({tenant_id:tenant,payload:{lease_id:lease.resource_id,environment:'sandbox'},idempotency_key:key,correlation_id:randomUUID()});
+async function finalizeRace(lease,keys) {
+ return Promise.all(keys.map(async key=>{
+  try {return {receipt:await finalizationApi.finalize(finalizationInput(lease,key))};}
+  catch(error) {return {error:error.code??'INTERNAL_ERROR'};}
+ }));
+}
+const completed=check(await finalizeRace(recoveredLease,Array(8).fill('finalize-same')),8);
+assert.equal(completed.request_id,intent.resource_id);assert.equal(completed.generation,3);
+check(await finalizeRace(otherLease,Array.from({length:8},(_,i)=>`finalize-distinct-${i}`)),1,'INVALID_STATE_TRANSITION');
+await assert.rejects(leaseApi.check(recoveredLease),{code:'INVALID_STATE_TRANSITION'});
+await assert.rejects(leaseApi.acquire({tenant_id:tenant,payload:{request_id:intent.resource_id,environment:'sandbox'},idempotency_key:'after-completion',correlation_id:randomUUID()}),{code:'INVALID_STATE_TRANSITION'});
+await assert.rejects(finalizationApi.finalize(finalizationInput(initialLease,'finalize-same')),{code:'IDEMPOTENCY_CONFLICT'});
+const finalizationFacts=JSON.parse(sql(`select jsonb_build_object(
+ 'completions',(select count(*) from private.flexexa_identity_provisioning_completions where tenant_id='${tenant}'),
+ 'final_receipts',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and operation_key='finalize_identity_provisioning' and status='completed'),
+ 'new_enrollment_receipts',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and operation_key='enroll_api_client_identity' and idempotency_key like 'provision-finalize:%' and status='completed'),
+ 'audits',(select count(*) from public.audit_events where tenant_id='${tenant}' and action='finalize_identity_provisioning'),
+ 'outbox',(select count(*) from public.outbox_events where tenant_id='${tenant}' and event_type='flexexa.api_identity_provisioning.completed'),
+ 'unfinished_finalizations',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and operation_key='finalize_identity_provisioning' and status<>'completed'),
+ 'reserved_bindings_match',(select bool_and(p.auth_user_id=r.intended_auth_user_id and p.api_client_id=r.api_client_id and p.environment=r.environment)
+  from private.flexexa_identity_provisioning_completions c join private.flexexa_identity_provisioning_requests r on r.tenant_id=c.tenant_id and r.id=c.request_id
+  join private.flexexa_machine_principals p on p.tenant_id=c.tenant_id and p.id=c.principal_id where c.tenant_id='${tenant}'),
+ 'grants',(select count(*) from public.api_client_permissions where tenant_id='${tenant}'));`));
+assert.deepEqual(finalizationFacts,{completions:2,final_receipts:2,new_enrollment_receipts:2,audits:2,outbox:2,unfinished_finalizations:0,reserved_bindings_match:true,grants:1});
+console.log(JSON.stringify({identity_finalization_concurrent_calls:16,completed_requests_cannot_reacquire:true,finalizationFacts,external_auth_calls:0}));
