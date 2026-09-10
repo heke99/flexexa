@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {randomUUID,randomBytes,createHmac} from 'node:crypto';
 import {once} from 'node:events';
+import {createServer as httpServer} from 'node:http';
 import {ensureSourceWorkspace} from './source-workspace.mjs';
 let stage='isolated-environment';
 async function main(){
@@ -56,17 +57,30 @@ async function main(){
   }
   return r;
  };
- const config={url:local.API_URL,allowLoopback:true,publishableKey:local.ANON_KEY,adminKey:local.SERVICE_ROLE_KEY,environment:'sandbox',fetcher:transport};
+ const batches=[];
+ const receiver=httpServer(async(req,res)=>{
+  try{assert.equal(req.url,'/v1/traces');const chunks=[];for await(const chunk of req)chunks.push(chunk);
+   batches.push(JSON.parse(Buffer.concat(chunks).toString()));res.setHeader('Content-Type','application/json');res.end('{}');
+  }catch{res.statusCode=400;res.end();}
+ });
+ receiver.listen(0,'127.0.0.1');await once(receiver,'listening');
+ const telemetryEndpoint='http://127.0.0.1:'+receiver.address().port+'/v1/traces';
+ const correlations=[];
+ const config={telemetryEndpoint,url:local.API_URL,allowLoopback:true,publishableKey:local.ANON_KEY,adminKey:local.SERVICE_ROLE_KEY,environment:'sandbox',fetcher:transport};
  let runtime;
+ try{
  if(process.env.IDENTITY_CONTAINER_IMAGE){
   stage='container-start';const {startIdentityContainer}=await import('./identity-container.mjs');runtime=await startIdentityContainer(config);
  }else{
+  const {startTelemetry}=await import('../../apps/identity-service/src/telemetry.ts');
+  const telemetry=startTelemetry(telemetryEndpoint,'sandbox',1);
   const server=createIdentityServer(config);server.listen(0,'127.0.0.1');await once(server,'listening');
-  runtime={origin:'http://127.0.0.1:'+server.address().port,async close(){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
+  runtime={origin:'http://127.0.0.1:'+server.address().port,async close(){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await telemetry.shutdown();}};
  }
+ }catch(error){receiver.closeAllConnections();await new Promise(resolve=>receiver.close(resolve));throw error;}
  const {origin}=runtime;
  const execute=async(lease,key,token=jwt)=>{
-  const correlation=randomUUID();
+  const correlation=randomUUID();correlations.push(correlation);
   const r=await fetch(origin+'/v1/identity/provisioning/execute',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
    body:JSON.stringify({lease,idempotency_key:key,correlation_id:correlation}),signal:AbortSignal.timeout(20000)});
   assert.equal(r.headers.get('x-correlation-id'),correlation);
@@ -100,6 +114,22 @@ async function main(){
   stage='current-membership-revocation';sql(`update public.memberships set status='suspended' where id='${member}'`);
   const counts={...observed};assert.equal((await execute(lease,'finish-first')).status,403);assert.deepEqual(observed,counts);
   console.log(JSON.stringify({real_auth_mfa:true,http_provisioning:true,real_reserved_auth_subjects:3,lost_create_response_reconciled:true,concurrent_http_calls:4,facts}));
- }finally{await runtime.close();}
+ }finally{
+  try{await runtime.close();
+   stage='real-auth-otlp-readback';
+   const spans=batches.flatMap(b=>b.resourceSpans.flatMap(r=>r.scopeSpans.flatMap(s=>s.spans)));
+   const attr=(span,key)=>span.attributes.find(a=>a.key===key)?.value?.stringValue;
+   const servers=spans.filter(s=>s.kind===2&&s.name==='POST /v1/identity/provisioning/execute');
+   assert.equal(servers.length,correlations.length);
+   assert.deepEqual(new Set(servers.map(s=>attr(s,'flexexa.correlation_id'))),new Set(correlations));
+   for(const name of ['supabase.rpc','supabase.auth']){
+    const clients=spans.filter(s=>s.kind===3&&s.name===name);assert(clients.length>0);
+    assert(clients.every(c=>servers.some(s=>s.traceId===c.traceId&&s.spanId===c.parentSpanId)));
+   }
+   const wire=JSON.stringify(batches);
+   for(const sensitive of [local.SERVICE_ROLE_KEY,local.ANON_KEY,jwt,aal1,email,password,tenant,actor,factor.totp.secret])assert(!wire.includes(sensitive));
+   console.log(JSON.stringify({real_auth_otlp:true,request_spans:servers.length,upstream_spans:spans.filter(s=>s.kind===3).length,private_values_absent:true}));
+  }finally{receiver.closeAllConnections();await new Promise(resolve=>receiver.close(resolve));}
+ }
 }
 try{await main();}catch{console.error('IDENTITY_AUTH_INTEGRATION_FAILED at '+stage);process.exitCode=1;}

@@ -2,6 +2,8 @@ import {randomUUID} from 'node:crypto';
 import {Console} from 'node:console';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {entityId} from '@flexexa/domain';
+import {isSpanContextValid,SpanStatusCode} from '@opentelemetry/api';
+import {serverTrace} from './telemetry.ts';
 
 export interface RequestLog {
  readonly event:'http.request.completed';
@@ -13,6 +15,8 @@ export interface RequestLog {
  readonly status_code:number;
  readonly duration_ms:number;
  readonly outcome:'completed'|'aborted';
+ readonly trace_id?:string;
+ readonly span_id?:string;
 }
 export type LogSink=(entry:RequestLog)=>void;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -27,17 +31,25 @@ export function observeRequest(request:IncomingMessage,response:ServerResponse,s
  const started=performance.now();let emitted=false;
  const route=request.url==='/health/live'?'/health/live':request.url==='/v1/identity/provisioning/execute'?'/v1/identity/provisioning/execute':'unmatched';
  const method=request.method==='GET'?'GET':request.method==='POST'?'POST':'other';
+ const requestTrace=serverTrace(request.headers.traceparent,route,method,requestId,correlationId);
  response.setHeader('X-Request-Id',requestId);response.setHeader('X-Correlation-Id',correlationId);
  const emit=(outcome:'completed'|'aborted')=>{
   if(emitted)return;emitted=true;
+  const status=outcome==='aborted'?499:response.statusCode;
+  requestTrace.span.setAttribute('http.response.status_code',status);
+  if(status>=500||outcome==='aborted')requestTrace.span.setStatus({code:SpanStatusCode.ERROR});
+  const spanContext=requestTrace.span.spanContext();
   const entry:RequestLog=Object.freeze({event:'http.request.completed',service:'identity-service',request_id:requestId,
-   correlation_id:correlationId,route,method,status_code:outcome==='aborted'?499:response.statusCode,
-   duration_ms:Math.max(0,Math.round((performance.now()-started)*1000)/1000),outcome});
+   correlation_id:correlationId,route,method,status_code:status,
+   duration_ms:Math.max(0,Math.round((performance.now()-started)*1000)/1000),outcome,
+   ...(isSpanContextValid(spanContext)?{trace_id:spanContext.traceId,span_id:spanContext.spanId}:{})});
+  requestTrace.span.end();
   try{sink(entry);}catch{/* Diagnostics must not change a business transaction's outcome. */}
  };
  response.once('finish',()=>emit('completed'));response.once('close',()=>emit(response.writableFinished?'completed':'aborted'));
- return Object.freeze({get correlationId(){return correlationId;},setCorrelationId(value:string){
+ return Object.freeze({run:requestTrace.run,get correlationId(){return correlationId;},setCorrelationId(value:string){
   // Only a canonical, already parsed UUID is passed here; never raw payload/header text.
   correlationId=entityId(value);response.setHeader('X-Correlation-Id',correlationId);
+  requestTrace.span.setAttribute('flexexa.correlation_id',correlationId);
  }});
 }

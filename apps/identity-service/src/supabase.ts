@@ -2,6 +2,7 @@ import {randomBytes} from 'node:crypto';
 import {DomainError,entityId,exactKeys,record,tenantId} from '@flexexa/domain';
 import {connectEnvironment} from '@flexexa/domain/connect';
 import type {ReservedAuthAdmin,ReservedIdentity} from './provision.ts';
+import {tracedUpstream} from './telemetry.ts';
 type Fetch=typeof fetch;
 export interface Connection {url:string;allowLoopback?:boolean;fetcher?:Fetch;correlationId?:string}
 function endpoint(config:Connection){
@@ -24,13 +25,13 @@ async function jsonResponse(response:Response){
 function transport(config:Connection,headers:Readonly<Record<string,string>>){
  const origin=endpoint(config),send=config.fetcher??fetch;
  const correlation=config.correlationId===undefined?{}:{'X-Correlation-Id':entityId(config.correlationId)};
- return async(path:string,method:string,body?:unknown)=>{
+ return async(path:string,method:string,body?:unknown)=>tracedUpstream(path.startsWith('/rest/')?'rpc':'auth',async traceHeaders=>{
   try{
-   const response=await send(origin+path,{method,headers:{...headers,...correlation,'Content-Type':'application/json'},redirect:'error',
+   const response=await send(origin+path,{method,headers:{...headers,...correlation,...traceHeaders,'Content-Type':'application/json'},redirect:'error',
     signal:AbortSignal.timeout(5000),...(body===undefined?{}:{body:JSON.stringify(body)})});
    return {status:response.status,ok:response.ok,body:await jsonResponse(response)};
   }catch{throw new DomainError('INTERNAL_ERROR');}
- };
+ });
 }
 /** Per-request caller JWT. This client never holds an Auth-admin credential. */
 export function createCallerRpc(config:Connection,publishableKey:string,callerJwt:string){
