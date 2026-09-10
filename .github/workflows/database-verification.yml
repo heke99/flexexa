@@ -30,7 +30,7 @@ jobs:
       - name: Build identity runtime from tracked source
         run: |
           docker build --pull -f apps/identity-service/Dockerfile -t flexexa-identity:ci .
-          docker image inspect --format '{{json .RepoDigests}}' node:24.19.0-bookworm-slim
+          docker image inspect --format '{{.Id}}' flexexa-identity:ci
       - name: Clean migration replay
         run: supabase db reset --local
       - name: Capture clean application schema before test fixtures
