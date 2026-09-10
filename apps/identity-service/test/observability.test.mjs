@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {request as httpRequest} from 'node:http';
+import {setTimeout as delay} from 'node:timers/promises';
 import {createIdentityServer} from '../src/server.ts';
 
 const id=n=>'ce500000-0000-4000-8000-'+String(n).padStart(12,'0');
@@ -11,7 +13,7 @@ async function fixture(run, options={}){
  const server=createIdentityServer({url:'https://example.supabase.co',publishableKey:secret,adminKey:secret,environment:'sandbox',
   logSink:entry=>logs.push(entry),fetcher:async(url,init)=>{calls.push({url,...init});throw Error(secret+' private@example.invalid');},...options});
  server.listen(0,'127.0.0.1');await once(server,'listening');
- try{await run('http://127.0.0.1:'+server.address().port,logs,calls);}
+ try{await run('http://127.0.0.1:'+server.address().port,logs,calls,server);}
  finally{await new Promise(resolve=>server.close(resolve));}
 }
 test('real HTTP logs use fixed routes and omit headers, raw URL, bodies and PII',async()=>fixture(async(origin,logs)=>{
@@ -48,3 +50,10 @@ test('concurrent request correlations propagate to caller RPC independently; ups
 test('diagnostic sink failure cannot change an HTTP result',async()=>fixture(async origin=>{
  const response=await fetch(origin+'/health/live');assert.equal(response.status,200);assert.deepEqual(await response.json(),{status:'alive'});
 },{logSink(){throw Error('collector down');}}));
+test('a client disconnect during body upload emits one abort record and no upstream call',async()=>fixture(async(origin,logs,calls,server)=>{
+ const arrived=once(server,'request');
+ const request=httpRequest(origin+'/v1/identity/provisioning/execute',{method:'POST',headers:{'content-type':'application/json','content-length':'4000',authorization:'Bearer '+secret}});
+ request.on('error',()=>{});request.write('{');await arrived;request.destroy();
+ const deadline=Date.now()+2000;while(!logs.length&&Date.now()<deadline)await delay(5);
+ assert.equal(logs.length,1);assert.equal(logs[0].outcome,'aborted');assert.equal(logs[0].status_code,499);assert.equal(calls.length,0);
+}));

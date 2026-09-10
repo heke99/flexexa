@@ -66,8 +66,11 @@ async function main(){
  }
  const {origin}=runtime;
  const execute=async(lease,key,token=jwt)=>{
+  const correlation=randomUUID();
   const r=await fetch(origin+'/v1/identity/provisioning/execute',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-   body:JSON.stringify({lease,idempotency_key:key,correlation_id:randomUUID()}),signal:AbortSignal.timeout(20000)});
+   body:JSON.stringify({lease,idempotency_key:key,correlation_id:correlation}),signal:AbortSignal.timeout(20000)});
+  assert.equal(r.headers.get('x-correlation-id'),correlation);
+  assert.match(r.headers.get('x-request-id'),/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
   const data=await r.json();assert(!JSON.stringify(data).includes(local.SERVICE_ROLE_KEY));assert(!('password' in data));return {status:r.status,data};
  };
  try{
