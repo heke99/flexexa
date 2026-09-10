@@ -17,6 +17,10 @@ The check RPC revalidates requester/session, current client state, intent expiry
 lease expiry and latest generation. Its answer is valid at that transaction only.
 Any future finalization must check the fence within its own write transaction.
 Session/client temporal validity is checked after potentially waiting on row locks.
+The canonical permission evaluator is extracted behind a private explicit-time
+helper. Existing permission callers retain their transaction-start semantics;
+lease continuation rechecks membership, role/grant periods and newly effective
+denies at wall time after locks. Callers cannot select the evaluation time.
 
 ## Explicit integration limits
 This is database coordination, not a running worker or credential issuer. Supabase

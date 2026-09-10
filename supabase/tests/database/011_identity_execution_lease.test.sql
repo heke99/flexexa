@@ -25,6 +25,7 @@ insert into public.api_clients(id,tenant_id,client_id,name,expires_at) values(pg
 select ok(not has_function_privilege('anon','public.flexexa_acquire_identity_execution_lease(uuid,jsonb,text,uuid)','EXECUTE'),'anonymous acquisition denied');
 select ok(not has_function_privilege('anon','public.flexexa_check_identity_execution_lease(uuid,uuid)','EXECUTE'),'anonymous check denied');
 select ok(not has_function_privilege('authenticated','private.flexexa_lock_identity_execution_request(uuid,uuid)','EXECUTE'),'internal lock helper is not a caller bypass');
+select ok(not has_function_privilege('authenticated','private.flexexa_has_permission_at(uuid,text,timestamptz)','EXECUTE'),'caller cannot supply authorization evaluation time');
 select ok(not has_table_privilege('authenticated','private.flexexa_identity_execution_leases','SELECT'),'leases not browser-readable');
 select ok(not has_table_privilege('authenticated','private.flexexa_identity_execution_leases','INSERT'),'leases not browser-writable');
 select ok((select relrowsecurity from pg_class where oid='private.flexexa_identity_execution_leases'::regclass),'leases have RLS');
@@ -75,6 +76,30 @@ select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','c
 select throws_ok($$select pg_temp.acquire()$$,'42501','PERMISSION_DENIED','replay rechecks current membership');
 reset role;
 update public.memberships set status='active' where id=pg_temp.lid(31);
+update public.memberships set valid_until=transaction_timestamp()+(clock_timestamp()-transaction_timestamp())/2 where id=pg_temp.lid(31);
+set local role authenticated;
+select ok(public.flexexa_has_permission(pg_temp.lid(20),'api_clients.manage'),'legacy evaluator retains transaction-start semantics');
+select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','membership expiring during transaction denies continuation');
+reset role;
+update public.memberships set valid_until=null where id=pg_temp.lid(31);
+update public.membership_roles set valid_until=transaction_timestamp()+(clock_timestamp()-transaction_timestamp())/2 where membership_id=pg_temp.lid(31);
+set local role authenticated;
+select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','role assignment expiring during transaction denies continuation');
+reset role;
+update public.membership_roles set valid_until=null where membership_id=pg_temp.lid(31);
+update public.role_permissions set valid_until=transaction_timestamp()+(clock_timestamp()-transaction_timestamp())/2
+ where tenant_id=pg_temp.lid(20) and permission_id=(select id from public.permissions where permission_key='api_clients.manage');
+set local role authenticated;
+select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','role permission expiring during transaction denies continuation');
+reset role;
+update public.role_permissions set valid_until=null where tenant_id=pg_temp.lid(20);
+insert into public.membership_permission_overrides(tenant_id,membership_id,permission_id,effect,valid_from)
+ select pg_temp.lid(20),pg_temp.lid(31),id,'deny',transaction_timestamp()+(clock_timestamp()-transaction_timestamp())/2 from public.permissions where permission_key='api_clients.manage';
+set local role authenticated;
+select ok(public.flexexa_has_permission(pg_temp.lid(20),'api_clients.manage'),'legacy evaluator does not see deny starting after transaction time');
+select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','deny becoming effective during transaction rejects continuation');
+reset role;
+delete from public.membership_permission_overrides where tenant_id=pg_temp.lid(20) and membership_id=pg_temp.lid(31);
 update auth.sessions set not_after=now()-interval '1 second' where id=pg_temp.lid(101);
 set local role authenticated;
 select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','expired authorizing session denied');
