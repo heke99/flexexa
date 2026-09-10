@@ -22,7 +22,8 @@ const docker=(command,code,input)=>{
  catch(error){
   // Never put dump contents, Auth material or failed COPY rows into CI logs.
   const headers=String(error.stderr??'').split('\n').filter(x=>/^pg_(?:dump|restore): (?:error|warning):/u.test(x)).slice(0,8);
-  console.error(JSON.stringify({restoreCommand:code,headers}));throw Error(code);
+  const commandHeader=String(error.stderr??'').split('\n').find(x=>x.startsWith('Command was:'))?.slice(0,180);
+  console.error(JSON.stringify({restoreCommand:code,headers,commandHeader}));throw Error(code);
  }
 };
 const sourceInfo=JSON.parse(sql('postgres',"select jsonb_build_object('major',current_setting('server_version_num')::int/10000,'address',inet_server_addr(),'database',current_database())"));
@@ -74,12 +75,19 @@ try{
  const archiveSha256=docker(['sha256sum',archive],'RESTORE_ARCHIVE_HASH_FAILED').split(' ')[0];assert.match(archiveSha256,/^[a-f0-9]{64}$/u);
  keeper.stdin.end('rollback;\n');keeperLines.close();
  sql('postgres',`create database ${identifier(target)} template template0`);created=true;
+ const toc=docker(['pg_restore','--list',archive],'RESTORE_TOC_FAILED');
+ // --clean is inappropriate for an empty target: DROP POLICY IF EXISTS still
+ // resolves its absent parent table. Retain every archive object; only remove
+ // the empty default namespace when the archive itself recreates it.
+ const publicToc=toc.split('\n').filter(line=>/ SCHEMA - public /u.test(line));
+ const publicSchemaSql=docker(['pg_restore','--use-list=/dev/stdin','--file=-',archive],'RESTORE_NAMESPACE_READ_FAILED',publicToc.join('\n')+'\n');
+ if(/^CREATE SCHEMA (?:public|"public");$/mu.test(publicSchemaSql))sql(target,'drop schema public');
  const restoreStarted=performance.now();
- docker(['pg_restore','-h','127.0.0.1','-p','5432','-U','postgres','--dbname='+target,'--clean','--if-exists','--exit-on-error','--single-transaction',archive],'RESTORE_ARCHIVE_FAILED');
+ docker(['pg_restore','-h','127.0.0.1','-p','5432','-U','postgres','--dbname='+target,'--exit-on-error','--single-transaction',archive],'RESTORE_ARCHIVE_FAILED');
  const restoreMs=Math.round(performance.now()-restoreStarted);
  // Sequence state is not MVCC. Compare against values in the actual archive,
  // not a later source read that could race a sequence increment.
- const sequenceToc=docker(['pg_restore','--list',archive],'RESTORE_TOC_FAILED').split('\n').filter(line=>/ SEQUENCE SET (?:public|private|auth|supabase_migrations) /u.test(line));
+ const sequenceToc=toc.split('\n').filter(line=>/ SEQUENCE SET (?:public|private|auth|supabase_migrations) /u.test(line));
  assert.equal(sequenceToc.length,sequenceCount);
  const sequenceSql=docker(['pg_restore','--use-list=/dev/stdin','--file=-',archive],'RESTORE_SEQUENCE_READ_FAILED',sequenceToc.join('\n')+'\n');
  const sequences=[...sequenceSql.matchAll(/SELECT pg_catalog.setval\('((?:[^']|'')*)', (-?[0-9]+), (true|false)\);/gu)];
