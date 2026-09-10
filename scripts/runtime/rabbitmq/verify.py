@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
                 env={**os.environ, 'FLEXEXA_OUTBOX_BROKER_TEST':'1', 'FLEXEXA_TEST_PYTHON':sys.executable,
                     'FLEXEXA_TEST_AMQP_PORT':str(port), 'FLEXEXA_TEST_AMQP_PASSWORD':passwords['tenant_a']}, check=True, timeout=120)
         if os.environ.get('FLEXEXA_OUTBOX_DB_TESTS') == '1':
-            channel.queue_declare('flexexa.policy.q', durable=True, arguments={'x-queue-type':'quorum'})
+            channel.queue_declare('flexexa.policy.q', durable=True, arguments={'x-queue-type':'quorum', 'x-delivery-limit':2, 'x-dead-letter-exchange':'flexexa.dead', 'x-dead-letter-routing-key':'failed'})
             channel.queue_bind('flexexa.policy.q', 'flexexa.events', 'policy.version.published')
             subprocess.run(['node', '--experimental-strip-types', 'scripts/database/verify-policy-registry.mjs'], cwd=ROOT,
                 env={**os.environ, 'FLEXEXA_OUTBOX_BROKER_TEST':'1', 'FLEXEXA_TEST_PYTHON':sys.executable,

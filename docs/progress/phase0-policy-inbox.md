@@ -1,4 +1,4 @@
-# Phase 0 transactional policy inbox — candidate
+# Phase 0 transactional policy inbox — verified increment
 
 Scope: locked §§14, 20, 31 and Phase 0 transactional event handling. The checked
 consumer compares the entire received envelope with the immutable canonical outbox
@@ -31,8 +31,14 @@ codebase index/impact/affected verification, code/security/performance review an
 strategy are active. Runtime CI uses the existing pinned RabbitMQ/Pika; no dependency
 or credential changes. Browser/provider/AWS deployment are outside this increment.
 
-Pending checks: full application/runtime CI, clean replay, RLS/two-tenant tests, forced
-audit failure rollback, 16 concurrent consumes, stale-version delivery and the real
-outbox → broker → typed consumer → SQL commit → lost ACK → redelivery flow. The
-migration is not applied until the candidate is green; then exact history/catalog
-synchronization and a final pinned-source run are required before merging.
+Candidate run `34491487152` passed all six jobs, 635 pgTAP assertions, 16 concurrent
+consumes, forced audit-failure rollback, obsolete-version delivery and grant expiry
+after a real inbox lock wait. The complete real outbox → RabbitMQ → typed consumer
+→ SQL commit → lost ACK → redelivery flow passed; one inbox/audit/effect remained.
+The final fixture also gives its quorum queue an explicit delivery limit and DLQ.
+
+Exact development migration `20260910145540` is applied: 31,692 bytes, SHA-256
+`a811298ccad01f483385922370691911ba285ff2988346eed6f487c22fe11033`. All 19 migration
+entries and 1,322 application catalog objects match the clean replay, zero differences.
+The final pinned-source run and final readback/merge evidence are recorded in PR #36.
+No hosted worker, general provider inbox or whole Phase 0 completion is claimed.
