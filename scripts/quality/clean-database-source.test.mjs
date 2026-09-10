@@ -20,7 +20,8 @@ function isolated(t) {
   const directory = mkdtempSync(join(tmpdir(), 'flexexa-clean-source-'));
   t.after(() => rmSync(directory, {recursive:true,force:true}));
   for (const file of ['scripts/database/check-connect-routes.mjs','scripts/database/source-workspace.mjs',
-    'packages/domain/package.json','packages/api-contracts/package.json']) {
+    'packages/domain/package.json','packages/api-contracts/package.json',
+    'country-packs/package.json','country-packs/registry.ts','country-packs/se/v1.json']) {
     mkdirSync(dirname(join(directory,file)),{recursive:true});cpSync(join(root,file),join(directory,file));
   }
   for (const name of ['domain','api-contracts']) cpSync(join(root,'packages',name,'src'),join(directory,'packages',name,'src'),{recursive:true});

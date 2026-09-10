@@ -8,7 +8,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "node scripts/quality/lint-smoke.mjs && turbo run lint",
+    "lint": "node scripts/quality/lint-smoke.mjs && eslint country-packs --max-warnings=0 && turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "node --test scripts/quality/*.test.mjs && turbo run test",
     "test:quality": "node --test scripts/quality/*.test.mjs",

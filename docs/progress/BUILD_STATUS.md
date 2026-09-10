@@ -25,10 +25,11 @@ Updated: 2026-09-10. This is an evidence ledger, not a percentage-complete estim
 | Application schema parity | PR #22: run `34452939530` passed full replay and tests; all 914 live application catalog entries match the clean replay, with zero differences. Final tracked CI/merge evidence is in the PR. See [scope and procedure](../quality/schema-parity.md). |
 | Reserved Auth provisioning backend | PR #23 merged as `8e0133b07aea0d8f4fb83d1a45a610242bbc589b`; final run `34458107930` passed: 32 service tests, 489 SQL assertions, real TOTP MFA, three actual isolated Auth subjects, lost-response recovery and four concurrent HTTP executions. No hosted deployment or credential issuance claimed. |
 | Identity container | PR #24 candidate run `34459951393` passed real container Auth/MFA/recovery/concurrency, signature verification, read-only/non-root runtime, clean shutdown and zero HIGH/CRITICAL image findings. Final pinned CI evidence is in the PR. No deployed ECS service claimed. |
+| Country-pack structure | PR #25 candidate run `34461923520` passed 502 SQL assertions and full application/Auth/container gates. Immutable Swedish metadata synchronizes API and nine SQL defaults without changing V1 behavior; exact dev migration `20260910094434`, all 16 history entries and 915 catalog objects verified. Final tracked CI evidence is in the PR. Tax/market domains remain gated. |
 | Rules/policy | Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |
-| Remaining foundation | Scoped service/client authentication, approval/break-glass, outbox publisher, provider architecture, country packs, observability, Docker/runtime dependencies, infrastructure verification and restore/security/load gates. |
+| Remaining foundation | Scoped service/client authentication, approval/break-glass, outbox publisher, provider architecture, remaining country domains, observability, Docker/runtime dependencies, infrastructure verification and restore/security/load gates. |
 
 ## Whole-plan coverage
 
@@ -38,7 +39,7 @@ reviewed, current evidence. See `masterplan-traceability.md`; coverage integrity
 product acceptance. Existing implemented boundaries retain the evidence above.
 
 ## Sequential continuation
-Complete the separately privileged Auth provisioning integration after the merged identity administration boundary, then authorized consent/link/discovery and central policy/readiness; finish runtime infrastructure and full Phase 0 gates before claiming the foundation complete. Each PR preserves prior tests and migrations. No destructive history rewrite, no skipping failed gates, no silent tenant/schema/contract divergence.
+The reserved Auth service, hardened container and country metadata structure now have isolated integration evidence. Continue runtime dependency/infrastructure verification, observability, central policy/readiness and authorized consent/link/discovery; complete the remaining Phase 0 gates before claiming the foundation complete. Each PR preserves prior tests and migrations. No destructive history rewrite, no skipping failed gates, no silent tenant/schema/contract divergence.
 
 The locked phase sequence remains: 1 smart charging MVP; 2 full Swedish true cost; 3 direct connector expansion; 4 flex shadow; 5 BSP pilot; 6 multi-BSP; 7 local flex; 8 solar/battery/HEMS; 9 Edge/OEM; 10 licensed Nord Pool data; 11 country expansion; 12 direct BSP readiness; 13 V2G. These later phases remain planned, not delivered.
 

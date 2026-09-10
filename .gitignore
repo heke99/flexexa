@@ -12,3 +12,5 @@ coverage/
 supabase/.temp/
 
 .flexexa/index/*.json
+*.tsbuildinfo
+**/next-env.d.ts
