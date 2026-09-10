@@ -27,7 +27,7 @@ CREATE TABLE flexexa.otel_traces_v1 (
   AND match(SpanId,'^[0-9a-f]{16}$') AND SpanId!='0000000000000000'
   AND (ParentSpanId='' OR match(ParentSpanId,'^[0-9a-f]{16}$')),
  CONSTRAINT bounded_names CHECK length(SpanName)<=128 AND length(ScopeVersion)<=32,
- CONSTRAINT no_free_text CHECK TraceState='' AND StatusMessage='',
+ CONSTRAINT no_free_text CHECK length(TraceState)=0 AND length(StatusMessage)=0,
  CONSTRAINT no_events CHECK length(`Events.Name`)=0,
  CONSTRAINT no_links CHECK length(`Links.TraceId`)=0,
  CONSTRAINT resource_keys CHECK arrayAll(k -> k IN ('service.name','service.version','deployment.environment.name'),mapKeys(ResourceAttributes)),
