@@ -13,6 +13,11 @@ absent. Random fixture admin/reader credentials are not stored in Git or logged.
 The test admin is a disposable bootstrap identity, not an application account.
 
 `infra/clickhouse/migrations/0001_telemetry_v1.sql` is the forward schema source.
+The application gate compares exact historical migration bytes with its target Git
+base: removal, rewrite, duplicate version and backdated additions fail. CI executes
+each migration in order and records SHA-256 hashes of the actual SQL inputs. Each
+file currently contains one SQL statement. This is source/replay synchronization,
+not a claim of a deployed ClickHouse catalog or migration ledger.
 It contains locked §30 fields, UUID attribution, UTC millisecond timestamps, one
 typed value per sample and explicit units/source/quality. Monthly partitions and
 tenant/asset/metric/time ordering support bounded asset-series queries. Values are
@@ -40,3 +45,5 @@ References checked 2026-09-10:
 - https://clickhouse.com/docs/reference/statements/create/row-policy
 - https://clickhouse.com/docs/concepts/features/configuration/settings/settings-users
 - https://hub.docker.com/v2/repositories/clickhouse/clickhouse-server/tags/26.8.2.7-distroless
+- https://clickhouse.com/docs/resources/changelogs/security-changelog
+- https://github.com/ClickHouse/ClickHouse/security/advisories

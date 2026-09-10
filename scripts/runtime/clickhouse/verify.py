@@ -59,7 +59,11 @@ with tempfile.TemporaryDirectory(prefix='flexexa-click-') as temporary:
         sql('SELECT 1',user='default',expected_code={194,516})
         sql('SELECT 1',user='health',expected_code={194,195,516})
         sql('CREATE DATABASE flexexa')
-        sql((ROOT/'infra/clickhouse/migrations/0001_telemetry_v1.sql').read_text())
+        migrations = {}
+        for migration in sorted((ROOT/'infra/clickhouse/migrations').glob('*.sql')):
+            content=migration.read_bytes()
+            sql(content.decode())
+            migrations[migration.name]=hashlib.sha256(content).hexdigest()
         sql('CREATE ROW POLICY admin_rows ON flexexa.telemetry_v1 USING 1 TO fixture_admin')
         for user in ['reader_a','reader_b','unassigned']:
             hashed=hashlib.sha256(passwords[user].encode()).hexdigest()
@@ -89,7 +93,8 @@ with tempfile.TemporaryDirectory(prefix='flexexa-click-') as temporary:
         insert(row(tenants[0],value_float=None,value_bool=True,metric='online',unit='1',sequence_number=2))
         insert(row(tenants[0],value_float=None,value_string='charging',metric='status',unit='1',sequence_number=3))
         assert sql("SELECT sum(value_float), countIf(value_bool), countIf(value_string='charging') FROM flexexa.telemetry_v1",'reader_a')=='3.5\t1\t1'
-        assert sql("SELECT type FROM system.columns WHERE database='flexexa' AND table='telemetry_v1' AND name='event_time'")=="DateTime64(3, 'UTC')"
+        column=json.loads(sql("SELECT type FROM system.columns WHERE database='flexexa' AND table='telemetry_v1' AND name='event_time' FORMAT JSONEachRow"))
+        assert column['type']=="DateTime64(3, 'UTC')", column['type']
         insert(row(tenants[0],event_time=(now-timedelta(days=31)).strftime('%Y-%m-%d %H:%M:%S'),sequence_number=9))
         sql('OPTIMIZE TABLE flexexa.telemetry_v1 FINAL')
         assert sql('SELECT count() FROM flexexa.telemetry_v1')=='4'
@@ -102,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='flexexa-click-') as temporary:
         assert sql('SELECT count() FROM flexexa.telemetry_v1','unassigned')=='0'
         run([*compose,'stop','--timeout','20','clickhouse'],env)
         assert run(['inspect','--format','{{.State.ExitCode}}',container],env).stdout.strip()=='0'
-        report={'image':config['Image'],'server_version':'26.8.2.7','tenant_read_isolation':True,'tenant_writes_denied':True,
+        report={'image':config['Image'],'server_version':'26.8.2.7','migration_sha256':migrations,'tenant_read_isolation':True,'tenant_writes_denied':True,
             'unassigned_reader_denied':True,'invalid_rows_rejected':4,'typed_value_roundtrip':True,'retention_days':30,
             'expired_row_removed':True,'restart_data_and_policy_persisted':True,'non_root_uid':101,'read_only':True,
             'loopback_http_only':True,'postgres_identity_integration':False,'production_deployed':False}
