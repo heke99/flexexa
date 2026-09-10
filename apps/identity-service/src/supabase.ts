@@ -3,7 +3,7 @@ import {DomainError,entityId,exactKeys,record,tenantId} from '@flexexa/domain';
 import {connectEnvironment} from '@flexexa/domain/connect';
 import type {ReservedAuthAdmin,ReservedIdentity} from './provision.ts';
 type Fetch=typeof fetch;
-export interface Connection {url:string;allowLoopback?:boolean;fetcher?:Fetch}
+export interface Connection {url:string;allowLoopback?:boolean;fetcher?:Fetch;correlationId?:string}
 function endpoint(config:Connection){
  const url=new URL(config.url);
  if(url.username||url.password||url.search||url.hash||url.pathname!=='/'||
@@ -23,9 +23,10 @@ async function jsonResponse(response:Response){
 }
 function transport(config:Connection,headers:Readonly<Record<string,string>>){
  const origin=endpoint(config),send=config.fetcher??fetch;
+ const correlation=config.correlationId===undefined?{}:{'X-Correlation-Id':entityId(config.correlationId)};
  return async(path:string,method:string,body?:unknown)=>{
   try{
-   const response=await send(origin+path,{method,headers:{...headers,'Content-Type':'application/json'},redirect:'error',
+   const response=await send(origin+path,{method,headers:{...headers,...correlation,'Content-Type':'application/json'},redirect:'error',
     signal:AbortSignal.timeout(5000),...(body===undefined?{}:{body:JSON.stringify(body)})});
    return {status:response.status,ok:response.ok,body:await jsonResponse(response)};
   }catch{throw new DomainError('INTERNAL_ERROR');}
