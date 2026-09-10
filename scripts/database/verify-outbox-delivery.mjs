@@ -49,7 +49,20 @@ if(process.env.FLEXEXA_OUTBOX_BROKER_TEST==='1'){
  assert.equal(broker({operation:'consume'}),null);
  realBroker=true;
 }
+// Recheck wall time after a real row-lock wait, not just at statement start.
+const blockerName='outbox-lock-'+randomUUID();
+const blocker=asyncSql(`set application_name=${q(blockerName)};begin;select id from public.outbox_events where id='${eventId}' for update;select pg_sleep(3);commit;`);
+let waiting=false;
+for(let attempt=0;attempt<100;attempt++){
+ if(sql(`select count(*) from pg_stat_activity where application_name=${q(blockerName)} and wait_event='PgSleep'`)==='1'){waiting=true;break;}
+ await new Promise(resolve=>setTimeout(resolve,20));
+}
+assert.ok(waiting,'Blocker must hold event lock before testing authorization expiry');
+sql(`update public.service_identity_tenant_grants set valid_until=clock_timestamp()+interval '1 second' where service_identity_id='${service}'`);
+await assert.rejects(database.finish(scope,winners[0].lease_id,'published'),/PERMISSION_DENIED/);
+await blocker;
+sql(`update public.service_identity_tenant_grants set valid_until=null where service_identity_id='${service}'`);
 // Revoking the same session affects every subsequent call, including receipt replay.
 sql(`delete from auth.sessions where id='${session}'`);
 await assert.rejects(database.finish(scope,winners[0].lease_id,'published'),/PERMISSION_DENIED/);
-console.log(JSON.stringify({outbox_parallel_claims:16,exclusive_winners:1,idempotent_parallel_confirmations:16,session_revocation_rechecked:true,real_broker_confirmation:realBroker}));
+console.log(JSON.stringify({outbox_parallel_claims:16,exclusive_winners:1,idempotent_parallel_confirmations:16,session_revocation_rechecked:true,grant_expiry_after_lock_wait_rechecked:true,real_broker_confirmation:realBroker}));
