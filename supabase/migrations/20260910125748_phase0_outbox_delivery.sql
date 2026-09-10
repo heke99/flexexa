@@ -98,9 +98,9 @@ begin
  insert into private.flexexa_outbox_leases(tenant_id,event_id,generation,principal_id,session_id,environment,created_at,expires_at)
   values(p_tenant_id,event.id,event.attempt_count+1,principal,(auth.jwt()->>'session_id')::uuid,p_environment,at,at+interval '30 seconds') returning * into lease;
  update public.outbox_events set attempt_count=lease.generation,available_at=lease.expires_at where tenant_id=p_tenant_id and id=event.id;
- return jsonb_build_object('lease_id',lease.id,'generation',lease.generation,'expires_at',lease.expires_at,'environment',p_environment,
+ return jsonb_build_object('lease_id',lease.id,'generation',lease.generation,'expires_at',to_char(lease.expires_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'environment',p_environment,
   'event',jsonb_build_object('event_id',event.id,'tenant_id',event.tenant_id,'organization_id',event.organization_id,
-   'event_type',event.event_type,'event_version',event.event_version,'occurred_at',event.occurred_at,'received_at',event.received_at,
+   'event_type',event.event_type,'event_version',event.event_version,'occurred_at',to_char(event.occurred_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'received_at',to_char(event.received_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
    'correlation_id',event.correlation_id,'causation_id',event.causation_id,'source',event.source,'payload',event.payload_json));
 end $$;
 revoke all on function private.flexexa_claim_outbox_event(uuid,text) from public,anon,authenticated;
