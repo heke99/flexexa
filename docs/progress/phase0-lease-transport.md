@@ -36,10 +36,13 @@ The permanent database runner now sends the existing 24 concurrent lease acquisi
 and two generation checks through this typed client, preserving all previous tests
 and assertions. Isolated tracked replay/RLS/contracts/concurrency must pass before
 merge; unit doubles alone are not database or live provisioning acceptance.
+Final run `34448449838` passed both jobs, including 445 pgTAP assertions and the
+24 typed lease acquisitions/two checks. PR #19 merged as
+`b238718b09e8a78fe41edcaefd480e00dd9e17db`.
 
 ## Next boundary
 The privileged provisioning service still needs protected Auth credentials,
 reserved-UUID create/read reconciliation and an atomic finalization check in the
-write transaction. A successful SQL lease check cannot fence a remote Auth request
+write transaction (next candidate: `phase0-identity-finalization.md`). A successful SQL lease check cannot fence a remote Auth request
 already in flight. There is no Auth user, credential, API grant, provider command,
 deployed AWS worker or whole-plan readiness claim in this change.

@@ -19,7 +19,8 @@ Updated: 2026-09-10. This is an evidence ledger, not a percentage-complete estim
 | Identity administration transport | PR #16 merged as `ed01da2e18f6579b97a37568d4fd6b7ef9e92482`; final run `34409212402` passed pinned application and complete database replay/RLS/concurrency gates. |
 | Durable identity provisioning request | PR #17 merged as `ecb82b7cd19cd9cc31aa05d2ab5648f33bda1bbf`; final run `34445226936` passed application and database gates. 392 SQL assertions and all concurrency checks; exact development migration `20260910062435` verified. No credentials or Auth users issued. |
 | Identity execution coordination | PR #18 merged as `b5e1956d9ff73bedf4373c0e7a6ad4bf65f3958d`; final run `34447623811` passed. 445 SQL assertions and all prior concurrency checks plus 24 lease races; exact development migration `20260910065545` verified. No running worker or external Auth I/O. |
-| Typed lease transport | Acquisition/check descriptors, strict receipt identity/generation/expiry validation and fresh SQL calls implemented; isolated transport/concurrency CI required before merge. |
+| Typed lease transport | PR #19 merged as `b238718b09e8a78fe41edcaefd480e00dd9e17db`; run `34448449838` passed 475 application tests, 445 SQL assertions and real typed lease races/checks. |
+| Atomic provisioning finalization | Candidate implements reserved-identity enrollment, final lease check, immutable completion and atomic audit/outbox evidence; database replay/concurrency and development promotion required before merge. |
 | Rules/policy | Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |

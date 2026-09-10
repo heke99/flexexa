@@ -200,3 +200,45 @@ export function createIdentityExecutionLeaseApi(client: IdentityExecutionLeaseCl
     },
   });
 }
+
+export function identityProvisioningFinalizationRpc(value: unknown, expectedScope: MachinePermissionScope) {
+  const tenant = tenantId(expectedScope.tenant_id), environment = connectEnvironment(expectedScope.environment);
+  const request = parseMutation(value, tenant, raw => {
+    const p = record(raw);
+    exactKeys(p, ["lease_id", "environment"]);
+    if (connectEnvironment(p.environment) !== environment) throw new DomainError("PERMISSION_DENIED");
+    return Object.freeze({ lease_id: entityId(p.lease_id), environment });
+  });
+  return Object.freeze({ function_name: "flexexa_finalize_identity_provisioning" as const,
+    args: Object.freeze({ p_tenant_id: request.tenant_id, p_payload: request.payload,
+      p_idempotency_key: request.idempotency_key, p_correlation_id: request.correlation_id }) });
+}
+type FinalizationCall = ReturnType<typeof identityProvisioningFinalizationRpc>;
+/** Completion is historical evidence, never proof that the enrolled principal is currently active. */
+export function parseIdentityProvisioningCompletion(value: unknown, call: FinalizationCall) {
+  const p = record(value);
+  exactKeys(p, ["tenant_id", "resource_type", "resource_id", "request_id", "lease_id", "principal_id", "generation", "environment", "correlation_id", "idempotency_key", "status"]);
+  assertSameTenant(call.args.p_tenant_id, p.tenant_id);
+  if (p.resource_type !== "identity_provisioning_completion" || p.status !== "completed" || p.idempotency_key !== call.args.p_idempotency_key ||
+      entityId(p.lease_id) !== call.args.p_payload.lease_id || connectEnvironment(p.environment) !== call.args.p_payload.environment) throw new DomainError("VALIDATION_ERROR");
+  return Object.freeze({ tenant_id: call.args.p_tenant_id, resource_type: "identity_provisioning_completion" as const,
+    resource_id: entityId(p.resource_id), request_id: entityId(p.request_id), lease_id: call.args.p_payload.lease_id,
+    principal_id: entityId(p.principal_id), generation: leaseGeneration(p.generation), environment: call.args.p_payload.environment,
+    correlation_id: entityId(p.correlation_id), idempotency_key: call.args.p_idempotency_key, status: "completed" as const });
+}
+export interface IdentityProvisioningFinalizationClient {
+  rpc(name: FinalizationCall["function_name"], args: FinalizationCall["args"]): PromiseLike<{ data: unknown; error: unknown | null }>;
+}
+/** Finalizes only the reserved, trusted pre-provisioned Auth subject. No Auth admin API or credential I/O. */
+export function createIdentityProvisioningFinalizationApi(client: IdentityProvisioningFinalizationClient, expectedScope: MachinePermissionScope) {
+  const scope = Object.freeze({ tenant_id: tenantId(expectedScope.tenant_id), environment: connectEnvironment(expectedScope.environment) });
+  return Object.freeze({ async finalize(value: unknown) {
+    const call = identityProvisioningFinalizationRpc(value, scope);
+    let result: unknown;
+    try { result = await client.rpc(call.function_name, call.args); }
+    catch { throw new DomainError("INTERNAL_ERROR"); }
+    const response = record(result);
+    if (response.error !== null && response.error !== undefined) throw databaseError(response.error);
+    return parseIdentityProvisioningCompletion(response.data, call);
+  } });
+}
