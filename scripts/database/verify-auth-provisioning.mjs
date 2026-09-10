@@ -75,6 +75,7 @@ async function main(){
   const recovery=await execute(recoveryLease,'finish-recovery');assert.equal(recovery.status,200);assert.equal(observed.creates,2);
   stage='concurrent-http-finalization';const raceLease=await newLease('race');
   const results=await Promise.all(Array.from({length:4},()=>execute(raceLease,'finish-race')));
+  console.log(JSON.stringify({concurrent_http_statuses:results.map(r=>r.status)}));
   assert(results.every(r=>r.status===200));assert.equal(new Set(results.map(r=>r.data.resource_id)).size,1);
   stage='database-readback';const facts=JSON.parse(sql(`select jsonb_build_object(
    'principals',(select count(*) from private.flexexa_machine_principals where tenant_id='${tenant}'),

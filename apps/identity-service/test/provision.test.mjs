@@ -61,3 +61,20 @@ test('ambiguous finalization does not fall through into Auth administration',asy
  let used=false;const api=createProvisioner({rpc:async()=>{throw Error('network');}},{find:async()=>{used=true;return false;},create:async()=>{used=true;}},scope);
  await assert.rejects(()=>api.execute(input()),e=>e.code==='INTERNAL_ERROR');assert.equal(used,false);
 });
+for(const at of [1,2,3])test(`concurrent completion at lease check ${at} replays canonical receipt without further Auth calls`,async()=>{
+ let checks=0,finalizations=0;const calls=[];
+ const rpc={async rpc(name){calls.push(name);
+  if(name==='flexexa_finalize_identity_provisioning')return ++finalizations===1?{data:null,error:{code:'42501'}}:{data:complete,error:null};
+  return ++checks===at?{data:null,error:{code:'P0001',message:'INVALID_STATE_TRANSITION'}}:{data:check,error:null};
+ }};
+ const admin={async find(){calls.push('find');return false;},async create(){calls.push('create');throw Error('ambiguous');}};
+ assert.deepEqual(await createProvisioner(rpc,admin,scope).execute(input()),complete);
+ assert.equal(finalizations,2);assert.equal(checks,at);
+ assert.deepEqual(calls.filter(c=>c==='find'||c==='create'),at===1?[]:at===2?['find']:['find','create']);
+});
+test('expired lease without canonical completion remains rejected',async()=>{
+ let finalizations=0,used=false;
+ const rpc={async rpc(name){return {data:null,error:name==='flexexa_finalize_identity_provisioning'&&++finalizations===1?{code:'42501'}:{code:'P0001',message:'INVALID_STATE_TRANSITION'}};}};
+ const admin={async find(){used=true;return false;},async create(){used=true;}};
+ await assert.rejects(()=>createProvisioner(rpc,admin,scope).execute(input()),e=>e.code==='INVALID_STATE_TRANSITION');assert.equal(used,false);
+});

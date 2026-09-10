@@ -26,6 +26,7 @@ export function createProvisioner(rpc:IdentityExecutionLeaseClient & IdentityPro
   // independently prove authority before any privileged Auth read or write.
   try{return await finalize();}
   catch(error){if(!(error instanceof DomainError)||error.code!=='PERMISSION_DENIED')throw error;}
+  try{
   let identity=await leases.check(lease);
   if(!await admin.find(identity)){
    identity=await leases.check(lease); // Auth lookup may have waited; recheck before create.
@@ -36,6 +37,12 @@ export function createProvisioner(rpc:IdentityExecutionLeaseClient & IdentityPro
     identity=await leases.check(lease);
     if(!await admin.find(identity))throw new DomainError('INTERNAL_ERROR');
    }
+  }
+  }catch(error){
+   // Another request can complete between our RPCs. Ask the canonical finalizer
+   // for this exact key's receipt; never resume privileged work from a stale lease.
+   if(error instanceof DomainError&&error.code==='INVALID_STATE_TRANSITION')return finalize();
+   throw error;
   }
   return finalize(); // Rechecks current lease and atomic canonical enrollment.
  }});
