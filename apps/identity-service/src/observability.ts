@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {Console} from 'node:console';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {entityId} from '@flexexa/domain';
 
@@ -15,9 +16,10 @@ export interface RequestLog {
 }
 export type LogSink=(entry:RequestLog)=>void;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const diagnostics=new Console({stdout:process.stdout,stderr:process.stderr,ignoreErrors:true});
 export function writeRequestLog(entry:RequestLog){
  // Bounded best-effort diagnostics; PostgreSQL remains the durable audit authority.
- if(process.stdout.writableLength<65536)process.stdout.write(JSON.stringify(entry)+'\n');
+ if(process.stdout.writableLength<65536)diagnostics.log(JSON.stringify(entry));
 }
 export function observeRequest(request:IncomingMessage,response:ServerResponse,sink:LogSink=writeRequestLog){
  const requestId=randomUUID(),header=request.headers['x-correlation-id'];

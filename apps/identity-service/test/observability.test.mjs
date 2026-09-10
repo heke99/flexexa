@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {request as httpRequest} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
+import {spawn} from 'node:child_process';
 import {createIdentityServer} from '../src/server.ts';
 
 const id=n=>'ce500000-0000-4000-8000-'+String(n).padStart(12,'0');
@@ -57,3 +58,10 @@ test('a client disconnect during body upload emits one abort record and no upstr
  const deadline=Date.now()+2000;while(!logs.length&&Date.now()<deadline)await delay(5);
  assert.equal(logs.length,1);assert.equal(logs[0].outcome,'aborted');assert.equal(logs[0].status_code,499);assert.equal(calls.length,0);
 }));
+test('a closed stdout pipe cannot crash the diagnostic producer',async()=>{
+ const source=new URL('../src/observability.ts',import.meta.url).href;
+ const child=spawn(process.execPath,['--experimental-strip-types','--input-type=module','-e',
+  `import {writeRequestLog} from ${JSON.stringify(source)};process.stdin.once('data',()=>{writeRequestLog({event:'http.request.completed'});setTimeout(()=>process.exit(0),50);});`],{stdio:['pipe','pipe','pipe']});
+ const ended=once(child,'exit');child.stdout.destroy();child.stderr.resume();
+ await delay(50);child.stdin.end('go');const [code]=await ended;assert.equal(code,0);
+});
