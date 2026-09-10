@@ -1,0 +1,49 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:${env:FLEXEXA_OTEL_RECEIVER_PORT}
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  batch:
+    timeout: 100ms
+    send_batch_size: 32
+    send_batch_max_size: 32
+exporters:
+  otlp_http:
+    endpoint: http://127.0.0.1:${env:FLEXEXA_OTEL_EXPORT_PORT}
+    encoding: json
+    compression: none
+    timeout: 1s
+    sending_queue:
+      enabled: true
+      num_consumers: 1
+      queue_size: 64
+    retry_on_failure:
+      enabled: true
+      initial_interval: 200ms
+      max_interval: 1s
+      max_elapsed_time: 5s
+extensions:
+  health_check:
+    endpoint: 127.0.0.1:${env:FLEXEXA_OTEL_HEALTH_PORT}
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: ${env:FLEXEXA_OTEL_METRICS_PORT}
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http]
