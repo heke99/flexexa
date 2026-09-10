@@ -1,0 +1,22 @@
+# Disposable Linux sidecar fixture. Pin the candidate image digest after CI readback.
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.160.0
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 1
+    pids_limit: 128
+    network_mode: host
+    command: [--config=/etc/otelcol/config.yaml]
+    environment:
+      FLEXEXA_OTEL_RECEIVER_PORT: ${FLEXEXA_OTEL_RECEIVER_PORT:?receiver port required}
+      FLEXEXA_OTEL_HEALTH_PORT: ${FLEXEXA_OTEL_HEALTH_PORT:?health port required}
+      FLEXEXA_OTEL_METRICS_PORT: ${FLEXEXA_OTEL_METRICS_PORT:?metrics port required}
+      FLEXEXA_CLICKHOUSE_PORT: ${FLEXEXA_CLICKHOUSE_PORT:?loopback ClickHouse port required}
+      FLEXEXA_TRACE_WRITER_PASSWORD: ${FLEXEXA_TRACE_WRITER_PASSWORD:?ephemeral writer password required}
+    volumes:
+      - ./config.yaml:/etc/otelcol/config.yaml:ro
+      - ${FLEXEXA_OTEL_STORAGE:?dedicated uid 65532 storage required}:/var/lib/otelcol:rw

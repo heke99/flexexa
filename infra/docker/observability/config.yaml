@@ -1,0 +1,79 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:${env:FLEXEXA_OTEL_RECEIVER_PORT}
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+    spike_limit_mib: 32
+  filter/identity:
+    error_mode: propagate
+    traces:
+      span:
+        - 'resource.attributes["service.name"] != "flexexa-identity"'
+        - 'resource.attributes["deployment.environment.name"] != "sandbox"'
+        - 'Len(span.events) > 0 or Len(span.links) > 0'
+        - 'span.status.message != "" or span.trace_state != ""'
+  transform/privacy:
+    error_mode: propagate
+    trace_statements:
+      - context: resource
+        statements:
+          - 'keep_keys(attributes, ["service.name", "service.version", "deployment.environment.name"])'
+      - context: span
+        statements:
+          - 'keep_keys(attributes, ["http.request.method", "http.route", "http.response.status_code", "flexexa.request_id", "flexexa.correlation_id"])'
+exporters:
+  clickhouse:
+    endpoint: http://127.0.0.1:${env:FLEXEXA_CLICKHOUSE_PORT}
+    username: trace_writer
+    password: ${env:FLEXEXA_TRACE_WRITER_PASSWORD}
+    database: flexexa
+    traces_table_name: otel_traces_v1
+    create_schema: false
+    async_insert: false
+    compress: none
+    timeout: 2s
+    sending_queue:
+      enabled: true
+      num_consumers: 1
+      sizer: items
+      queue_size: 1024
+      storage: file_storage
+      batch:
+        sizer: items
+        min_size: 32
+        max_size: 256
+        flush_timeout: 1s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 500ms
+      max_interval: 2s
+      max_elapsed_time: 0s
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol
+    fsync: true
+    max_size: 67108864
+    recreate: false
+  health_check:
+    endpoint: 127.0.0.1:${env:FLEXEXA_OTEL_HEALTH_PORT}
+service:
+  extensions: [file_storage, health_check]
+  telemetry:
+    logs:
+      level: error
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: ${env:FLEXEXA_OTEL_METRICS_PORT}
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/identity, transform/privacy]
+      exporters: [clickhouse]
