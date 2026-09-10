@@ -29,7 +29,8 @@ permanent database bridge. Core mutation callers retain the same error semantics
   the pinned pnpm 12.3.4 CI installation gate.
 - Verification exits 2 intentionally because clean database replay/RLS and the
   real RPC/concurrency checks remain pending. Docker is unavailable locally.
-- Final-head application and isolated database CI must pass before merge.
+- Final published head `fcef9dc3153227ebeae6888bf83a28902dd0ef1f`: run `34409212402` passed application job `102659430676` and database job `102659430891`, including all 40 identity race calls through the transport.
+- PR #16 merged into foundation as `ed01da2e18f6579b97a37568d4fd6b7ef9e92482`.
 
 ## Remaining boundary
 This does not provision Auth users, issue API credentials, deliver secrets, implement

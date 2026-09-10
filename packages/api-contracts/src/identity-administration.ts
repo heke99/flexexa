@@ -67,3 +67,45 @@ export function createIdentityAdministrationApi(client: IdentityAdministrationCl
     revoke: (value: unknown) => invoke("revoke", value),
   });
 }
+
+/** Records intent only; the database generates both the operation and intended Auth identity. */
+export function identityProvisioningRequestRpc(value: unknown, expectedScope: MachinePermissionScope) {
+  const tenant = tenantId(expectedScope.tenant_id), environment = connectEnvironment(expectedScope.environment);
+  const request = parseMutation(value, tenant, raw => {
+    const p = record(raw);
+    exactKeys(p, ["api_client_id", "environment"]);
+    if (connectEnvironment(p.environment) !== environment) throw new DomainError("PERMISSION_DENIED");
+    return Object.freeze({ api_client_id: entityId(p.api_client_id), environment });
+  });
+  return Object.freeze({ function_name: "flexexa_request_api_identity_provisioning" as const,
+    args: Object.freeze({ p_tenant_id: request.tenant_id, p_payload: request.payload,
+      p_idempotency_key: request.idempotency_key, p_correlation_id: request.correlation_id }) });
+}
+type ProvisioningRequestCall = ReturnType<typeof identityProvisioningRequestRpc>;
+export function parseIdentityProvisioningRequestReceipt(value: unknown, call: ProvisioningRequestCall) {
+  const p = record(value);
+  exactKeys(p, ["tenant_id", "resource_type", "resource_id", "api_client_id", "intended_auth_user_id", "environment", "correlation_id", "idempotency_key", "status"]);
+  assertSameTenant(call.args.p_tenant_id, p.tenant_id);
+  if (p.resource_type !== "identity_provisioning_request" || p.status !== "requested" || p.idempotency_key !== call.args.p_idempotency_key ||
+      entityId(p.api_client_id) !== call.args.p_payload.api_client_id || connectEnvironment(p.environment) !== call.args.p_payload.environment) throw new DomainError("VALIDATION_ERROR");
+  return Object.freeze({ tenant_id: call.args.p_tenant_id, resource_type: "identity_provisioning_request" as const,
+    resource_id: entityId(p.resource_id), api_client_id: call.args.p_payload.api_client_id,
+    intended_auth_user_id: entityId(p.intended_auth_user_id), environment: call.args.p_payload.environment,
+    correlation_id: entityId(p.correlation_id), idempotency_key: call.args.p_idempotency_key, status: "requested" as const });
+}
+export interface IdentityProvisioningRequestClient {
+  rpc(name: ProvisioningRequestCall["function_name"], args: ProvisioningRequestCall["args"]): PromiseLike<{ data: unknown; error: unknown | null }>;
+}
+/** An expiring durable intent is never permission for an Auth admin API call. */
+export function createIdentityProvisioningRequestApi(client: IdentityProvisioningRequestClient, expectedScope: MachinePermissionScope) {
+  const scope = Object.freeze({ tenant_id: tenantId(expectedScope.tenant_id), environment: connectEnvironment(expectedScope.environment) });
+  return Object.freeze({ async request(value: unknown) {
+    const call = identityProvisioningRequestRpc(value, scope);
+    let result: unknown;
+    try { result = await client.rpc(call.function_name, call.args); }
+    catch { throw new DomainError("INTERNAL_ERROR"); }
+    const response = record(result);
+    if (response.error !== null && response.error !== undefined) throw databaseError(response.error);
+    return parseIdentityProvisioningRequestReceipt(response.data, call);
+  } });
+}
