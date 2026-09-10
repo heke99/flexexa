@@ -1,12 +1,15 @@
 # Phase 0 — identity runtime container
 
 Candidate builds the existing identity backend from an explicit source allowlist. The
-Node 24.19.0 bookworm-slim image contains only the service, canonical domain and API
+Distroless Node 24 / Debian 13 image contains only the service, canonical domain and API
 contract sources/manifests plus fixed workspace symlinks. There is no package install,
 compiler, copied lockfile, test fixture or application secret in the build context.
-The base image still includes its vendor-provided tools; this is not a distroless image.
+The runtime has no shell, npm, yarn, Perl or distribution package manager. The previous
+bookworm-slim candidate was rejected after Trivy reported 64 HIGH/CRITICAL package
+findings (26 distinct CVEs); unused vulnerable tools are removed by changing the actual
+runtime distribution, not by an ignore list or deleting scanner metadata.
 
-The Dockerfile runs as `node`, exposes process liveness, and directly executes the
+The Dockerfile runs as UID/GID `65532`, exposes process liveness, and directly executes the
 production Node entrypoint as PID 1. Isolated verification additionally enforces a
 read-only root filesystem, no Linux capabilities, no privilege escalation and bounded
 memory/CPU. The actual production HTTPS requirement remains enabled. An ephemeral
@@ -21,7 +24,9 @@ outside the repository and image, and removed with the fixture. Only the public 
 certificate is mounted. Docker inspection output never includes runtime environment.
 The fixture verifies Docker health, non-root UID, read-only root and clean SIGTERM exit.
 
-CI scans the tested image archive using pinned Trivy 0.74.0, retains a JSON report and
+CI verifies the base image signature against the published Distroless identity/issuer
+using Cosign 3.1.3 and builds the resolved digest. The reviewed digest is pinned before
+merge. CI scans the tested image archive using digest-pinned Trivy 0.74.0, retains a JSON report and
 fails on HIGH/CRITICAL vulnerabilities, including unfixed findings. No ignore policy is
 added. Image scanning needs registry/advisory access and remains a real required gate.
 No Docker daemon is available in the editing workspace; container results must come
@@ -32,6 +37,8 @@ index/impact, code/security review and test strategy. Master sections 77 and 83 
 OpenTofu remains infrastructure authority; this change provisions no AWS resource.
 
 References checked:
+- https://github.com/GoogleContainerTools/distroless
+- https://github.com/sigstore/cosign/releases/tag/v3.1.3
 - https://github.com/aquasecurity/trivy/releases/tag/v0.74.0
 - https://trivy.dev/docs/latest/references/configuration/cli/trivy_image/
 

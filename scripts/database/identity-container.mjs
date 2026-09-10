@@ -50,7 +50,7 @@ export async function startIdentityContainer(config){
    await new Promise(resolve=>setTimeout(resolve,1000));
   }
   assert(healthy);assert.equal((await fetch(origin+'/health/live')).status,200);
-  const user=docker(['exec',container,'id','-u']);assert.notEqual(user,'0');
+  const user=docker(['exec',container,'/nodejs/bin/node','-e','console.log(process.getuid())']);assert.notEqual(user,'0');
   const locked=docker(['inspect','--format','{{.HostConfig.ReadonlyRootfs}}',container]);assert.equal(locked,'true');
   return {origin,async close(){
    try{
