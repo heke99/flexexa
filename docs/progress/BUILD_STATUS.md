@@ -58,3 +58,9 @@ final run `34481935364` passed all six jobs, 550 pgTAP assertions and real Postg
 RabbitMQ delivery, replay and concurrency checks. Exact migration `20260910131811`,
 17 history entries and 960 catalog objects matched development with zero differences.
 Hosted delivery, neutral-event classification and consumer inbox remain pending.
+
+Sandbox policy registry: PR #35 merged as `a1c90b85fc502792a8cc159d9f6313409019ece8`;
+final run `34489237479` passed all six jobs and 606 pgTAP assertions. Exact migration
+`20260910142645`, 18 history entries and 1,284 catalog objects matched development.
+Independent approval, immutable evidence and new-version readiness are verified in
+sandbox. Production shadow/criteria, binding lifecycle and hosted signing remain open.
