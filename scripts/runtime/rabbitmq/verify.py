@@ -131,7 +131,8 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         channel.basic_publish('flexexa.events','asset.connected',body,props,mandatory=True)
         connection.close();connection=None
         run([*compose,'restart','rabbitmq'],env)
-        run([*compose,'up','-d','--wait','--wait-timeout','120'],env)
+        run([*compose,'up','--no-recreate','-d','--wait','--wait-timeout','120'],env)
+        assert run([*compose,'ps','-q','rabbitmq'],env).stdout.strip()==container
         port = int(run([*compose, 'port', 'rabbitmq', '5672'], env).stdout.strip().rsplit(':', 1)[1])
         connection=connect_ready();channel=connection.channel()
         method,received,message=wait_message(channel,'flexexa.events.q')
