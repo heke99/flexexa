@@ -18,7 +18,9 @@ For each promotion:
    target, not from an arbitrary label supplied by the data itself. Save only that JSON
    envelope to a temporary file. It contains no credentials or business data.
 6. Run `pnpm db:history:check -- --base origin/phase/0-foundation --snapshot /tmp/flexexa-dev-history.json`.
-7. Run final CI on the tracked version, review threads and merge using expected head SHA.
+7. Compare a fresh development application catalog with the clean replay artifact using
+   the [schema parity procedure](schema-parity.md); resolve every difference.
+8. Run final CI on the tracked version, review threads and merge using expected head SHA.
 
 ```sql
 select jsonb_build_object(
