@@ -1,4 +1,4 @@
-# Phase 0 logical database restore — candidate
+# Phase 0 logical database restore — verified isolated exercise
 
 Scope: locked §§73, 77 and 84/DoD and Phase 0 database recovery. The isolated CI exercise
 uses the running PostgreSQL 17 container's own client binaries, with explicit local
@@ -40,5 +40,20 @@ No applied migration is changed and no live development data is dumped or restor
 
 References: PostgreSQL 17 [pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html)
 (snapshot/custom archive and scope) and [pg_restore](https://www.postgresql.org/docs/17/app-pgrestore.html)
-(transactional restoration and ownership). CI replay/restore and final live schema
-parity remain pending; no recovery completion is inferred from source inspection.
+(transactional restoration and ownership), and [pg_attribute](https://www.postgresql.org/docs/17/catalog-pg-attribute.html)
+(dropped attributes remain physical slots).
+
+Candidate run `34496452044`, head `e677f7dd6410dc4eed572b12be2201a36f73e456`,
+passed all six jobs and 635 pgTAP assertions. Actual restore compared 1,322 catalog
+objects, 72 tables / 3,223 fixture rows, including 23 Auth tables and all 19 migration
+rows, plus one archived sequence. Restored isolation/FKs/audit/idempotency and resumed
+atomic writes passed. Dump 266 ms; restore 666 ms; whole exercise 2,771 ms for this
+fixture only. Temporary target/archive cleanup succeeded.
+
+Three initial failures were retained as failure evidence: empty-target `--clean`
+policy drops, insufficient managed-owner privileges, and physical dropped-column
+positions. The corrected procedure restores every archived object and retains all
+logical schema/data checks. No failed assertion or archive object was excluded.
+
+Final tracked CI, fresh development migration/catalog parity and head-locked merge
+are recorded in PR #37. Production PITR and overall Phase 0 remain unverified.

@@ -70,3 +70,18 @@ final run `34492407834` passed all six jobs and 635 SQL assertions, 16 concurren
 consumes and actual TypeScript/SQL/RabbitMQ lost-ACK recovery. Exact migration
 `20260910145540`, 19 history entries and 1,322 catalog objects matched development.
 This is a sandbox policy consumer; hosted workers and provider ingress remain pending.
+
+Logical restore: PR #37 candidate run `34496452044` passed all six jobs and 635 SQL
+assertions. The actual isolated dump/restore verified 1,322 logical catalog objects,
+72 tables (23 Auth), 19 migration rows, sequence values and recovered tenant/audit/
+idempotency/atomic-write invariants. Final tracked CI and fresh live parity are in
+the PR. This does not certify hosted PITR or whole Phase 0.
+
+All 21 Phase 0 entries now have individual reviewed scope/gap notes in
+`masterplan-coverage.json` (plus the phase heading). These are partial/blocked
+assessments, not fabricated completion evidence. AWS readback at
+`2026-09-10T15:35:47Z` confirmed no ECS clusters or `flexexa-dev-vpc` in eu-north-1.
+The connector does not expose the authorized main-only apply workflow start.
+Hosted infrastructure/runtime acceptance, durable observability, credential and
+approval/break-glass workflows, policy binding/signing criteria and provider lifecycle
+remain open. Later charging/tax/market phases retain their original scope.
