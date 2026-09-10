@@ -47,7 +47,7 @@ limited incoming header/body time. These limits do not replace distributed rate 
 
 ## Verification and routing
 
-28 unit/adapter regressions exercise fencing, historical replay, ambiguity, tampering,
+32 unit/adapter regressions exercise fencing, historical replay, ambiguity, tampering,
 foreign attestation, exact endpoints, bounded responses and error redaction. The isolated
 integration test uses the real local Supabase Auth API for administrator creation, password
 login, TOTP enrollment/challenge/verification, three reserved machine subjects and actual
@@ -56,7 +56,12 @@ replay, a lost response after real Auth commit, four concurrent HTTP calls, and 
 revocation. Local keys/JWTs/TOTP material remain in process memory and are never printed.
 Business tenancy fixtures use disposable SQL; machine Auth rows use the actual Auth API.
 Existing fifteen migrations and all earlier replay/RLS/concurrency checks are preserved.
-Candidate CI must pass before this integration is reported verified.
+Candidate run `34457760220` passed application and database jobs, including all 489 SQL
+assertions and the real MFA/Auth/HTTP integration. The initial candidate exposed a
+concurrent completion between lease checks; the service now asks canonical finalization
+for the exact key receipt on a terminal lease, without further privileged Auth calls.
+Four added regressions cover all three lease-check positions and expired-without-completion
+rejection. Final tracked CI and exact-head merge evidence are recorded in PR #23.
 
 Activated Supabase/Postgres, verification, index/impact/affected verification, code/security
 review and test strategy. Reviewed master 18–20, 68, 70–71 and ADR-0004. CI and dependency
