@@ -1,0 +1,127 @@
+[
+  {
+    "from": "pending",
+    "to": "pending",
+    "allowed": false
+  },
+  {
+    "from": "pending",
+    "to": "connected",
+    "allowed": true
+  },
+  {
+    "from": "pending",
+    "to": "error",
+    "allowed": true
+  },
+  {
+    "from": "pending",
+    "to": "disconnected",
+    "allowed": true
+  },
+  {
+    "from": "pending",
+    "to": "revoked",
+    "allowed": true
+  },
+  {
+    "from": "connected",
+    "to": "pending",
+    "allowed": false
+  },
+  {
+    "from": "connected",
+    "to": "connected",
+    "allowed": false
+  },
+  {
+    "from": "connected",
+    "to": "error",
+    "allowed": true
+  },
+  {
+    "from": "connected",
+    "to": "disconnected",
+    "allowed": true
+  },
+  {
+    "from": "connected",
+    "to": "revoked",
+    "allowed": true
+  },
+  {
+    "from": "error",
+    "to": "pending",
+    "allowed": true
+  },
+  {
+    "from": "error",
+    "to": "connected",
+    "allowed": false
+  },
+  {
+    "from": "error",
+    "to": "error",
+    "allowed": false
+  },
+  {
+    "from": "error",
+    "to": "disconnected",
+    "allowed": true
+  },
+  {
+    "from": "error",
+    "to": "revoked",
+    "allowed": true
+  },
+  {
+    "from": "disconnected",
+    "to": "pending",
+    "allowed": true
+  },
+  {
+    "from": "disconnected",
+    "to": "connected",
+    "allowed": false
+  },
+  {
+    "from": "disconnected",
+    "to": "error",
+    "allowed": false
+  },
+  {
+    "from": "disconnected",
+    "to": "disconnected",
+    "allowed": false
+  },
+  {
+    "from": "disconnected",
+    "to": "revoked",
+    "allowed": true
+  },
+  {
+    "from": "revoked",
+    "to": "pending",
+    "allowed": false
+  },
+  {
+    "from": "revoked",
+    "to": "connected",
+    "allowed": false
+  },
+  {
+    "from": "revoked",
+    "to": "error",
+    "allowed": false
+  },
+  {
+    "from": "revoked",
+    "to": "disconnected",
+    "allowed": false
+  },
+  {
+    "from": "revoked",
+    "to": "revoked",
+    "allowed": false
+  }
+]

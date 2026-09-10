@@ -12,7 +12,7 @@ This repository implements the locked architecture in `FLEXEXA_MASTER_BUILD_PROM
 6. Preserve canonical models, tenant isolation and architecture boundaries.
 7. Verify the complete changed flow before reporting completion.
 
-## Installed skill inventory — 18
+## Installed skill inventory — 40
 
 ### Critical
 1. `supabase`
@@ -123,3 +123,78 @@ Run all gates relevant to the change:
 Flex reservations must prove no oversubscription under concurrency.
 Settlement/ledger changes must prove idempotency and debit=credit balance.
 No phase is complete until its relevant master-plan Definition of Done is green.
+
+
+## Mandatory codebase index and change-impact flow
+
+For every non-trivial code, schema, contract, event or infrastructure change:
+
+1. Run `pnpm index:codebase`.
+2. Run `pnpm impact -- --base <target-ref>`.
+3. Read `.flexexa/index/impact-report.json` before editing dependent areas.
+4. Review direct and transitive consumers, not only changed files.
+5. Run `pnpm verify:affected -- --base <target-ref>`.
+6. Run every domain-specific check named by the impact report.
+
+### HIGH-risk changes
+
+These always require full verification, not affected-only optimization:
+- `packages/domain/**`
+- `packages/kernel/**`
+- `packages/events/**`
+- `packages/api-contracts/**`
+- `supabase/migrations/**`
+- RLS/RBAC/policy/rules
+- optimizer/flex/reservations
+- dispatch
+- settlement/ledger
+- OpenTofu/IAM/workflows
+
+### Additional AWS/system skills
+
+Use the matching local skill before AWS work:
+- `aws-signing-in`
+- `aws-iam`
+- `aws-containers`
+- `aws-messaging-and-streaming`
+- `aws-database`
+- `aws-secrets-manager`
+- `aws-observability`
+- `aws-billing`
+- `aws-sdk-js`
+- `aws-sdk-python`
+
+OpenTofu remains the IaC authority through `flexexa-aws-opentofu`. AWS CDK/CloudFormation guidance may explain AWS semantics but must not silently replace OpenTofu.
+
+### Flexexa quality/security skills
+
+- `flexexa-codebase-index`
+- `flexexa-impact-analysis`
+- `flexexa-affected-verification`
+- `flexexa-code-review`
+- `flexexa-security-review`
+- `flexexa-test-strategy`
+- `flexexa-performance-review`
+
+Codex Security is not a dependency. Security review must remain executable with repository-local rules and normal CI.
+
+## Flexexa Connect — mandatory continuation context
+
+Read `docs/architecture/connect-adapter-boundary.md` and
+`docs/progress/phase0-connect-handoff.md` before provider/integration work.
+Flexexa builds its own Enode-like connectivity layer; Enode is optional, not the
+canonical data model or default control authority. Preserve first-party adapter support.
+Keep provider schemas in integrations, canonical IDs/contracts in shared domain and
+route/policy evaluation in Kernel. Never treat routing unit tests as distributed command
+idempotency, physical safety, an OAuth connection or completed phase readiness.
+
+## Flexexa Connect ownership mandate
+Read `docs/architecture/ADR-0001-flexexa-connect.md` and `docs/progress/BUILD_STATUS.md` before continuing implementation. Flexexa must be an independent Enode-like connectivity platform **and** support Enode as one replaceable adapter. Canonical tenant/customer/site/asset identity, consent and control ownership remain in Flexexa. Never build an Enode-only backend, expose provider IDs as canonical identity, or activate competing control routes. Do not mark a later phase complete from skeletons, mock calls or a green frontend build alone.
+
+## Complete master-plan traceability
+Before a non-trivial change, run `pnpm plan:check` and read the relevant source points in
+`.flexexa/index/masterplan-report.json` alongside BUILD_STATUS. Preserve every locked
+section and phase. Coverage integrity is not implementation or production approval.
+Record only actually reviewed evidence for the exact scope and current source snapshot.
+Run `pnpm plan:ready` before claiming the entire plan complete; a failing readiness check
+must not be hidden by a green application, coverage or simulator job.

@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { entityId, tenantId } from '@flexexa/domain';
+import { intersectPowerPolicy, assertCommandTransition, COMMAND_TRANSITIONS } from '../src/index.ts';
+const A=tenantId('a0000000-0000-4000-8000-000000000001'),R=entityId('b0000000-0000-4000-8000-000000000001');
+const policy=maximums=>({tenant_id:A,policy_set_version_id:R,valid_from:'2026-09-09T12:00:00Z',valid_until:'2026-09-09T13:00:00Z',deny_reasons:[],limits:maximums.map(maximum_kw=>({rule_version_id:R,minimum_kw:0,maximum_kw}))});
+const evaluate=p=>intersectPowerPolicy(p,A,'2026-09-09T12:30:00Z');
+test('lower-priority limits never widen stricter constraints: 400 combinations',()=>{assert.equal(evaluate(policy([11,9,7])).constraints_json.maximum_kw,7);for(let a=1;a<=20;a++)for(let b=1;b<=20;b++){const v=evaluate(policy([a,b]));assert(v.constraints_json.maximum_kw<=a);assert(v.constraints_json.maximum_kw<=b);}});
+test('deny, missing policy and expiry fail closed',()=>{assert.equal(evaluate(policy([])).allowed,false);assert.equal(evaluate({...policy([11]),deny_reasons:['CUSTOMER_OVERRIDE']}).allowed,false);assert.equal(intersectPowerPolicy(policy([11]),A,'2026-09-09T13:00:00Z').allowed,false);});
+test('conflicts deny; non-finite and cross-tenant inputs reject',()=>{const p=policy([7]);p.limits.push({rule_version_id:R,minimum_kw:8,maximum_kw:11});assert.equal(evaluate(p).allowed,false);assert.throws(()=>evaluate(policy([NaN])));assert.throws(()=>evaluate(policy([Infinity])));assert.throws(()=>evaluate({...policy([11]),tenant_id:R}),{code:'TENANT_MISMATCH'});});
+test('command lifecycle cannot skip measurement or reopen final states',()=>{assert.doesNotThrow(()=>assertCommandTransition('requested','validated'));assert.doesNotThrow(()=>assertCommandTransition('measurement_confirmed','completed'));for(const [from,to] of [['requested','completed'],['executing','completed'],['completed','executing'],['failed','queued'],['__proto__','queued']])assert.throws(()=>assertCommandTransition(from,to),{code:'INVALID_STATE_TRANSITION'});assert.throws(()=>COMMAND_TRANSITIONS.requested.push('completed'));});

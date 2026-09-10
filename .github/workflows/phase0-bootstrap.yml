@@ -1,0 +1,33 @@
+name: Flexexa quality verification
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install frozen dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile
+      - name: Verify application scope only
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: pnpm verify:affected -- --base "$IMPACT_BASE" --application-only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-impact-index
+          path: .flexexa/index/*.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,0 +1,13 @@
+{
+  "source_run_id": 34349453337,
+  "source_commit": "12a5af95507b13ca1770c2047e2c30d4d915b4a3",
+  "artifact_id": 10103058111,
+  "artifact_sha256": "11b7cfcf07400ea1a67f94fdd58f612847c5a3522a130a25271f2538b3dd3e3e",
+  "path": "pnpm-lock.yaml",
+  "bytes": 138989,
+  "content_sha256": "00e0193c88925b58ce9d69192c925c7ff6989f05c78f51b6cca6783fced0de5b",
+  "git_blob_sha": "f68f97c266c0c785251aa7a4f9a7b0b2cddf1bbb",
+  "review": "All six importer manifests match pinned package versions and explicit workspace links. Registry package resolutions use integrity hashes, no custom tarball/git/directory resolution. This generated lock is not proof of runtime correctness; subsequent frozen CI must pass.",
+  "publication_run_id": 34350134988,
+  "publication": "Isolated temporary job: no PR checkout or source execution, checksum-locked artifact, content-addressed Git blob only. Temporary resolution/publication workflows removed in this commit."
+}

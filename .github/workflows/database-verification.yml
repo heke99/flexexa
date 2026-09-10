@@ -1,0 +1,362 @@
+name: Supabase replay and authorization tests
+on:
+  pull_request:
+    branches: [main, phase/0-foundation]
+permissions:
+  contents: read
+concurrency:
+  group: db-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  runtime-observability-storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Install frozen SDK runtime dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile --prod --ignore-scripts --filter @flexexa/identity-service...
+      - name: Build checksum-locked minimal Collector
+        run: docker build --pull --progress=plain -t flexexa-observability:0.160.0-1 infra/docker/observability
+      - name: Verify durable trace storage, access and actual crash recovery
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: node --experimental-strip-types scripts/runtime/verify-observability-storage.mjs
+      - name: Scan exact tested observability Collector
+        run: |
+          mkdir -p /tmp/flexexa-observe-input /tmp/flexexa-observe-report
+          observe_image=$(sed -n 's/^    image: //p' infra/docker/observability/compose.yml)
+          docker save "$observe_image" -o /tmp/flexexa-observe-input/image.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-observe-input:/images:ro -v /tmp/flexexa-observe-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/image.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/trivy.json
+      - name: Summarize exact image findings
+        if: always()
+        run: |
+          python3 - <<'PYCODE'
+          import json,pathlib
+          p=pathlib.Path('/tmp/flexexa-observe-report/trivy.json')
+          if p.exists():
+              findings=[{k:v.get(k) for k in ['VulnerabilityID','PkgName','InstalledVersion','FixedVersion','Severity','PrimaryURL']} for r in json.loads(p.read_text()).get('Results',[]) for v in r.get('Vulnerabilities',[])]
+              print(json.dumps({'image_findings':findings}))
+          else:
+              print('Image scan report unavailable; no clean-image claim.')
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-observability-storage
+          path: |
+            .flexexa/index/observability-storage.json
+            /tmp/flexexa-observe-report/trivy.json
+          if-no-files-found: warn
+          retention-days: 7
+  runtime-otel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Install frozen SDK runtime dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile --prod --ignore-scripts --filter @flexexa/identity-service...
+      - name: Verify SDK through the real Collector
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: node --experimental-strip-types scripts/runtime/verify-otel.mjs
+      - name: Scan exact tested Collector image
+        run: |
+          mkdir -p /tmp/flexexa-otel-input /tmp/flexexa-otel-report
+          otel_image=$(sed -n 's/^    image: //p' infra/docker/otel/compose.yml)
+          docker save "$otel_image" -o /tmp/flexexa-otel-input/image.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-otel-input:/images:ro -v /tmp/flexexa-otel-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/image.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/trivy.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-otel-runtime
+          path: |
+            .flexexa/index/otel-runtime.json
+            /tmp/flexexa-otel-report/trivy.json
+          if-no-files-found: error
+          retention-days: 7
+  runtime-clickhouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify real telemetry storage and tenant isolation
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: python3 scripts/runtime/clickhouse/verify.py
+      - name: Scan exact tested ClickHouse image
+        run: |
+          mkdir -p /tmp/flexexa-click-input /tmp/flexexa-click-report
+          click_image=$(sed -n 's/^    image: //p' infra/docker/clickhouse/compose.yml)
+          docker save "$click_image" -o /tmp/flexexa-click-input/image.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-click-input:/images:ro -v /tmp/flexexa-click-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/image.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/trivy.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-clickhouse-runtime
+          path: |
+            .flexexa/index/clickhouse-runtime.json
+            /tmp/flexexa-click-report/trivy.json
+          if-no-files-found: error
+          retention-days: 7
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
+        with:
+          version: 2.117.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Check tracked local configuration
+        run: |
+          supabase --version
+          test -f supabase/config.toml
+          test -n "$(find supabase/migrations -name '*_phase0_authorization_invariants.sql')"
+          test -f supabase/migrations/20260909111942_phase0_customer_site_asset_core.sql
+      - name: Start isolated Supabase
+        run: supabase start
+      - name: Build identity runtime from tracked source
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile --prod --ignore-scripts --filter @flexexa/identity-service...
+          identity_base_image=$(sed -n 's/^ARG IDENTITY_BASE_IMAGE=//p' apps/identity-service/Dockerfile)
+          docker pull "$identity_base_image"
+          identity_base_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$identity_base_image")
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
+            ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 verify "$identity_base_digest" \
+            --certificate-oidc-issuer https://accounts.google.com \
+            --certificate-identity keyless@distroless.iam.gserviceaccount.com
+          docker build --pull --build-arg IDENTITY_BASE_IMAGE="$identity_base_digest" \
+            -f apps/identity-service/Dockerfile -t flexexa-identity:ci .
+          docker image inspect --format '{{.Id}}' flexexa-identity:ci
+      - name: Clean migration replay
+        run: supabase db reset --local
+      - name: Capture clean application schema before test fixtures
+        env:
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: node scripts/database/capture-schema-catalog.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-clean-schema-catalog
+          path: .flexexa/index/schema-catalog.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Real PostgreSQL RLS and authorization tests
+        run: supabase test db
+      - name: Cross-language contracts and real concurrent RPC verification
+        env:
+          ALLOW_ISOLATED_DB_TESTS: '1'
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: |
+          node --experimental-strip-types scripts/database/verify-country-packs.mjs
+          node --experimental-strip-types scripts/database/verify-policy-registry.mjs
+          python3 scripts/database/verify-core.py
+          python3 scripts/database/verify-connect.py
+          python3 scripts/database/verify-provider-accounts.py
+          node --experimental-strip-types scripts/database/verify-rpc-transport.mjs
+          node --experimental-strip-types scripts/database/verify-machine-authorization.mjs
+          node --experimental-strip-types scripts/database/verify-identity-administration.mjs
+          node --experimental-strip-types scripts/database/verify-auth-provisioning.mjs
+          IDENTITY_CONTAINER_IMAGE=flexexa-identity:ci node --experimental-strip-types scripts/database/verify-auth-provisioning.mjs
+      - name: Verify transactional outbox through real RabbitMQ
+        env:
+          ALLOW_ISOLATED_DB_TESTS: '1'
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+          FLEXEXA_OUTBOX_DB_TESTS: '1'
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: |
+          python3 -m venv /tmp/flexexa-outbox-venv
+          /tmp/flexexa-outbox-venv/bin/pip install --require-hashes --only-binary=:all: -r scripts/runtime/rabbitmq/requirements.txt
+          /tmp/flexexa-outbox-venv/bin/python scripts/runtime/rabbitmq/verify.py
+      - name: Restore a consistent logical backup and verify recovered invariants
+        env:
+          ALLOW_ISOLATED_DB_TESTS: '1'
+          ALLOW_ISOLATED_RESTORE_TESTS: '1'
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: node scripts/database/verify-restore.mjs
+      - name: Retain restore verification metadata only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-database-restore
+          path: .flexexa/index/database-restore.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Scan the tested container for high and critical vulnerabilities
+        run: |
+          mkdir -p /tmp/flexexa-image-input /tmp/flexexa-image-report
+          docker save flexexa-identity:ci -o /tmp/flexexa-image-input/identity.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-image-input:/images:ro -v /tmp/flexexa-image-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/identity.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --format json --output /reports/trivy.json
+      - name: Retain container vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-identity-container-scan
+          path: /tmp/flexexa-image-report/trivy.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Retain exact migration replay inputs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-db-replay-inputs
+          path: supabase/migrations/*.sql
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain tracked source snapshot for review
+        if: always()
+        run: git archive --format=tar HEAD > /tmp/flexexa-reviewed-source.tar
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-reviewed-source
+          path: /tmp/flexexa-reviewed-source.tar
+          retention-days: 1
+      - name: Stop local services
+        if: always()
+        run: supabase stop --no-backup
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install pinned package manager and dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile
+      - name: Verify application scope (database and infrastructure are separate gates)
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: pnpm verify:affected -- --base "$IMPACT_BASE" --application-only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-application-verification
+          path: .flexexa/index/*.json
+          retention-days: 7
+  runtime-valkey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify isolated Valkey protocol, isolation and lease races
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: node scripts/runtime/verify-valkey.mjs
+      - name: Scan the exact tested Valkey image
+        run: |
+          mkdir -p /tmp/flexexa-valkey-input /tmp/flexexa-valkey-report
+          valkey_image=$(sed -n 's/^    image: //p' infra/docker/compose.yml)
+          docker save "$valkey_image" -o /tmp/flexexa-valkey-input/valkey.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-valkey-input:/images:ro -v /tmp/flexexa-valkey-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/valkey.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --format json --output /reports/trivy.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-valkey-runtime
+          path: |
+            .flexexa/index/valkey-runtime.json
+            /tmp/flexexa-valkey-report/trivy.json
+          if-no-files-found: error
+          retention-days: 7
+  runtime-rabbitmq:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install hash-locked AMQP test client
+        run: |
+          python3 -m venv /tmp/flexexa-amqp-venv
+          /tmp/flexexa-amqp-venv/bin/pip install --require-hashes --only-binary=:all: -r scripts/runtime/rabbitmq/requirements.txt
+      - name: Verify real AMQP delivery and isolation
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: /tmp/flexexa-amqp-venv/bin/python scripts/runtime/rabbitmq/verify.py
+      - name: Scan tested broker image and locked client
+        run: |
+          mkdir -p /tmp/flexexa-rabbit-input /tmp/flexexa-rabbit-report
+          rabbit_image=$(sed -n 's/^    image: //p' infra/docker/rabbitmq/compose.yml)
+          docker save "$rabbit_image" -o /tmp/flexexa-rabbit-input/rabbitmq.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-rabbit-input:/images:ro -v /tmp/flexexa-rabbit-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/rabbitmq.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/image.json
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v "$PWD/scripts/runtime/rabbitmq:/client:ro" -v /tmp/flexexa-rabbit-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 fs /client \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/client.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-rabbitmq-runtime
+          path: |
+            .flexexa/index/rabbitmq-runtime.json
+            /tmp/flexexa-rabbit-report/*.json
+          if-no-files-found: error
+          retention-days: 7

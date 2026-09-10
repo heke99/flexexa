@@ -1,0 +1,30 @@
+{
+  "name": "flexexa",
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "node scripts/quality/lint-smoke.mjs && eslint country-packs --max-warnings=0 && turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "node --test scripts/quality/*.test.mjs && turbo run test",
+    "test:quality": "node --test scripts/quality/*.test.mjs",
+    "index:codebase": "node scripts/quality/build-codebase-index.mjs",
+    "impact": "node scripts/quality/impact-analysis.mjs",
+    "verify:affected": "node scripts/quality/verify-affected.mjs",
+    "plan:check": "node scripts/quality/masterplan-report.mjs --check",
+    "db:history:check": "node scripts/database/check-migration-history.mjs",
+    "plan:ready": "node scripts/quality/masterplan-report.mjs --require-ready"
+  },
+  "devDependencies": {
+    "turbo": "2.10.12",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "eslint": "10.10.0",
+    "eslint-config-next": "16.3.4",
+    "@eslint/compat": "2.1.1"
+  }
+}

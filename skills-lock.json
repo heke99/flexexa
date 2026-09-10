@@ -131,6 +131,154 @@
       "localPath": ".agents/skills/vercel-flags/SKILL.md",
       "priority": "selective",
       "purpose": "UI/product feature rollout only; never the central Flexexa Rules Engine."
+    },
+    "aws-signing-in": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/signing-in-to-aws",
+      "localPath": ".agents/skills/aws-signing-in/SKILL.md",
+      "priority": "critical",
+      "purpose": "AWS authentication without long-lived credentials."
+    },
+    "aws-iam": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-iam",
+      "localPath": ".agents/skills/aws-iam/SKILL.md",
+      "priority": "critical",
+      "purpose": "IAM, OIDC, trust policies and least privilege."
+    },
+    "aws-containers": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-containers",
+      "localPath": ".agents/skills/aws-containers/SKILL.md",
+      "priority": "critical",
+      "purpose": "ECS/Fargate/ECR deployment and operations."
+    },
+    "aws-messaging-and-streaming": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-messaging-and-streaming",
+      "localPath": ".agents/skills/aws-messaging-and-streaming/SKILL.md",
+      "priority": "critical",
+      "purpose": "Amazon MQ/RabbitMQ and messaging semantics."
+    },
+    "aws-database": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-database",
+      "localPath": ".agents/skills/aws-database/SKILL.md",
+      "priority": "high",
+      "purpose": "AWS database/cache guidance, especially Valkey."
+    },
+    "aws-secrets-manager": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-secrets-manager",
+      "localPath": ".agents/skills/aws-secrets-manager/SKILL.md",
+      "priority": "critical",
+      "purpose": "Secrets Manager and secret safety."
+    },
+    "aws-observability": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-observability",
+      "localPath": ".agents/skills/aws-observability/SKILL.md",
+      "priority": "high",
+      "purpose": "CloudWatch, ADOT, X-Ray and CloudTrail."
+    },
+    "aws-billing": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-billing-and-cost-management",
+      "localPath": ".agents/skills/aws-billing/SKILL.md",
+      "priority": "high",
+      "purpose": "AWS budgets, billing and cost controls."
+    },
+    "aws-sdk-js": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-sdk-js-v3-usage",
+      "localPath": ".agents/skills/aws-sdk-js/SKILL.md",
+      "priority": "high",
+      "purpose": "AWS SDK for JavaScript v3."
+    },
+    "aws-sdk-python": {
+      "sourceType": "chatgpt-plugin-skill",
+      "sourceUri": "skills://plugins/app-6a0b1644959c8191a6ecd016190651cd/aws-sdk-python-usage",
+      "localPath": ".agents/skills/aws-sdk-python/SKILL.md",
+      "priority": "high",
+      "purpose": "AWS SDK for Python/boto3."
+    },
+    "flexexa-codebase-index": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-codebase-index/SKILL.md",
+      "priority": "critical",
+      "purpose": "Deterministic repository indexing."
+    },
+    "flexexa-impact-analysis": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-impact-analysis/SKILL.md",
+      "priority": "critical",
+      "purpose": "Direct/transitive change-impact analysis."
+    },
+    "flexexa-affected-verification": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-affected-verification/SKILL.md",
+      "priority": "critical",
+      "purpose": "Risk-routed affected/full verification."
+    },
+    "flexexa-code-review": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-code-review/SKILL.md",
+      "priority": "critical",
+      "purpose": "Impact-aware differential code review."
+    },
+    "flexexa-security-review": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-security-review/SKILL.md",
+      "priority": "critical",
+      "purpose": "Local security review without Codex Security dependency."
+    },
+    "flexexa-test-strategy": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-test-strategy/SKILL.md",
+      "priority": "critical",
+      "purpose": "Risk-based invariant and regression testing."
+    },
+    "flexexa-performance-review": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-performance-review/SKILL.md",
+      "priority": "high",
+      "purpose": "Performance review without weakening correctness."
+    },
+    "flexexa-aws-opentofu": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-aws-opentofu/SKILL.md",
+      "priority": "critical",
+      "purpose": "OpenTofu authority for AWS infrastructure."
+    },
+    "flexexa-docker-local-stack": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-docker-local-stack/SKILL.md",
+      "priority": "high",
+      "purpose": "Local Docker stack conventions."
+    },
+    "flexexa-clickhouse": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-clickhouse/SKILL.md",
+      "priority": "high",
+      "purpose": "ClickHouse telemetry guidance."
+    },
+    "flexexa-rabbitmq": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-rabbitmq/SKILL.md",
+      "priority": "critical",
+      "purpose": "RabbitMQ topology/contracts/idempotency."
+    },
+    "flexexa-valkey": {
+      "sourceType": "flexexa-native",
+      "localPath": ".agents/skills/flexexa-valkey/SKILL.md",
+      "priority": "high",
+      "purpose": "Valkey cache/locks/hot-state patterns."
     }
+  },
+  "qualityLayer": {
+    "codebaseIndex": "scripts/quality/build-codebase-index.mjs",
+    "impactAnalysis": "scripts/quality/impact-analysis.mjs",
+    "affectedVerification": "scripts/quality/verify-affected.mjs",
+    "generatedIndexDirectory": ".flexexa/index"
   }
 }

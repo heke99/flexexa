@@ -1,0 +1,98 @@
+name: OpenTofu AWS apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type APPLY_DEV to apply the reviewed dev foundation."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: flexexa-opentofu-dev-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-dev:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'APPLY_DEV'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+
+      - name: Configure main-only AWS apply credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-apply-dev
+          aws-region: eu-north-1
+          allowed-account-ids: 938095765653
+          role-session-name: flexexa-main-apply-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 10
+
+      - name: Check formatting
+        run: tofu fmt -check -recursive infra/opentofu
+
+      - name: Initialize dev backend
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          cat > /tmp/flexexa-backend.hcl <<'EOF'
+          bucket = "flexexa-tofu-state-938095765653"
+          key    = "flexexa/dev/foundation.tfstate"
+          region = "eu-north-1"
+          EOF
+          tofu init -input=false -backend-config=/tmp/flexexa-backend.hcl
+
+      - name: Validate dev configuration
+        working-directory: infra/opentofu/environments/dev
+        run: tofu validate
+
+      - name: Create reviewed apply plan
+        working-directory: infra/opentofu/environments/dev
+        run: tofu plan -input=false -no-color -out=tfplan
+
+      - name: Render pre-apply plan
+        working-directory: infra/opentofu/environments/dev
+        run: tofu show -no-color tfplan > pre-apply-plan.txt
+
+      - name: Apply reviewed plan
+        working-directory: infra/opentofu/environments/dev
+        run: tofu apply -input=false -auto-approve tfplan
+
+      - name: Verify zero drift after apply
+        working-directory: infra/opentofu/environments/dev
+        shell: bash
+        run: |
+          set +e
+          tofu plan -input=false -lock=false -detailed-exitcode -no-color > post-apply-plan.txt
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "Post-apply verification: zero drift."
+          elif [ "$code" -eq 2 ]; then
+            echo "Post-apply verification found drift." >&2
+            cat post-apply-plan.txt
+            exit 2
+          else
+            cat post-apply-plan.txt
+            exit "$code"
+          fi
+
+      - name: Upload apply evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flexexa-opentofu-dev-apply-evidence
+          path: |
+            infra/opentofu/environments/dev/pre-apply-plan.txt
+            infra/opentofu/environments/dev/post-apply-plan.txt
+          if-no-files-found: warn
