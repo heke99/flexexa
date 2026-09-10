@@ -12,7 +12,7 @@ with namespaces as materialized (
  where p.prokind in ('f','p') and not exists (
   select 1 from pg_catalog.pg_depend d where d.classid='pg_catalog.pg_proc'::regclass and d.objid=p.oid and d.deptype='e')
 ), objects(kind,key,definition) as (
- select 'schema',nspname,jsonb_build_object('owner',pg_catalog.pg_get_userbyid(nspowner),'acl',
+ select 'schema',nspname::text,jsonb_build_object('owner',pg_catalog.pg_get_userbyid(nspowner),'acl',
   (select jsonb_agg(a::text order by a::text) from unnest(coalesce(nspacl,pg_catalog.acldefault('n',nspowner))) a)) from namespaces
  union all
  select 'relation',nspname||'.'||relname,jsonb_build_object('kind',relkind,'owner',pg_catalog.pg_get_userbyid(relowner),

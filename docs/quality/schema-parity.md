@@ -27,5 +27,8 @@ No whole-plan or production readiness is implied.
 Activated Supabase/Postgres, verification, codebase index/impact/affected verification,
 code/security review, test strategy and CI guidance. Reviewed master sections 18–20,
 70–71 and the existing workflow. Browser/provider/AWS deployment are outside this check.
-Eleven comparator regressions cover actual drift and corrupt catalog handling. Live
+Twelve comparator regressions cover actual drift and corrupt catalog handling. The
+SQL union explicitly uses text for qualified names, avoiding PostgreSQL name-type
+truncation at 63 bytes; capture rejects duplicate object identities before saving.
+The first candidate exposed this instrumentation defect and is not parity evidence. Live
 comparison against the clean CI capture is required before this step is complete.
