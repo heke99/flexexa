@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
     compose = ['compose', '--project-name', project, '--file', str(ROOT/'infra/docker/rabbitmq/compose.yml')]
     connection = None
     try:
-        run([*compose, 'up', '-d', '--wait', '--wait-timeout', '120'], env)
+        run([*compose, 'up', '--build', '-d', '--wait', '--wait-timeout', '120'], env)
         container = run([*compose, 'ps', '-q', 'rabbitmq'], env).stdout.strip()
         host = json.loads(run(['inspect', '--format', '{{json .HostConfig}}', container], env).stdout)
         assert host['ReadonlyRootfs'] and 'ALL' in host['CapDrop']
@@ -139,7 +139,8 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         connection.close();connection=None
         run([*compose,'stop','--timeout','15','rabbitmq'],env)
         assert run(['inspect','--format','{{.State.ExitCode}}',container],env).stdout.strip()=='0'
-        report={'server_version':version,'publisher_confirms':True,'canonical_event_roundtrip':True,'unauthorized_cases':negatives,
+        image=run(['inspect','--format','{{.Image}}',container],env).stdout.strip()
+        report={'image':image,'server_version':version,'publisher_confirms':True,'canonical_event_roundtrip':True,'unauthorized_cases':negatives,
             'unroutable_return':True,'unacked_redelivered':True,'dead_letter_verified':True,'duplicate_deliveries':2,'bounded_failed_deliveries':3,
             'persistent_message_survives_restart':True,'non_root_uid':999,'read_only':True,'loopback_amqp_only':True,
             'production_deployed':False,'durable_business_deduplication':False}
