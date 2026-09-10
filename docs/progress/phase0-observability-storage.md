@@ -1,4 +1,4 @@
-# Phase 0 durable operational traces — candidate
+# Phase 0 durable operational traces — isolated verification
 
 Scope: locked §§71–73/77/83. The identity SDK uses the official Collector ClickHouse
 exporter. Schema is migration-owned (`create_schema: false`); the exporter has INSERT
@@ -26,7 +26,7 @@ then recovered queued span; retained database data; actual TTL removal; private/
 containers and image scans. Candidate run `34501183417` passed all runtime storage
 checks (including 96 recovered spans) and the other six jobs, but the full contrib
 image failed Trivy for CVE-2026-79921 in unused `amqp091-go` v1.12.0. That image
-is not accepted. A minimal distribution is being built from official v0.160.0
+is not accepted. A minimal distribution is built from official v0.160.0
 components, with reviewed generated source, module checksums and a digest-pinned
 Go build stage. The final runtime image must pass the same complete tests and
 HIGH/CRITICAL scan; no vulnerability exclusions are introduced. No production deployment
@@ -60,3 +60,19 @@ To regenerate, run the same pinned OCB against the manifest in a disposable Go
 builder, review source/module changes and rerun the entire runtime/security gate.
 Build locally with `docker build -t flexexa-observability:0.160.0-1
 infra/docker/observability` before the explicitly isolated Node verification.
+
+Minimal-image runtime job `102957647767`, run `34502758983`, passed at
+`2026-09-10T16:36:28Z`: all storage/recovery/privacy/retention checks above,
+96 recovered SDK spans, clean shutdown and verified cleanup. Trivy detected and
+scanned the Go binary and returned zero HIGH/CRITICAL findings. The tested image
+was `sha256:b6c7ef9a08ac4e9489fd006ade1c11c8a906830df33bb0fccca0817acafbabe5`;
+module download verification and unchanged go.mod/go.sum checks passed. No scanner
+ignore list or vulnerability exception was added. Final whole-PR CI and fresh
+PostgreSQL parity/merge evidence are recorded in PR #38.
+
+Review: credentials are ephemeral and absent from reports; ports are loopback-only;
+queue access is restricted to uid 65532; SQL schema/fixtures are isolated; runtime
+writer has no DDL or tenant-table access. No Postgres history, tenant grants, API
+contracts or hosted infrastructure change. Final acceptance still requires all
+seven CI jobs, not the application-only check. Remaining observability scope is
+hosted collection, dashboards/alerts, platform RBAC integration and disk/host recovery.
