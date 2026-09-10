@@ -25,8 +25,8 @@ certificate is mounted. Docker inspection output never includes runtime environm
 The fixture verifies Docker health, non-root UID, read-only root and clean SIGTERM exit.
 
 CI verifies the base image signature against the published Distroless identity/issuer
-using Cosign 3.1.3 and builds the resolved digest. The reviewed digest is pinned before
-merge. CI scans the tested image archive using digest-pinned Trivy 0.74.0, retains a JSON report and
+using Cosign 3.1.3 and builds the resolved digest. The reviewed base digest is `7781e8b4fccf59240bd539af6738cccf8dad4be303165c3a1fa065c48699b937`;
+Cosign and Trivy images are also digest-pinned. CI scans the tested image archive using digest-pinned Trivy 0.74.0, retains a JSON report and
 fails on HIGH/CRITICAL vulnerabilities, including unfixed findings. No ignore policy is
 added. Image scanning needs registry/advisory access and remains a real required gate.
 No Docker daemon is available in the editing workspace; container results must come
@@ -45,3 +45,18 @@ References checked:
 Remaining: ECR publishing, least-privilege ECS runtime/secrets binding, private egress,
 TLS ingress, distributed rate limiting, observability, deployment rollback and live
 smoke verification. A green isolated container does not complete Phase 0 or deploy AWS.
+
+## Verified candidate and current live scope
+
+Run `34459951393` passed application and database jobs: all 489 SQL assertions,
+real Auth/MFA/three-subject recovery/concurrency on both host and container, signed base
+verification, HTTPS, non-root/read-only runtime, liveness and SIGTERM exit 0. The retained
+Trivy report has zero HIGH/CRITICAL findings, with no ignore list and no unfixed exclusion.
+Final tracked digest-pinned CI/merge evidence is recorded in PR #24.
+
+PR #23 merged as `8e0133b07aea0d8f4fb83d1a45a610242bbc589b` after final run
+`34458107930`; fresh development history and all 914 catalog objects matched replay.
+Read-only AWS metadata on 2026-09-10 confirms account `938095765653` has no ECS cluster
+or Secrets Manager reference in `eu-north-1`. No secret value was retrieved. The existing
+main-only/manual OpenTofu workflow is preserved; the current GitHub connector exposes no
+workflow-dispatch operation. These live gates remain distinct from isolated verification.

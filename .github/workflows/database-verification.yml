@@ -33,7 +33,7 @@ jobs:
           docker pull "$identity_base_image"
           identity_base_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$identity_base_image")
           docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
-            ghcr.io/sigstore/cosign/cosign:v3.1.3 verify "$identity_base_digest" \
+            ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 verify "$identity_base_digest" \
             --certificate-oidc-issuer https://accounts.google.com \
             --certificate-identity keyless@distroless.iam.gserviceaccount.com
           docker build --pull --build-arg IDENTITY_BASE_IMAGE="$identity_base_digest" \

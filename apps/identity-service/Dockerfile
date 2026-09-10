@@ -1,4 +1,4 @@
-ARG IDENTITY_BASE_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot
+ARG IDENTITY_BASE_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot@sha256:7781e8b4fccf59240bd539af6738cccf8dad4be303165c3a1fa065c48699b937
 FROM ${IDENTITY_BASE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080
