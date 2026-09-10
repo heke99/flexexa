@@ -1,16 +1,24 @@
 -- Session-authorized coordination only; no Auth I/O or credential authority.
 -- One permission evaluator with an explicit internal evaluation time. Existing callers
 -- retain transaction-time behavior; execution coordination rechecks wall time after locks.
-create function private.flexexa_has_permission_at(p_tenant_id uuid,p_permission_key text,p_at timestamptz)
-returns boolean language sql stable security definer set search_path='' as $$
- with member as(
+create function private.flexexa_current_membership_id_at(p_tenant_id uuid,p_at timestamptz)
+returns uuid language sql stable security definer set search_path='' as $$
   select m.id from public.memberships m
   join public.tenants t on t.id=m.tenant_id and t.status='active'
   join public.organizations o on o.id=t.organization_id and o.status='active'
   where m.tenant_id=p_tenant_id and m.user_id=auth.uid() and m.status='active'
    and m.valid_from<=p_at and (m.valid_until is null or m.valid_until>p_at)
    and coalesce(auth.jwt()->>'is_anonymous','false')='false'
- ),
+   and not exists(select 1 from private.flexexa_machine_principals x where x.auth_user_id=auth.uid())
+$$;
+revoke all on function private.flexexa_current_membership_id_at(uuid,timestamptz) from public,anon,authenticated;
+create or replace function private.flexexa_current_membership_id(p_tenant_id uuid)
+returns uuid language sql stable security definer set search_path='' as $$
+ select private.flexexa_current_membership_id_at(p_tenant_id,now())
+$$;
+create function private.flexexa_has_permission_at(p_tenant_id uuid,p_permission_key text,p_at timestamptz)
+returns boolean language sql stable security definer set search_path='' as $$
+ with member as(select private.flexexa_current_membership_id_at(p_tenant_id,p_at) id),
  target as(select p.* from public.permissions p where p.permission_key=private.flexexa_canonical_permission(p_permission_key) and p.status='active' and p.scope_type='tenant'),
  grants as(
   select rp.effect,rp.condition_json from member m
