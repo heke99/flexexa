@@ -27,10 +27,11 @@ let database,collector,server,telemetry,port,report,storageOwned=false;
 async function command(binary,args){try{return (await exec(binary,args,{cwd:root,env,timeout:180000,maxBuffer:2*1024*1024})).stdout.trim();}catch{throw Error('OBSERVABILITY_COMMAND_FAILED_'+binary);}}
 const docker=args=>command('docker',args);
 async function waitFor(check,label){const end=Date.now()+30000;while(Date.now()<end){if(await check())return;await new Promise(r=>setTimeout(r,100));}throw Error('OBSERVABILITY_TIMEOUT_'+label);}
-async function sql(query,user='fixture_admin',denied=false){
+async function sql(query,user='fixture_admin',denied=false,schemaDiagnostic=false){
  const response=await fetch('http://127.0.0.1:'+port+'/',{method:'POST',headers:{'X-ClickHouse-User':user,'X-ClickHouse-Key':passwords[user]??''},body:query,signal:AbortSignal.timeout(15000)});
  const body=await response.text();
  if(denied){assert(!response.ok,'Expected SQL denial');assert.match(body,/Code: (?:164|194|195|497|516)\./u);return '';}
+ if(!response.ok&&schemaDiagnostic)console.error(body.slice(0,4000)); // Tracked DDL only; never row/credential SQL.
  if(!response.ok)throw Error('OBSERVABILITY_SQL_FAILED_'+response.status+'_'+(body.match(/Code: ([0-9]+)/u)?.[1]??'UNKNOWN'));
  return body.trim();
 }
@@ -49,7 +50,7 @@ try{
  assert(databaseInfo.HostConfig.PortBindings['8123/tcp'].every(p=>p.HostIp==='127.0.0.1'));
  assert.equal(await sql('SELECT version()'),'26.8.2.7');await sql('CREATE DATABASE flexexa');
  const migrations={};for(const name of readdirSync(resolve(root,'infra/clickhouse/migrations')).sort()){
-  const source=readFileSync(resolve(root,'infra/clickhouse/migrations',name),'utf8');await sql(source);migrations[name]=hash(source);
+  const source=readFileSync(resolve(root,'infra/clickhouse/migrations',name),'utf8');await sql(source,'fixture_admin',false,true);migrations[name]=hash(source);
  }
  await sql('CREATE ROW POLICY admin_traces ON flexexa.otel_traces_v1 USING 1 TO fixture_admin');
  for(const user of ['trace_writer','ops_sandbox','ops_production','unassigned'])await sql(`CREATE USER ${user} IDENTIFIED WITH sha256_hash BY '${hash(passwords[user])}' SETTINGS readonly=${user==='trace_writer'?0:1}`);
