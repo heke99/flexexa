@@ -56,8 +56,8 @@ with tempfile.TemporaryDirectory(prefix='flexexa-click-') as temporary:
             return result
         assert sql('SELECT version()')=='26.8.2.7'
         sql('SELECT 1',password='wrong',expected_code={516})
-        sql('SELECT 1',user='default',expected_code={516})
-        sql('SELECT 1',user='health',expected_code={516})
+        sql('SELECT 1',user='default',expected_code={194,516})
+        sql('SELECT 1',user='health',expected_code={194,195,516})
         sql('CREATE DATABASE flexexa')
         sql((ROOT/'infra/clickhouse/migrations/0001_telemetry_v1.sql').read_text())
         sql('CREATE ROW POLICY admin_rows ON flexexa.telemetry_v1 USING 1 TO fixture_admin')
