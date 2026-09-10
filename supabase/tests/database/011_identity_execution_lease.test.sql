@@ -78,7 +78,7 @@ reset role;
 update public.memberships set status='active' where id=pg_temp.lid(31);
 update public.memberships set valid_until=transaction_timestamp()+(clock_timestamp()-transaction_timestamp())/2 where id=pg_temp.lid(31);
 set local role authenticated;
-select ok(public.flexexa_has_permission(pg_temp.lid(20),'api_clients.manage'),'legacy evaluator retains transaction-start semantics');
+select ok(private.flexexa_has_permission(pg_temp.lid(20),'api_clients.manage'),'legacy evaluator retains transaction-start semantics');
 select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','membership expiring during transaction denies continuation');
 reset role;
 update public.memberships set valid_until=null where id=pg_temp.lid(31);
@@ -96,7 +96,7 @@ update public.role_permissions set valid_until=null where tenant_id=pg_temp.lid(
 insert into public.membership_permission_overrides(tenant_id,membership_id,permission_id,effect,valid_from)
  select pg_temp.lid(20),pg_temp.lid(31),id,'deny',transaction_timestamp()+(clock_timestamp()-transaction_timestamp())/2 from public.permissions where permission_key='api_clients.manage';
 set local role authenticated;
-select ok(public.flexexa_has_permission(pg_temp.lid(20),'api_clients.manage'),'legacy evaluator does not see deny starting after transaction time');
+select ok(private.flexexa_has_permission(pg_temp.lid(20),'api_clients.manage'),'legacy evaluator does not see deny starting after transaction time');
 select throws_ok($$select pg_temp.check_lease()$$,'42501','PERMISSION_DENIED','deny becoming effective during transaction rejects continuation');
 reset role;
 delete from public.membership_permission_overrides where tenant_id=pg_temp.lid(20) and membership_id=pg_temp.lid(31);
