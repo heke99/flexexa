@@ -32,10 +32,10 @@ Updated: 2026-09-10. This is an evidence ledger, not a percentage-complete estim
 | Identity HTTP diagnostics | PR #29 merged as `c981f72fc7c259211985d9b436352a30f54596d7`; final run `34468481493` passed all five jobs, HTTP privacy/concurrency/abort/broken-pipe and real Auth/container correlation checks. Fresh 16-migration/915-object parity verified. |
 | Identity OpenTelemetry | PR #30 merged as `365d314be274c56874fffa3839f261f8911d07f1`; final run `34470498569` passed all five jobs. Native and container Auth each exported 13 executions/52 upstream spans with exact parentage and privacy. Fresh 16-migration/915-object parity; image scan zero HIGH/CRITICAL. Collector deployment, business metrics and alerting remain pending. |
 | OpenTelemetry Collector | PR #31 merged as `c7c9f14bd2b70344b93b8259e6334cbb340fccc8`; final run `34471689444` passed all six jobs. Real SDK forwarding, bounded retry, loopback negative probes, restart, self-metrics and exact-image Go scan passed. Fresh 16-migration/915-object parity verified. No durable trace store or AWS deployment. |
-| Rules/policy | Immutable canonical power decisions verified in PR #32, merged `ce14aa49275a538159c9d3272d6dfc89673a540a`, final run `34476892427` with all six jobs and fresh 16-migration/915-object parity. Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
+| Rules/policy | Immutable canonical power decisions verified in PR #32, merged `ce14aa49275a538159c9d3272d6dfc89673a540a`, final run `34476892427` with all six jobs and fresh 16-migration/915-object parity. PR #35 adds independently approved immutable sandbox registry/publication/readiness; PR #36 adds transactional consumption. Production criteria, binding lifecycle and hosted signing remain pending. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |
-| Remaining foundation | Scoped service/client authentication, approval/break-glass, outbox publisher, provider architecture, remaining country domains, observability, Docker/runtime dependencies, infrastructure verification and restore/security/load gates. |
+| Remaining foundation | Hosted service/client credential lifecycle, approval/break-glass, hosted outbox/inbox workers, provider lifecycle, observability storage/alerts, infrastructure apply/verification and remaining restore/security/load gates. Existing foundation boundaries and later-phase scope are distinguished in the phase sequence. |
 
 ## Whole-plan coverage
 
@@ -57,10 +57,31 @@ Outbox delivery: PR #34 merged as `ecf775c872132e9063ee97f4e06ba3b8dc8a40a6`;
 final run `34481935364` passed all six jobs, 550 pgTAP assertions and real PostgreSQL/
 RabbitMQ delivery, replay and concurrency checks. Exact migration `20260910131811`,
 17 history entries and 960 catalog objects matched development with zero differences.
-Hosted delivery, neutral-event classification and consumer inbox remain pending.
+Hosted delivery and neutral-event classification remain pending. PR #36 subsequently verifies the sandbox policy consumer inbox.
 
 Sandbox policy registry: PR #35 merged as `a1c90b85fc502792a8cc159d9f6313409019ece8`;
 final run `34489237479` passed all six jobs and 606 pgTAP assertions. Exact migration
 `20260910142645`, 18 history entries and 1,284 catalog objects matched development.
 Independent approval, immutable evidence and new-version readiness are verified in
 sandbox. Production shadow/criteria, binding lifecycle and hosted signing remain open.
+
+Transactional policy inbox: PR #36 merged as `38af546164df9b24b5345caf53d9a0f7724020bf`;
+final run `34492407834` passed all six jobs and 635 SQL assertions, 16 concurrent
+consumes and actual TypeScript/SQL/RabbitMQ lost-ACK recovery. Exact migration
+`20260910145540`, 19 history entries and 1,322 catalog objects matched development.
+This is a sandbox policy consumer; hosted workers and provider ingress remain pending.
+
+Logical restore: PR #37 candidate run `34496452044` passed all six jobs and 635 SQL
+assertions. The actual isolated dump/restore verified 1,322 logical catalog objects,
+72 tables (23 Auth), 19 migration rows, sequence values and recovered tenant/audit/
+idempotency/atomic-write invariants. Final tracked CI and fresh live parity are in
+the PR. This does not certify hosted PITR or whole Phase 0.
+
+All 21 Phase 0 entries now have individual reviewed scope/gap notes in
+`masterplan-coverage.json` (plus the phase heading). These are partial/blocked
+assessments, not fabricated completion evidence. AWS readback at
+`2026-09-10T15:35:47Z` confirmed no ECS clusters or `flexexa-dev-vpc` in eu-north-1.
+The connector does not expose the authorized main-only apply workflow start.
+Hosted infrastructure/runtime acceptance, durable observability, credential and
+approval/break-glass workflows, policy binding/signing criteria and provider lifecycle
+remain open. Later charging/tax/market phases retain their original scope.

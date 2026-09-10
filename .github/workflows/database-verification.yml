@@ -157,6 +157,24 @@ jobs:
           python3 -m venv /tmp/flexexa-outbox-venv
           /tmp/flexexa-outbox-venv/bin/pip install --require-hashes --only-binary=:all: -r scripts/runtime/rabbitmq/requirements.txt
           /tmp/flexexa-outbox-venv/bin/python scripts/runtime/rabbitmq/verify.py
+      - name: Restore a consistent logical backup and verify recovered invariants
+        env:
+          ALLOW_ISOLATED_DB_TESTS: '1'
+          ALLOW_ISOLATED_RESTORE_TESTS: '1'
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: node scripts/database/verify-restore.mjs
+      - name: Retain restore verification metadata only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-database-restore
+          path: .flexexa/index/database-restore.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Scan the tested container for high and critical vulnerabilities
         run: |
           mkdir -p /tmp/flexexa-image-input /tmp/flexexa-image-report
