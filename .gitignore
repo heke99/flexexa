@@ -14,3 +14,5 @@ supabase/.temp/
 .flexexa/index/*.json
 *.tsbuildinfo
 **/next-env.d.ts
+__pycache__/
+*.py[cod]

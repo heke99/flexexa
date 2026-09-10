@@ -1,0 +1,30 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.3.5-alpine@sha256:3486d98205df3d6395ed70e7924baa13b561cbac54116c0ddae5b0b7382bbabd
+    hostname: rabbitmq
+    user: "999:999"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 512
+    environment:
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2"
+      RABBITMQ_CTL_ERL_ARGS: "+S 1:1"
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ${FLEXEXA_RABBITMQ_DEFINITIONS:?ephemeral definitions required}:/etc/rabbitmq/definitions.json:ro
+      - data:/var/lib/rabbitmq
+    tmpfs:
+      - /tmp:uid=999,gid=999,mode=0700,size=32m
+    ports:
+      - "127.0.0.1::5672"
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+volumes:
+  data:
