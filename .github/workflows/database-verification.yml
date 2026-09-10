@@ -134,6 +134,7 @@ jobs:
           PGPASSWORD: postgres
         run: |
           node --experimental-strip-types scripts/database/verify-country-packs.mjs
+          node --experimental-strip-types scripts/database/verify-policy-registry.mjs
           python3 scripts/database/verify-core.py
           python3 scripts/database/verify-connect.py
           python3 scripts/database/verify-provider-accounts.py

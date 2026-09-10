@@ -52,3 +52,9 @@ The reserved Auth service, hardened container and country metadata structure now
 The locked phase sequence remains: 1 smart charging MVP; 2 full Swedish true cost; 3 direct connector expansion; 4 flex shadow; 5 BSP pilot; 6 multi-BSP; 7 local flex; 8 solar/battery/HEMS; 9 Edge/OEM; 10 licensed Nord Pool data; 11 country expansion; 12 direct BSP readiness; 13 V2G. These later phases remain planned, not delivered.
 
 External vendor credentials, device/protocol qualification, commercial data rights and market-role approvals must be recorded as external gates. Simulators and code interfaces are not substitutes for successful live verification. No real bids, settlement money or physical commands until their corresponding safety/authorization gates pass.
+
+Outbox delivery: PR #34 merged as `ecf775c872132e9063ee97f4e06ba3b8dc8a40a6`;
+final run `34481935364` passed all six jobs, 550 pgTAP assertions and real PostgreSQL/
+RabbitMQ delivery, replay and concurrency checks. Exact migration `20260910131811`,
+17 history entries and 960 catalog objects matched development with zero differences.
+Hosted delivery, neutral-event classification and consumer inbox remain pending.
