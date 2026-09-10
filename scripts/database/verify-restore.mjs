@@ -22,8 +22,8 @@ const docker=(command,code,input)=>{
  catch(error){
   // Never put dump contents, Auth material or failed COPY rows into CI logs.
   const headers=String(error.stderr??'').split('\n').filter(x=>/^pg_(?:dump|restore): (?:error|warning):/u.test(x)).slice(0,8);
-  const commandHeader=String(error.stderr??'').split('\n').find(x=>x.startsWith('Command was:'))?.slice(0,180);
-  console.error(JSON.stringify({restoreCommand:code,headers,commandHeader}));throw Error(code);
+  const commandKind=String(error.stderr??'').split('\n').find(x=>x.startsWith('Command was:'))?.match(/^Command was: ([A-Z]+(?: [A-Z]+)?)/u)?.[1];
+  console.error(JSON.stringify({restoreCommand:code,headers,commandKind}));throw Error(code);
  }
 };
 const sourceInfo=JSON.parse(sql('postgres',"select jsonb_build_object('major',current_setting('server_version_num')::int/10000,'address',inet_server_addr(),'database',current_database())"));
@@ -82,8 +82,11 @@ try{
  const publicToc=toc.split('\n').filter(line=>/ SCHEMA - public /u.test(line));
  const publicSchemaSql=docker(['pg_restore','--use-list=/dev/stdin','--file=-',archive],'RESTORE_NAMESPACE_READ_FAILED',publicToc.join('\n')+'\n');
  if(/^CREATE SCHEMA (?:public|"public");$/mu.test(publicSchemaSql))sql(target,'drop schema public');
+ // Supabase's postgres role cannot SET ROLE to managed object owners.
+ // Use the existing container-local administrator only for isolated restoration.
+ assert.equal(docker(['psql','-U','supabase_admin','-d',target,'-XAtq','--set=ON_ERROR_STOP=1','--command',"select rolsuper from pg_catalog.pg_roles where rolname=current_user"],'RESTORE_ADMIN_CHECK_FAILED'),'t');
  const restoreStarted=performance.now();
- docker(['pg_restore','-h','127.0.0.1','-p','5432','-U','postgres','--dbname='+target,'--exit-on-error','--single-transaction',archive],'RESTORE_ARCHIVE_FAILED');
+ docker(['pg_restore','-U','supabase_admin','--dbname='+target,'--exit-on-error','--single-transaction',archive],'RESTORE_ARCHIVE_FAILED');
  const restoreMs=Math.round(performance.now()-restoreStarted);
  // Sequence state is not MVCC. Compare against values in the actual archive,
  // not a later source read that could race a sequence increment.
