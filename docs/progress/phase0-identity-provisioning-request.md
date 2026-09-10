@@ -56,7 +56,8 @@ indexes, RLS, no browser SELECT/INSERT, no anonymous function EXECUTE, empty
 search paths and public invoker wrapper. Zero provisioning requests were created.
 Security advisors have no WARN/ERROR; four INFO-only no-policy notices describe
 intentionally default-denied evidence/private tables. No permissive policy added.
-Final tracked-only replay still required before merge.
+Final tracked-only run `34445226936` passed application and database jobs.
+PR #17 merged as `ecb82b7cd19cd9cc31aa05d2ab5648f33bda1bbf`.
 
 Runtime inventory: AWS account `938095765653`, eu-north-1, has zero ECS clusters
 and zero Secrets Manager entries with name prefix `flexexa` at the read-only check.
