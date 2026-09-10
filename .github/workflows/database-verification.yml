@@ -8,6 +8,56 @@ concurrency:
   group: db-tests-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
+  runtime-observability-storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Install frozen SDK runtime dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile --prod --ignore-scripts --filter @flexexa/identity-service...
+      - name: Build checksum-locked minimal Collector
+        run: docker build --pull --progress=plain -t flexexa-observability:0.160.0-1 infra/docker/observability
+      - name: Verify durable trace storage, access and actual crash recovery
+        env:
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+        run: node --experimental-strip-types scripts/runtime/verify-observability-storage.mjs
+      - name: Scan exact tested observability Collector
+        run: |
+          mkdir -p /tmp/flexexa-observe-input /tmp/flexexa-observe-report
+          observe_image=$(sed -n 's/^    image: //p' infra/docker/observability/compose.yml)
+          docker save "$observe_image" -o /tmp/flexexa-observe-input/image.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/flexexa-observe-input:/images:ro -v /tmp/flexexa-observe-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/image.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/trivy.json
+      - name: Summarize exact image findings
+        if: always()
+        run: |
+          python3 - <<'PYCODE'
+          import json,pathlib
+          p=pathlib.Path('/tmp/flexexa-observe-report/trivy.json')
+          if p.exists():
+              findings=[{k:v.get(k) for k in ['VulnerabilityID','PkgName','InstalledVersion','FixedVersion','Severity','PrimaryURL']} for r in json.loads(p.read_text()).get('Results',[]) for v in r.get('Vulnerabilities',[])]
+              print(json.dumps({'image_findings':findings}))
+          else:
+              print('Image scan report unavailable; no clean-image claim.')
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-observability-storage
+          path: |
+            .flexexa/index/observability-storage.json
+            /tmp/flexexa-observe-report/trivy.json
+          if-no-files-found: warn
+          retention-days: 7
   runtime-otel:
     runs-on: ubuntu-latest
     timeout-minutes: 10

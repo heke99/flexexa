@@ -6,7 +6,7 @@ import {analyze} from './impact-core.mjs';
 const config=JSON.parse(readFileSync(resolve(import.meta.dirname,'../../.flexexa/impact-config.json'),'utf8'));
 const index={imports:[],packages:[],coverage:{unknowns:[]}};
 test('isolated runtime and Lua changes cannot pass from application checks alone',()=>{
- for(const file of ['infra/docker/compose.yml','infra/docker/valkey/release-lease.lua','scripts/runtime/verify-valkey.mjs']){
+ for(const file of ['infra/docker/compose.yml','infra/docker/valkey/release-lease.lua','scripts/runtime/verify-valkey.mjs','infra/clickhouse/migrations/0002_operational_traces_v1.sql']){
   const report=analyze({files:[file],dirty:false},index,config);
   assert.equal(report.risk,'HIGH');assert(report.requiredChecks.includes('runtime-protocol-and-container-security-tests'));
   assert(!report.requiredChecks.includes('infra-plan-and-iam-review'));

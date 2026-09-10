@@ -71,8 +71,8 @@ consumes and actual TypeScript/SQL/RabbitMQ lost-ACK recovery. Exact migration
 `20260910145540`, 19 history entries and 1,322 catalog objects matched development.
 This is a sandbox policy consumer; hosted workers and provider ingress remain pending.
 
-Logical restore: PR #37 candidate run `34496452044` passed all six jobs and 635 SQL
-assertions. The actual isolated dump/restore verified 1,322 logical catalog objects,
+Logical restore: PR #37 merged as `16ceb7b1bea05c063742e51a273408e6b8cea49e`;
+final run `34497100503` passed all six jobs and 635 SQL assertions. The actual isolated dump/restore verified 1,322 logical catalog objects,
 72 tables (23 Auth), 19 migration rows, sequence values and recovered tenant/audit/
 idempotency/atomic-write invariants. Final tracked CI and fresh live parity are in
 the PR. This does not certify hosted PITR or whole Phase 0.
@@ -85,3 +85,13 @@ The connector does not expose the authorized main-only apply workflow start.
 Hosted infrastructure/runtime acceptance, durable observability, credential and
 approval/break-glass workflows, policy binding/signing criteria and provider lifecycle
 remain open. Later charging/tax/market phases retain their original scope.
+
+Durable operational traces: PR #38 minimal-image job `102957647767` in run
+`34502758983` passed actual SDK-to-Collector-to-ClickHouse storage, privacy/access
+checks, 96-span fsync-queue recovery after SIGKILL/replacement, restart retention,
+TTL deletion and zero HIGH/CRITICAL findings. The full contrib candidate's unused
+RabbitMQ dependency was removed by building only required official components;
+reviewed generated Go source and complete module checksums are tracked. Final
+seven-job CI, fresh Postgres parity and merge evidence are recorded in PR #38.
+This completes the isolated durable-storage boundary, not hosted observability,
+dashboards/alerts, disk-loss recovery or the whole Phase 0.
