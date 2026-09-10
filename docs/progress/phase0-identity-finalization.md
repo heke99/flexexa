@@ -57,7 +57,9 @@ Live completion count is zero. RLS, five foreign keys, denied anonymous executio
 denied browser table access were verified. Security advisors report no WARN/ERROR;
 six INFO-only no-policy tables intentionally deny direct access. See the
 [Supabase lint explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
-PR #20 requires final tracked replay after promotion before head-locked merge.
+PR #20 final tracked run `34450850188` passed application job `102786011025` and
+database job `102786011128`. Head `2343b0ad44c03a4d86ac902404b6bbe6ce43beeb`
+merged as `a9611c9b7502d62a15dba6da753c76f80350e28e` after thread review.
 
 ## Remaining integration
 The privileged Auth service still needs protected credential binding, actual reserved-
