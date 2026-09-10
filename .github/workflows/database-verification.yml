@@ -70,9 +70,10 @@ jobs:
         run: |
           mkdir -p /tmp/flexexa-image-input /tmp/flexexa-image-report
           docker save flexexa-identity:ci -o /tmp/flexexa-image-input/identity.tar
-          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
             -v /tmp/flexexa-image-input:/images:ro -v /tmp/flexexa-image-report:/reports \
-            aquasec/trivy:0.74.0 image --input /images/identity.tar \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/identity.tar \
             --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
             --format json --output /reports/trivy.json
       - name: Retain container vulnerability evidence
