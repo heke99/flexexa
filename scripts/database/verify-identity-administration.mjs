@@ -102,3 +102,51 @@ const provisionFacts=JSON.parse(sql(`select jsonb_build_object(
 assert.deepEqual(provisionFacts,{requests:2,receipts:2,audits:2,outbox:2,created_auth_users:0,unfinished:0});
 assert.equal(calls,56);
 console.log(JSON.stringify({provisioning_request_concurrent_calls:16,provisionFacts,external_auth_calls:0}));
+
+// Session-authorized leases serialize on the immutable request row across real connections.
+let leaseCalls=0;
+async function leaseRace(requestId,keys) {
+ return Promise.all(keys.map(async key=>{
+  leaseCalls++;
+  try {
+   const output=await asyncSql('psql',[...args,`begin; set local statement_timeout='25s'; set local role authenticated;
+    set local request.jwt.claims=${claims};
+    select public.flexexa_acquire_identity_execution_lease('${tenant}',${q(JSON.stringify({request_id:requestId,environment:'sandbox'}))}::jsonb,${q(key)},'${randomUUID()}');
+    select pg_sleep(0.05); commit;`],opts);
+   return {receipt:JSON.parse(output.stdout.trim())};
+  } catch(error) {
+   if(!/ERROR:\s+INVALID_STATE_TRANSITION\s*(?:\n|$)/u.test(String(error.stderr??''))) throw Error('Unexpected lease database failure');
+   return {error:'INVALID_STATE_TRANSITION'};
+  }
+ }));
+}
+const initialLease=check(await leaseRace(intent.resource_id,Array(8).fill('lease-same')),8);
+assert.equal(initialLease.generation,1);
+assert.equal(initialLease.intended_auth_user_id,intent.intended_auth_user_id);
+const otherIntent=sql(`select id from private.flexexa_identity_provisioning_requests where tenant_id='${tenant}' and id<>'${intent.resource_id}';`);
+check(await leaseRace(otherIntent,Array.from({length:8},(_,i)=>`lease-different-${i}`)),1,'INVALID_STATE_TRANSITION');
+// Simulate an expired prior attempt using a new fixture row; never disable immutability triggers.
+const expiredReceipt=randomUUID();
+sql(`insert into public.idempotency_records(id,tenant_id,actor_type,actor_id,operation_key,idempotency_key,request_hash,correlation_id)
+ values('${expiredReceipt}','${tenant}','user','${actor}','fixture','expired-lease',repeat('a',64),'${randomUUID()}');
+ insert into private.flexexa_identity_execution_leases(tenant_id,request_id,generation,session_id,idempotency_record_id,created_at,expires_at)
+ values('${tenant}','${intent.resource_id}',2,'${session}','${expiredReceipt}',clock_timestamp()-interval '1 minute',clock_timestamp()-interval '40 seconds');`);
+const recoveredLease=check(await leaseRace(intent.resource_id,Array.from({length:8},(_,i)=>`lease-recovered-${i}`)),1,'INVALID_STATE_TRANSITION');
+assert.equal(recoveredLease.generation,3);
+assert.equal(recoveredLease.intended_auth_user_id,intent.intended_auth_user_id);
+function checkLease(id) {
+ return JSON.parse(sql(`begin;set local role authenticated;set local request.jwt.claims=${claims};
+  select public.flexexa_check_identity_execution_lease('${tenant}','${id}');rollback;`));
+}
+assert.equal(checkLease(recoveredLease.resource_id).generation,3);
+assert.throws(()=>checkLease(initialLease.resource_id),error=>/ERROR:\s+INVALID_STATE_TRANSITION\s*(?:\n|$)/u.test(String(error.stderr??'')));
+const leaseFacts=JSON.parse(sql(`select jsonb_build_object(
+ 'leases',(select count(*) from private.flexexa_identity_execution_leases where tenant_id='${tenant}'),
+ 'receipts',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and operation_key='acquire_identity_execution_lease' and status='completed'),
+ 'audits',(select count(*) from public.audit_events where tenant_id='${tenant}' and action='acquire_identity_execution_lease'),
+ 'outbox',(select count(*) from public.outbox_events where tenant_id='${tenant}' and event_type='flexexa.identity_execution.leased'),
+ 'unfinished_leases',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and operation_key='acquire_identity_execution_lease' and status<>'completed'),
+ 'created_auth_users',(select count(*) from auth.users where id='${intent.intended_auth_user_id}'));`));
+assert.deepEqual(leaseFacts,{leases:4,receipts:3,audits:3,outbox:3,unfinished_leases:0,created_auth_users:0});
+assert.equal(leaseCalls,24);
+console.log(JSON.stringify({identity_lease_concurrent_calls:leaseCalls,stale_generation_rejected:true,leaseFacts,external_auth_calls:0}));

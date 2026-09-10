@@ -14,13 +14,16 @@
     "supabase/migrations/20260909155618_phase0_provider_account_lifecycle.sql": "e2bd33a61de22d7e41a04f02eb695ecb9d72954dab41875fc22189a857c5738e",
     "supabase/migrations/20260909183109_phase0_machine_authorization.sql": "bd9e0e500374d5d63bc3f47677e2afcc8c04debd21df67b5a9705a0abb48a4c9",
     "supabase/migrations/20260909190638_phase0_api_identity_administration.sql": "924c8ecc1427cfbe9365d4a0b51b449b5a4658a66cee5983d5b7371b17ce47fe",
-    "supabase/migrations/20260910062435_phase0_identity_provisioning_request.sql": "38586f78122ac7d784403b4dcc4f037fe20bb9450db2f99ea427b0985cc80be7"
+    "supabase/migrations/20260910062435_phase0_identity_provisioning_request.sql": "38586f78122ac7d784403b4dcc4f037fe20bb9450db2f99ea427b0985cc80be7",
+    "supabase/migrations/20260910065545_phase0_identity_execution_lease.sql": "3030a11965917076165fb5fcfea6e2987a8be384a1d7119d1af44e7190fe08c6"
   },
   "appended_dev_verified_versions": [
     "20260909135947",
     "20260909151938",
     "20260909155618",
     "20260909183109",
-    "20260909190638"
+    "20260909190638",
+    "20260910062435",
+    "20260910065545"
   ]
 }

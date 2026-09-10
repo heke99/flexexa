@@ -1,6 +1,6 @@
 # ADR-0003 — Session-bound machine authorization
 
-Status: bounded implementation verified in isolated CI and development on 2026-09-09; final tracked-only CI/merge still required. No production identities, credentials or provider sessions provisioned.
+Status: bounded implementation merged in PR #13 as `fb8d081b3a042d836837ddbcc10d3191173c769e`; final tracked run `34389879469` passed. No production identities, credentials or provider sessions provisioned.
 
 ## Boundary
 Canonical services and API clients already exist. A private binding associates a dedicated
