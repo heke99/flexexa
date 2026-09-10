@@ -134,7 +134,10 @@ try{
  await docker(['kill','--signal','KILL',collector]);assert.equal(await docker(['inspect','--format','{{.State.ExitCode}}',collector]),'137');
  await docker([...dbCompose,'up','--no-recreate','-d','--wait','--wait-timeout','120','clickhouse']);
  assert.equal(await docker([...dbCompose,'ps','-q','clickhouse']),database);
- assert.equal(Number((await docker([...dbCompose,'port','clickhouse','8123'])).split(':').at(-1)),port);
+ port=Number((await docker([...dbCompose,'port','clickhouse','8123'])).split(':').at(-1));
+ assert(Number.isSafeInteger(port)&&port>0&&port<=65535);env.FLEXEXA_CLICKHOUSE_PORT=String(port);
+ const restarted=JSON.parse(await docker(['inspect',database]))[0];
+ assert(restarted.HostConfig.PortBindings['8123/tcp'].every(p=>p.HostIp==='127.0.0.1'));
  await docker([...collectorCompose,'up','-d','--force-recreate']);const replacement=await docker([...collectorCompose,'ps','-q','collector']);assert.notEqual(replacement,collector);collector=replacement;
  await waitFor(healthy,'REPLACEMENT_HEALTH');
  const queuedList=queued.map(id=>"'"+id+"'").join(',');
