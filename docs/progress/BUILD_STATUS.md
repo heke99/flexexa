@@ -44,6 +44,8 @@ Updated: 2026-09-10. This is an evidence ledger, not a percentage-complete estim
 reviewed, current evidence. See `masterplan-traceability.md`; coverage integrity is not
 product acceptance. Existing implemented boundaries retain the evidence above.
 
+Signed power snapshots: PR #33 merged as `e327b062970e14463f43bf87c6fde565dc8dfe52`; final run `34478120182` passed all six jobs and 33 Kernel tests. Snapshot trust must come from authenticated publication state; no hosted publisher or control authorization claimed.
+
 ## Sequential continuation
 The reserved Auth service, hardened container and country metadata structure now have isolated integration evidence. Continue runtime dependency/infrastructure verification, observability, central policy/readiness and authorized consent/link/discovery; complete the remaining Phase 0 gates before claiming the foundation complete. Each PR preserves prior tests and migrations. No destructive history rewrite, no skipping failed gates, no silent tenant/schema/contract divergence.
 

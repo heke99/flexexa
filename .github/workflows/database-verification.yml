@@ -142,6 +142,20 @@ jobs:
           node --experimental-strip-types scripts/database/verify-identity-administration.mjs
           node --experimental-strip-types scripts/database/verify-auth-provisioning.mjs
           IDENTITY_CONTAINER_IMAGE=flexexa-identity:ci node --experimental-strip-types scripts/database/verify-auth-provisioning.mjs
+      - name: Verify transactional outbox through real RabbitMQ
+        env:
+          ALLOW_ISOLATED_DB_TESTS: '1'
+          ALLOW_ISOLATED_RUNTIME_TESTS: '1'
+          FLEXEXA_OUTBOX_DB_TESTS: '1'
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: |
+          python3 -m venv /tmp/flexexa-outbox-venv
+          /tmp/flexexa-outbox-venv/bin/pip install --require-hashes --only-binary=:all: -r scripts/runtime/rabbitmq/requirements.txt
+          /tmp/flexexa-outbox-venv/bin/python scripts/runtime/rabbitmq/verify.py
       - name: Scan the tested container for high and critical vulnerabilities
         run: |
           mkdir -p /tmp/flexexa-image-input /tmp/flexexa-image-report
