@@ -41,6 +41,44 @@ const published=await Promise.all(Array.from({length:16},()=>invoke(2,'publish',
 assert.ok(published.every(x=>x.status==='published'));
 assert.equal(sql(`select count(*) from public.outbox_events where tenant_id='${tenant}' and payload_json->>'policy_set_version_id'='${version.policy_set_version_id}'`),'1');
 assert.equal(sql(`select count(*) from public.tenant_policy_readiness where tenant_id='${tenant}'`),'1');
+// Same typed consumer path against PostgreSQL, and (in broker mode) real AMQP.
+const {consumePolicyPublication}=await import('../../packages/events/src/inbox-consumption.ts');
+const {deliverOutboxEvent}=await import('../../packages/events/src/outbox-delivery.ts');
+const [consumer,consumerSession,consumerService,consumerBinding,publisher,publisherSession,publisherService,publisherBinding]=Array.from({length:8},()=>randomUUID());
+sql(`insert into auth.users(id,is_anonymous) values('${consumer}',false),('${publisher}',false);
+insert into auth.sessions(id,user_id) values('${consumerSession}','${consumer}'),('${publisherSession}','${publisher}');
+insert into public.service_identities(id,service_key,name) values('${consumerService}','consumer-${consumerService}','Consumer'),('${publisherService}','publisher-${publisherService}','Publisher');
+insert into private.flexexa_machine_principals(id,auth_user_id,principal_type,service_identity_id,environment) values('${consumerBinding}','${consumer}','service','${consumerService}','sandbox'),('${publisherBinding}','${publisher}','service','${publisherService}','sandbox');
+insert into public.service_identity_tenant_grants(service_identity_id,tenant_id,permission_id,scope_json) select '${consumerService}','${tenant}',id,'{"environment":"sandbox"}' from public.permissions where permission_key='events.consume';
+insert into public.service_identity_tenant_grants(service_identity_id,tenant_id,permission_id,scope_json) select '${publisherService}','${tenant}',id,'{"environment":"sandbox"}' from public.permissions where permission_key='events.publish';`);
+const consumerClaims={sub:consumer,session_id:consumerSession,role:'authenticated',aal:'aal1'};
+const machineTx=(claims,s)=>`begin;set local role authenticated;set local request.jwt.claims=${q(JSON.stringify(claims))};${s};commit;`;
+const scope={tenant_id:tenant,environment:'sandbox'};
+const captureEvent=(id,t)=>JSON.parse(sql(`select jsonb_build_object('event_id',e.id,'tenant_id',e.tenant_id,'organization_id',e.organization_id,'event_type',e.event_type,'event_version',e.event_version,
+'occurred_at',to_char(e.occurred_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'received_at',to_char(e.received_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+'correlation_id',e.correlation_id,'causation_id',e.causation_id,'source',e.source,'payload',e.payload_json) from public.outbox_events e where e.tenant_id='${t}' and e.payload_json->>'policy_set_version_id'='${id}'`));
+const event=captureEvent(version.policy_set_version_id,tenant);
+assert.equal(event.event_type,'policy.version.published');
+const inbox={consume:async(s,e)=>JSON.parse(await asyncSql(machineTx(consumerClaims,`select public.flexexa_consume_policy_publication(${q(s.tenant_id)},${q(s.environment)},${q(JSON.stringify(e))}::jsonb)`)))};
+let brokerRecovery=false;
+if(process.env.FLEXEXA_OUTBOX_BROKER_TEST==='1'){
+ const broker=request=>JSON.parse(execFileSync(process.env.FLEXEXA_TEST_PYTHON,['scripts/runtime/rabbitmq/outbox-bridge.py'],{input:JSON.stringify(request),encoding:'utf8',timeout:25000,maxBuffer:1024*1024}));
+ const publisherClaims={sub:publisher,session_id:publisherSession,role:'authenticated',aal:'aal1'};
+ const db={claim:async s=>JSON.parse(await asyncSql(machineTx(publisherClaims,`select public.flexexa_claim_outbox_event(${q(s.tenant_id)},${q(s.environment)})`))),finish:async(s,lease,outcome)=>JSON.parse(await asyncSql(machineTx(publisherClaims,`select public.flexexa_finish_outbox_event(${q(s.tenant_id)},${q(s.environment)},${q(lease)},${q(outcome)})`)))};
+ assert.equal(await deliverOutboxEvent(scope,db,{publishConfirmed:async message=>{assert.deepEqual(broker({operation:'publish',message}),{confirmed:true});}}),'published');
+ const lost=broker({operation:'consume_policy_lost_ack',scope,claims:consumerClaims});
+ assert.deepEqual(lost,{redelivered:false,consumer:{error:'SIMULATED_ACK_LOSS'}});
+ assert.equal(sql(`select count(*) from public.inbox_events where tenant_id='${tenant}'`),'1');
+ assert.deepEqual(broker({operation:'consume_policy',scope,claims:consumerClaims}),{redelivered:true,consumer:{status:'processed'}});
+ assert.equal(broker({operation:'consume_policy',scope,claims:consumerClaims}),null);
+ brokerRecovery=true;
+}
+let acknowledgements=0;
+const consumed=await Promise.all(Array.from({length:16},()=>consumePolicyPublication(scope,event,inbox,{acknowledge:async()=>{acknowledgements++;}})));
+assert.ok(consumed.every(x=>x==='processed'));assert.equal(acknowledgements,16);
+assert.equal(sql(`select count(*) from public.inbox_events where tenant_id='${tenant}'`),'1');
+assert.equal(sql(`select count(*) from public.audit_events where tenant_id='${tenant}' and action='policy_readiness_evaluated'`),'1');
+assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${tenant}'`),'blocked');
 // A newer publication for a different tenant must not invalidate this tenant.
 const otherTenant=randomUUID();
 sql(`insert into public.tenants(id,organization_id,name,slug) values('${otherTenant}','${org}','Other policy tenant','${otherTenant}')`);
@@ -53,6 +91,17 @@ await invoke(2,'publish',otherVersion,'other-publish');
 await invoke(2,'readiness',version,'original-readiness');
 assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${tenant}' and policy_set_version_id='${version.policy_set_version_id}'`),'blocked');
 assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${otherTenant}'`),'pending');
+// A delayed first delivery of an obsolete version records superseded, never
+// overwriting the fresh pending row for the newly published version.
+const newerOther=await invoke(1,'create',{...payload,tenants:[otherTenant]},'other-new-create');
+const newerOtherVersion={policy_set_version_id:newerOther.policy_set_version_id};
+await invoke(1,'test',newerOtherVersion,'other-new-test');
+await invoke(1,'shadow',{...newerOtherVersion,observations},'other-new-shadow');
+await invoke(2,'approve',newerOtherVersion,'other-new-approve');
+await invoke(2,'publish',newerOtherVersion,'other-new-publish');
+sql(`insert into public.service_identity_tenant_grants(service_identity_id,tenant_id,permission_id,scope_json) select '${consumerService}','${otherTenant}',id,'{"environment":"sandbox"}' from public.permissions where permission_key='events.consume'`);
+assert.equal(await consumePolicyPublication({tenant_id:otherTenant,environment:'sandbox'},captureEvent(otherVersion.policy_set_version_id,otherTenant),inbox,{acknowledge:async()=>{}}),'superseded');
+assert.equal(sql(`select status from public.tenant_policy_readiness where tenant_id='${otherTenant}' and policy_set_version_id='${newerOtherVersion.policy_set_version_id}'`),'pending');
 // A real blocking lock lets the session expire after initial authorization.
 const second=await invoke(1,'create',payload,'create-second');
 const secondVersion={policy_set_version_id:second.policy_set_version_id};
@@ -70,4 +119,4 @@ await assert.rejects(invoke(1,'test',secondVersion,'expires-waiting'),/PERMISSIO
 await blocker;
 assert.equal(sql(`select status from public.policy_set_versions where id='${second.policy_set_version_id}'`),'draft');
 assert.equal(sql(`select count(*) from public.idempotency_records where scope_type='platform' and actor_id='${author}' and idempotency_key='expires-waiting'`),'0');
-console.log(JSON.stringify({policyRegistry:{createRaces:16,publishRaces:16,kernelParity:observations.length,expiredSessionAfterRealLock:'denied',atomicEvidence:true}}));
+console.log(JSON.stringify({policyRegistry:{createRaces:16,publishRaces:16,kernelParity:observations.length,expiredSessionAfterRealLock:'denied',atomicEvidence:true,inboxRaces:16,brokerAckLossRecovery:brokerRecovery}}));

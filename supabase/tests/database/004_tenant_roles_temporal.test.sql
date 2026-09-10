@@ -18,7 +18,7 @@ insert into public.membership_roles(tenant_id,membership_id,role_id)
 select is((select count(*) from public.role_templates),9::bigint,'nine tenant role templates');
 select is((select count(*) from public.roles where tenant_id='c4000000-0000-4000-8000-000000000001'),9::bigint,'each tenant receives its own nine roles');
 select is((select count(*) from public.roles where tenant_id is null),2::bigint,'only platform roles are global');
-select is((select count(*) from public.permissions where status='active'),59::bigint,'complete V1 permission catalog plus meter/platform/outbox extensions');
+select is((select count(*) from public.permissions where status='active'),60::bigint,'complete V1 permission catalog plus meter/platform/outbox/inbox extensions');
 select throws_ok($$insert into public.roles(role_key,name,scope_type) values('broken','Broken','tenant')$$,'23514',null,'tenant role cannot be ownerless');
 select throws_ok($$insert into public.membership_roles(tenant_id,membership_id,role_id) select 'c4000000-0000-4000-8000-000000000001','d4000000-0000-4000-8000-000000000001',id from public.roles where tenant_id='c4000000-0000-4000-8000-000000000002' and role_key='viewer'$$,'23503',null,'role foreign key prevents cross-tenant assignment');
 select throws_ok($$insert into public.role_permissions(tenant_id,role_id,permission_id) select 'c4000000-0000-4000-8000-000000000002',r.id,p.id from public.roles r cross join public.permissions p where r.tenant_id='c4000000-0000-4000-8000-000000000001' and r.role_key='viewer' and p.permission_key='assets.control'$$,'23514','ROLE_OWNER_MISMATCH','permission row must match role owner');
