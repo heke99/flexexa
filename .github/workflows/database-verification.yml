@@ -21,6 +21,20 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
           pnpm install --frozen-lockfile --prod --ignore-scripts --filter @flexexa/identity-service...
+      - name: Generate minimal Collector source for dependency review
+        run: |
+          mkdir -p /tmp/flexexa-collector-source
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
+            -v "$PWD/infra/docker/observability/builder-config.yaml:/manifest.yaml:ro" \
+            -v /tmp/flexexa-collector-source:/output \
+            golang:1.27-alpine3.23@sha256:d9e2f2f07b10cc922da3e80e035c3058810b328d5aef82d2c63680967c5e2ec9 \
+            sh -ec 'go install go.opentelemetry.io/collector/cmd/builder@v0.160.0; /go/bin/builder --config=/manifest.yaml --skip-compilation'
+          python3 - <<'PYCODE'
+          import base64,json,pathlib
+          for p in sorted(pathlib.Path('/tmp/flexexa-collector-source').iterdir()):
+              if p.name in ['go.mod','go.sum','main.go','components.go','main_others.go','main_windows.go']:
+                  print('COLLECTOR_SOURCE='+json.dumps({'name':p.name,'base64':base64.b64encode(p.read_bytes()).decode()}))
+          PYCODE
       - name: Verify durable trace storage, access and actual crash recovery
         env:
           ALLOW_ISOLATED_RUNTIME_TESTS: '1'
