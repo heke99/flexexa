@@ -55,11 +55,23 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
             return pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1', port, vhost,
                 pika.PlainCredentials(user, passwords.get(user) if password is None else password),
                 socket_timeout=5, blocked_connection_timeout=5, connection_attempts=1, heartbeat=15))
+        def connect_ready():
+            deadline=time.monotonic()+20
+            while True:
+                try:return connect()
+                except (pika.exceptions.ProbableAuthenticationError,pika.exceptions.ProbableAccessDeniedError):raise
+                except pika.exceptions.AMQPConnectionError:
+                    if time.monotonic()>=deadline:raise
+                    time.sleep(0.2)
+        ready=connect_ready();ready.close()
         negatives = 0
         for user,vhost,password in [('tenant_a','ci_tenant_b',passwords['tenant_a']), ('tenant_a','production',passwords['tenant_a']), ('tenant_a','ci_tenant_a','wrong'), ('guest','ci_tenant_a','guest')]:
             try:
                 unexpected=connect(user,vhost,password)
-            except pika.exceptions.AMQPConnectionError:
+            except (pika.exceptions.ProbableAuthenticationError,pika.exceptions.ProbableAccessDeniedError):
+                negatives += 1
+            except pika.exceptions.ConnectionClosedByBroker as error:
+                assert error.reply_code in (403,530)
                 negatives += 1
             else:
                 unexpected.close()
@@ -120,7 +132,8 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         connection.close();connection=None
         run([*compose,'restart','rabbitmq'],env)
         run([*compose,'up','-d','--wait','--wait-timeout','120'],env)
-        connection=connect();channel=connection.channel()
+        port = int(run([*compose, 'port', 'rabbitmq', '5672'], env).stdout.strip().rsplit(':', 1)[1])
+        connection=connect_ready();channel=connection.channel()
         method,received,message=wait_message(channel,'flexexa.events.q')
         assert json.loads(message)==event;channel.basic_ack(method.delivery_tag)
         connection.close();connection=None
