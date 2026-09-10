@@ -45,7 +45,19 @@ trigger invalidates the actor session after enrollment; a nontransactional seque
 proves enrollment was reached before all transactional effects rolled back. The
 permanent isolated runner adds 16 actual concurrent typed finalizations and checks
 that completed requests cannot reacquire. Existing replay/RLS/contracts/races remain.
-Candidate isolated CI and exact development read-back are required before merge.
+Candidate run `34450483563` passed application job `102784855094` and database
+job `102784855374`: 489 SQL assertions in twelve files, all prior contract/race gates,
+and 16 concurrent typed finalization calls. Two requests completed exactly once;
+reserved bindings matched, no unfinished finalizations, and no new API grants.
+
+Development recorded migration `20260910073558`. Exact read-back matched 11,488 bytes
+and SHA-256 `2527bc4d3c8568101c76619fa46c634e546a9ac101c4a5dde8b7ab934f93f0b4`.
+All fifteen migration versions are tracked; the previous fourteen files are unchanged.
+Live completion count is zero. RLS, five foreign keys, denied anonymous execution and
+denied browser table access were verified. Security advisors report no WARN/ERROR;
+six INFO-only no-policy tables intentionally deny direct access. See the
+[Supabase lint explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
+PR #20 requires final tracked replay after promotion before head-locked merge.
 
 ## Remaining integration
 The privileged Auth service still needs protected credential binding, actual reserved-
