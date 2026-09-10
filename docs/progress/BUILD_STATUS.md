@@ -18,7 +18,7 @@ Updated: 2026-09-10. This is an evidence ledger, not a percentage-complete estim
 | Audited API identity administration | PR #14 merged as `55db456dce07c0620f4f2d6138d5ab6590692b10`; final tracked run `34393440885` passed app and database. Exact dev migration `20260909190638` verified. Dedicated pre-attested subject only; no live Auth provisioning or credentials. |
 | Identity administration transport | PR #16 merged as `ed01da2e18f6579b97a37568d4fd6b7ef9e92482`; final run `34409212402` passed pinned application and complete database replay/RLS/concurrency gates. |
 | Durable identity provisioning request | PR #17 merged as `ecb82b7cd19cd9cc31aa05d2ab5648f33bda1bbf`; final run `34445226936` passed application and database gates. 392 SQL assertions and all concurrency checks; exact development migration `20260910062435` verified. No credentials or Auth users issued. |
-| Identity execution coordination | Session-bound expiring leases and generation checks in progress; clean CI/dev read-back required. No running worker or external Auth I/O. |
+| Identity execution coordination | PR #18 candidate run `34447195593` passed 445 SQL assertions and all prior concurrency checks plus 24 lease races. Exact development migration `20260910065545` read-back verified. Final tracked-history CI required before merge. No running worker or external Auth I/O. |
 | Rules/policy | Deterministic primitives exist; full versioned registry, publishing, approval and readiness are not finished. |
 | AWS | Bootstrap/state/OIDC documented. Normal application resources have not been applied by this change. No claim of running ECS/RabbitMQ/Valkey/ClickHouse. |
 | UI/deployment | Next.js shell and preview builds exist; no end-to-end smart charging UI or production readiness. |

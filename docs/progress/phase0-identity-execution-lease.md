@@ -43,7 +43,35 @@ Application verification passed locally. New PostgreSQL cases cover MFA, tenant,
 actor/session/environment isolation, revocation, expiry, immutability, generation
 fencing and atomic evidence. The permanent isolated runner adds 24 real concurrent
 lease calls while retaining all previous tests. Clean tracked CI and exact dev
-read-back remain required before merge; this document does not claim them yet.
+read-back acceptance is recorded below. Final tracked-history replay is required
+before merge.
+
+## Candidate acceptance and development read-back
+Candidate `3008329aae6d4bd9229dc34ef2dcbf5a73b2fdaa` passed application and
+database jobs in run `34447195593`: 445 pgTAP assertions, all earlier contract/race
+checks, 40 identity calls, 16 intent calls and 24 lease calls. Earlier run
+`34446896571` stopped on a new test calling the existing helper in the wrong schema;
+the test was corrected and the complete suite rerun before promotion.
+
+Exact 14,906-byte SQL, SHA256
+`3030a11965917076165fb5fcfea6e2987a8be384a1d7119d1af44e7190fe08c6`,
+was applied to Stockholm development as `20260910065545`. The CLI-created candidate
+filename was synchronized to this recorded version without changing its SQL body.
+Read-back confirms exact bytes/hash, RLS, no browser SELECT/INSERT, no anonymous
+EXECUTE, public invoker wrappers and empty search paths. Internal explicit-time
+helpers cannot be executed by authenticated callers; existing helper ACLs remain.
+There are zero live leases. Security advisors report no WARN/ERROR; five INFO-only
+no-policy findings describe intentionally inaccessible evidence/private tables.
+
+## Remaining live provisioning prerequisite
+Read-only AWS inventory confirmed no Secrets Manager entries in account
+`938095765653`, eu-north-1, and no ECS clusters. No Auth-management key is configured
+in the available runtime. The enabled Supabase operations expose publishable keys,
+not a callable Auth admin provisioning/secret-key binding operation. A protected
+Auth credential must be bound to the intended AWS runtime before live provisioning
+can be verified. Secret values must not be pasted into source, logs or chat.
+Typed lease transport, privileged service integration, reconciliation/finalization,
+runtime deployment and full Phase 0 readiness remain unfinished.
 
 ## Historical SQL audit
 Read-back of all thirteen existing development migrations found nine byte-identical
