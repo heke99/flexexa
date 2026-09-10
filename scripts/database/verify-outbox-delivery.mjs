@@ -13,7 +13,7 @@ const asyncSql=async s=>(await promisify(execFile)('psql',[...args,'--command',s
 const [actor,session,org,tenant,service,binding,eventId,receipt,audit]=Array.from({length:9},()=>randomUUID());
 const claims=q(JSON.stringify({sub:actor,session_id:session,role:'authenticated',aal:'aal1'}));
 const transaction=s=>`begin;set local role authenticated;set local request.jwt.claims=${claims};${s};commit;`;
-const call=(fn,values)=>`select to_jsonb(public.${fn}(${values.map(q).join(',')}))`;
+const call=(fn,values)=>`select coalesce(to_jsonb(public.${fn}(${values.map(q).join(',')})), 'null'::jsonb)`;
 sql(`insert into auth.users(id,is_anonymous) values('${actor}',false);insert into auth.sessions(id,user_id) values('${session}','${actor}');
 insert into public.organizations(id,name,slug) values('${org}','Outbox integration','${org}');
 insert into public.tenants(id,organization_id,name,slug) values('${tenant}','${org}','Outbox integration','${tenant}');
