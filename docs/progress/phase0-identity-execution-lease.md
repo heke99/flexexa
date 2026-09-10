@@ -44,7 +44,8 @@ actor/session/environment isolation, revocation, expiry, immutability, generatio
 fencing and atomic evidence. The permanent isolated runner adds 24 real concurrent
 lease calls while retaining all previous tests. Clean tracked CI and exact dev
 read-back acceptance is recorded below. Final tracked-history replay is required
-before merge.
+before merge. Final tracked run `34447623811` passed both jobs, then PR #18
+merged as `b5e1956d9ff73bedf4373c0e7a6ad4bf65f3958d`.
 
 ## Candidate acceptance and development read-back
 Candidate `3008329aae6d4bd9229dc34ef2dcbf5a73b2fdaa` passed application and
@@ -70,8 +71,9 @@ in the available runtime. The enabled Supabase operations expose publishable key
 not a callable Auth admin provisioning/secret-key binding operation. A protected
 Auth credential must be bound to the intended AWS runtime before live provisioning
 can be verified. Secret values must not be pasted into source, logs or chat.
-Typed lease transport, privileged service integration, reconciliation/finalization,
-runtime deployment and full Phase 0 readiness remain unfinished.
+Typed lease transport is the next reviewed change (see `phase0-lease-transport.md`).
+Privileged service integration, reconciliation/finalization, runtime deployment
+and full Phase 0 readiness remain unfinished.
 
 ## Historical SQL audit
 Read-back of all thirteen existing development migrations found nine byte-identical

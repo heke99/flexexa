@@ -7,7 +7,7 @@ for(const [key,value] of Object.entries({ALLOW_ISOLATED_DB_TESTS:'1',PGHOST:'127
  if(process.env[key]!==value) throw Error('Refusing non-disposable identity administration verification');
 }
 ensureSourceWorkspace();
-const {createIdentityAdministrationApi,createIdentityProvisioningRequestApi}=await import('../../packages/api-contracts/src/identity-administration.ts');
+const {createIdentityAdministrationApi,createIdentityProvisioningRequestApi,createIdentityExecutionLeaseApi}=await import('../../packages/api-contracts/src/identity-administration.ts');
 const q=v=>"'"+v.replaceAll("'","''")+"'";
 const args=['-h','127.0.0.1','-p','54322','-U','postgres','-d','postgres','-XAtq','--set=ON_ERROR_STOP=1','--command'];
 const opts={encoding:'utf8',timeout:30000,maxBuffer:1024*1024};
@@ -105,17 +105,28 @@ console.log(JSON.stringify({provisioning_request_concurrent_calls:16,provisionFa
 
 // Session-authorized leases serialize on the immutable request row across real connections.
 let leaseCalls=0;
+const leaseApi=createIdentityExecutionLeaseApi({rpc:async(name,a)=>{
+ assert(['flexexa_acquire_identity_execution_lease','flexexa_check_identity_execution_lease'].includes(name));
+ const parameters=name==='flexexa_acquire_identity_execution_lease'
+  ?`${q(a.p_tenant_id)},${q(JSON.stringify(a.p_payload))}::jsonb,${q(a.p_idempotency_key)},${q(a.p_correlation_id)}`
+  :`${q(a.p_tenant_id)},${q(a.p_lease_id)}`;
+ try {
+  const output=await asyncSql('psql',[...args,`begin; set local statement_timeout='25s'; set local role authenticated;
+   set local request.jwt.claims=${claims};select public.${name}(${parameters});select pg_sleep(0.05);commit;`],opts);
+  return {data:JSON.parse(output.stdout.trim()),error:null};
+ } catch(error) {
+  const match=String(error.stderr??'').match(/ERROR:\s+(INVALID_STATE_TRANSITION|PERMISSION_DENIED|IDEMPOTENCY_CONFLICT)\s*(?:\n|$)/u);
+  if(!match)throw Error('Unexpected lease database failure');
+  return {data:null,error:{code:'P0001',message:match[1]}};
+ }
+}},scope);
 async function leaseRace(requestId,keys) {
  return Promise.all(keys.map(async key=>{
   leaseCalls++;
   try {
-   const output=await asyncSql('psql',[...args,`begin; set local statement_timeout='25s'; set local role authenticated;
-    set local request.jwt.claims=${claims};
-    select public.flexexa_acquire_identity_execution_lease('${tenant}',${q(JSON.stringify({request_id:requestId,environment:'sandbox'}))}::jsonb,${q(key)},'${randomUUID()}');
-    select pg_sleep(0.05); commit;`],opts);
-   return {receipt:JSON.parse(output.stdout.trim())};
+   return {receipt:await leaseApi.acquire({tenant_id:tenant,payload:{request_id:requestId,environment:'sandbox'},idempotency_key:key,correlation_id:randomUUID()})};
   } catch(error) {
-   if(!/ERROR:\s+INVALID_STATE_TRANSITION\s*(?:\n|$)/u.test(String(error.stderr??''))) throw Error('Unexpected lease database failure');
+   if(error.code!=='INVALID_STATE_TRANSITION') throw error;
    return {error:'INVALID_STATE_TRANSITION'};
   }
  }));
@@ -134,12 +145,8 @@ sql(`insert into public.idempotency_records(id,tenant_id,actor_type,actor_id,ope
 const recoveredLease=check(await leaseRace(intent.resource_id,Array.from({length:8},(_,i)=>`lease-recovered-${i}`)),1,'INVALID_STATE_TRANSITION');
 assert.equal(recoveredLease.generation,3);
 assert.equal(recoveredLease.intended_auth_user_id,intent.intended_auth_user_id);
-function checkLease(id) {
- return JSON.parse(sql(`begin;set local role authenticated;set local request.jwt.claims=${claims};
-  select public.flexexa_check_identity_execution_lease('${tenant}','${id}');rollback;`));
-}
-assert.equal(checkLease(recoveredLease.resource_id).generation,3);
-assert.throws(()=>checkLease(initialLease.resource_id),error=>/ERROR:\s+INVALID_STATE_TRANSITION\s*(?:\n|$)/u.test(String(error.stderr??'')));
+assert.equal((await leaseApi.check(recoveredLease)).generation,3);
+await assert.rejects(leaseApi.check(initialLease),{code:'INVALID_STATE_TRANSITION'});
 const leaseFacts=JSON.parse(sql(`select jsonb_build_object(
  'leases',(select count(*) from private.flexexa_identity_execution_leases where tenant_id='${tenant}'),
  'receipts',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and operation_key='acquire_identity_execution_lease' and status='completed'),
@@ -149,4 +156,4 @@ const leaseFacts=JSON.parse(sql(`select jsonb_build_object(
  'created_auth_users',(select count(*) from auth.users where id='${intent.intended_auth_user_id}'));`));
 assert.deepEqual(leaseFacts,{leases:4,receipts:3,audits:3,outbox:3,unfinished_leases:0,created_auth_users:0});
 assert.equal(leaseCalls,24);
-console.log(JSON.stringify({identity_lease_concurrent_calls:leaseCalls,stale_generation_rejected:true,leaseFacts,external_auth_calls:0}));
+console.log(JSON.stringify({identity_lease_concurrent_calls:leaseCalls,typed_lease_checks:2,stale_generation_rejected:true,leaseFacts,external_auth_calls:0}));
