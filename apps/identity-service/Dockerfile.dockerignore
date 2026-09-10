@@ -1,0 +1,15 @@
+**
+!packages
+!packages/domain
+!packages/domain/package.json
+!packages/domain/src
+!packages/domain/src/**
+!packages/api-contracts
+!packages/api-contracts/package.json
+!packages/api-contracts/src
+!packages/api-contracts/src/**
+!apps
+!apps/identity-service
+!apps/identity-service/package.json
+!apps/identity-service/src
+!apps/identity-service/src/**

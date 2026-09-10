@@ -56,8 +56,15 @@ async function main(){
   }
   return r;
  };
- const server=createIdentityServer({url:local.API_URL,allowLoopback:true,publishableKey:local.ANON_KEY,adminKey:local.SERVICE_ROLE_KEY,environment:'sandbox',fetcher:transport});
- server.listen(0,'127.0.0.1');await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
+ const config={url:local.API_URL,allowLoopback:true,publishableKey:local.ANON_KEY,adminKey:local.SERVICE_ROLE_KEY,environment:'sandbox',fetcher:transport};
+ let runtime;
+ if(process.env.IDENTITY_CONTAINER_IMAGE){
+  stage='container-start';const {startIdentityContainer}=await import('./identity-container.mjs');runtime=await startIdentityContainer(config);
+ }else{
+  const server=createIdentityServer(config);server.listen(0,'127.0.0.1');await once(server,'listening');
+  runtime={origin:'http://127.0.0.1:'+server.address().port,async close(){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
+ }
+ const {origin}=runtime;
  const execute=async(lease,key,token=jwt)=>{
   const r=await fetch(origin+'/v1/identity/provisioning/execute',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
    body:JSON.stringify({lease,idempotency_key:key,correlation_id:randomUUID()}),signal:AbortSignal.timeout(20000)});
@@ -90,6 +97,6 @@ async function main(){
   stage='current-membership-revocation';sql(`update public.memberships set status='suspended' where id='${member}'`);
   const counts={...observed};assert.equal((await execute(lease,'finish-first')).status,403);assert.deepEqual(observed,counts);
   console.log(JSON.stringify({real_auth_mfa:true,http_provisioning:true,real_reserved_auth_subjects:3,lost_create_response_reconciled:true,concurrent_http_calls:4,facts}));
- }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+ }finally{await runtime.close();}
 }
 try{await main();}catch{console.error('IDENTITY_AUTH_INTEGRATION_FAILED at '+stage);process.exitCode=1;}
