@@ -1,5 +1,5 @@
 """Disposable AMQP protocol verification, never a production consumer/outbox."""
-import base64, hashlib, json, logging, os, pathlib, secrets, subprocess, tempfile, time
+import base64, hashlib, json, logging, os, pathlib, secrets, subprocess, sys, tempfile, time
 if os.environ.get('ALLOW_ISOLATED_RUNTIME_TESTS') != '1':
     raise SystemExit('Refusing non-disposable runtime verification')
 import pika
@@ -85,6 +85,12 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         channel.queue_bind('flexexa.dead.q', 'flexexa.dead', 'failed')
         channel.queue_declare('flexexa.events.q', durable=True, arguments={'x-queue-type':'quorum', 'x-dead-letter-exchange':'flexexa.dead', 'x-dead-letter-routing-key':'failed'})
         channel.queue_bind('flexexa.events.q','flexexa.events','asset.connected')
+        if os.environ.get('FLEXEXA_OUTBOX_DB_TESTS') == '1':
+            channel.queue_declare('flexexa.outbox.q', durable=True, arguments={'x-queue-type':'quorum'})
+            channel.queue_bind('flexexa.outbox.q', 'flexexa.events', 'flexexa.fixture.created')
+            subprocess.run(['node', '--experimental-strip-types', 'scripts/database/verify-outbox-delivery.mjs'], cwd=ROOT,
+                env={**os.environ, 'FLEXEXA_OUTBOX_BROKER_TEST':'1', 'FLEXEXA_TEST_PYTHON':sys.executable,
+                    'FLEXEXA_TEST_AMQP_PORT':str(port), 'FLEXEXA_TEST_AMQP_PASSWORD':passwords['tenant_a']}, check=True, timeout=120)
         channel.queue_declare('flexexa.retry.q', durable=True, arguments={'x-queue-type':'quorum', 'x-delivery-limit':2, 'x-dead-letter-exchange':'flexexa.dead', 'x-dead-letter-routing-key':'failed'})
         channel.queue_bind('flexexa.retry.q','flexexa.retry','asset.connected')
         denied = connection.channel()
