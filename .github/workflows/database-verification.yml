@@ -29,6 +29,20 @@ jobs:
         run: supabase start
       - name: Clean migration replay
         run: supabase db reset --local
+      - name: Capture clean application schema before test fixtures
+        env:
+          PGHOST: '127.0.0.1'
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: postgres
+        run: node scripts/database/capture-schema-catalog.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-clean-schema-catalog
+          path: .flexexa/index/schema-catalog.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Real PostgreSQL RLS and authorization tests
         run: supabase test db
       - name: Cross-language contracts and real concurrent RPC verification
