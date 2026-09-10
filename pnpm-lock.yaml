@@ -128,6 +128,25 @@ importers:
         specifier: npm:@typescript/typescript6@6.0.2
         version: '@typescript/typescript6@6.0.2'
 
+  apps/identity-service:
+    dependencies:
+      '@flexexa/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@flexexa/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@types/node':
+        specifier: 24.3.0
+        version: 24.3.0
+      '@typescript/native':
+        specifier: npm:typescript@7.0.2
+        version: typescript@7.0.2
+      typescript:
+        specifier: npm:@typescript/typescript6@6.0.2
+        version: '@typescript/typescript6@6.0.2'
+
   apps/web:
     dependencies:
       next:
