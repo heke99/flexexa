@@ -50,3 +50,12 @@ on infrastructure work. UI/browser and provider adapters are skipped for this ch
 
 References: locked master §§13, 70, 78–84; [PostgreSQL locking](https://www.postgresql.org/docs/17/explicit-locking.html),
 [Supabase function privileges](https://supabase.com/docs/guides/database/functions).
+
+## Development synchronization
+
+Candidate run `34481259184` passed all six jobs, 550 SQL assertions and the real
+PostgreSQL/RabbitMQ integration. Development applied `20260910131811`, 11,724 bytes,
+SHA-256 `a809b4e5281d590070a874632502d4911b1ae6eff163cd5fc908517140b1a8b3`.
+Readback at 2026-09-10 13:18:28 UTC matched all 17 migrations and all 960 application
+catalog objects against clean replay, with zero schema differences. Final tracked
+filename/hash CI and merge evidence are recorded in PR #34.
