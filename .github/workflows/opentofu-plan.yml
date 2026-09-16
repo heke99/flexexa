@@ -23,12 +23,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24.20.0'
 
-      - name: Test fail-closed development plan gate
-        run: node --test infra/opentofu/scripts/verify-dev-plan.test.mjs
+      - name: Test fail-closed development gates
+        run: node --test infra/opentofu/scripts/*.test.mjs
 
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
@@ -49,16 +51,17 @@ jobs:
       - name: Check formatting
         run: tofu fmt -check -recursive infra/opentofu
 
-      - name: Initialize dev backend
+      - name: Initialize dev backend with reviewed provider lock
         working-directory: infra/opentofu/environments/dev
         run: |
-          cat > /tmp/flexexa-backend.hcl <<'EOF'
+          cat > /tmp/flexexa-backend.hcl <<'EOF_BACKEND'
           bucket = "flexexa-tofu-state-938095765653"
           key    = "flexexa/dev/foundation.tfstate"
           region = "eu-north-1"
-          EOF
-          tofu init -input=false -backend-config=/tmp/flexexa-backend.hcl
-          echo "::group::Resolved public provider lock for review"
+          EOF_BACKEND
+          tofu init -input=false -lockfile=readonly -backend-config=/tmp/flexexa-backend.hcl
+          git diff --exit-code -- .terraform.lock.hcl
+          echo "::group::Reviewed provider lock"
           cat .terraform.lock.hcl
           echo "::endgroup::"
 
