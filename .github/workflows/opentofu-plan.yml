@@ -1,0 +1,92 @@
+name: OpenTofu AWS plan
+
+on:
+  pull_request:
+    branches: [main, phase/0-foundation]
+    paths:
+      - "infra/opentofu/**"
+      - ".github/workflows/opentofu-plan.yml"
+      - ".github/workflows/opentofu-apply.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: flexexa-opentofu-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan-dev:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+
+      - name: Test fail-closed development plan gate
+        run: node --test infra/opentofu/scripts/verify-dev-plan.test.mjs
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-plan
+          aws-region: eu-north-1
+          allowed-account-ids: 938095765653
+          role-session-name: flexexa-pr-plan-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 10
+
+      - name: Check formatting
+        run: tofu fmt -check -recursive infra/opentofu
+
+      - name: Initialize dev backend
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          cat > /tmp/flexexa-backend.hcl <<'EOF'
+          bucket = "flexexa-tofu-state-938095765653"
+          key    = "flexexa/dev/foundation.tfstate"
+          region = "eu-north-1"
+          EOF
+          tofu init -input=false -backend-config=/tmp/flexexa-backend.hcl
+          echo "::group::Resolved public provider lock for review"
+          cat .terraform.lock.hcl
+          echo "::endgroup::"
+
+      - name: Validate dev configuration
+        working-directory: infra/opentofu/environments/dev
+        run: tofu validate
+
+      - name: Plan dev foundation
+        working-directory: infra/opentofu/environments/dev
+        run: tofu plan -input=false -lock=false -no-color -out=tfplan
+
+      - name: Enforce reviewed first-foundation scope
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          trap 'rm -f /tmp/flexexa-dev-plan.json' EXIT
+          tofu show -json tfplan > /tmp/flexexa-dev-plan.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-dev-plan.json dev-plan-safety.json
+
+      - name: Render plan
+        working-directory: infra/opentofu/environments/dev
+        run: tofu show -no-color tfplan > tfplan.txt
+
+      - name: Upload plan evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flexexa-opentofu-dev-plan
+          path: |
+            infra/opentofu/environments/dev/tfplan.txt
+            infra/opentofu/environments/dev/dev-plan-safety.json
+          if-no-files-found: error
+          retention-days: 7

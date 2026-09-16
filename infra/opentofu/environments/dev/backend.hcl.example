@@ -1,0 +1,3 @@
+bucket = "flexexa-tofu-state-REPLACE_WITH_ACCOUNT_ID"
+key    = "flexexa/dev/foundation.tfstate"
+region = "eu-north-1"
