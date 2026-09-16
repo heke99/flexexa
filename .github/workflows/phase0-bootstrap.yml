@@ -1,7 +1,7 @@
 name: Flexexa quality verification
 on:
   pull_request:
-    branches: [main]
+    branches: [main, phase/0-foundation]
 permissions:
   contents: read
 jobs:
@@ -20,6 +20,13 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
           pnpm install --frozen-lockfile
+      - name: Inventory locked plan and codebase impact
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pnpm plan:check
+          pnpm index:codebase
+          pnpm impact -- --base "$IMPACT_BASE"
       - name: Verify application scope only
         env:
           IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
