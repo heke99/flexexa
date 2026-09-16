@@ -25,7 +25,7 @@ function fixture() {
   return {
     format_version: '1.2', errored: false, complete: true,
     variables: { aws_region: { value: 'eu-north-1' }, environment: { value: 'dev' }, project: { value: 'flexexa' }, github_repository: { value: 'heke99/flexexa' } },
-    planned_values: { root_module: {
+    planned_values: { outputs: { aws_account_id: { value: '938095765653' }, aws_region: { value: 'eu-north-1' }, environment: { value: 'dev' } }, root_module: {
       resources: [
         ['data.aws_caller_identity.current', { account_id: '938095765653' }],
         ['data.aws_region.current', { name: 'eu-north-1' }],
@@ -80,7 +80,7 @@ const negative = [
   ['unknown checks', (p) => { p.checks = [{ status: 'unknown' }]; }],
   ['malformed checks', (p) => { p.checks = {}; }],
   ['wrong account', (p) => { p.planned_values.root_module.resources[0].values.account_id = '111111111111'; }],
-  ['missing identity', (p) => { p.planned_values.root_module.resources.shift(); }],
+  ['missing identity', (p) => { p.planned_values.root_module.resources.shift(); delete p.planned_values.outputs.aws_account_id; }],
   ['wrong actual region', (p) => { p.planned_values.root_module.resources[1].values.name = 'us-east-1'; }],
   ['wrong AZ selection', (p) => { p.planned_values.root_module.resources[2].values.names.reverse(); }],
   ['wrong configured region', (p) => { p.variables.aws_region.value = 'eu-west-1'; }],
@@ -156,3 +156,21 @@ test('CLI emits only a sanitized summary; malformed JSON and existing output fai
     assert.equal(spawnSync(process.execPath, [executable]).status, 1);
   } finally { rmSync(directory, { force: true, recursive: true }); }
 });
+
+
+test('accepts the observed OpenTofu shape with elided data-source resources', () => {
+  const plan = fixture();
+  plan.planned_values.root_module.resources = [];
+  assert.equal(verifyDevPlan(plan).create, 52);
+});
+for (const [field, invalid] of [['aws_account_id', '111111111111'], ['aws_region', 'us-east-1'], ['environment', 'prod']]) {
+  test(`rejects contradictory ${field} output even with valid data sources`, () => {
+    const plan = fixture(); plan.planned_values.outputs[field].value = invalid;
+    assert.throws(() => verifyDevPlan(plan), /DEV_FOUNDATION_PLAN_REJECTED/);
+  });
+  test(`rejects missing ${field} output when data sources are elided`, () => {
+    const plan = fixture(); plan.planned_values.root_module.resources = [];
+    delete plan.planned_values.outputs[field];
+    assert.throws(() => verifyDevPlan(plan), /DEV_FOUNDATION_PLAN_REJECTED/);
+  });
+}

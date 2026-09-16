@@ -136,11 +136,23 @@ export function verifyDevPlan(plan) {
     if (resource.type !== type) reject(`${resource.address}: type mismatch`);
     checkValues(resource, expected.get(resource.address));
   }
-  subset(data.get('data.aws_caller_identity.current'), { account_id: authority.accountId }, 'AWS identity');
-  const region = data.get('data.aws_region.current');
-  if (!object(region) || (region.name ?? region.region) !== authority.region) reject('AWS region mismatch');
-  const azs = data.get('data.aws_availability_zones.available');
-  if (!object(azs) || !Array.isArray(azs.names) || zones.some((zone, index) => azs.names[index] !== zone)) reject('AWS availability-zone selection mismatch');
+  // OpenTofu can elide unchanged data sources from planned_values. The locked
+  // root outputs are direct references to caller_identity/account_id and region;
+  // require their known values rather than inventing missing data-source evidence.
+  subset(plan.planned_values.outputs?.aws_account_id, { value: authority.accountId }, 'AWS account output');
+  subset(plan.planned_values.outputs?.aws_region, { value: authority.region }, 'AWS region output');
+  subset(plan.planned_values.outputs?.environment, { value: authority.environment }, 'AWS environment output');
+  if (data.has('data.aws_caller_identity.current')) {
+    subset(data.get('data.aws_caller_identity.current'), { account_id: authority.accountId }, 'AWS identity');
+  }
+  if (data.has('data.aws_region.current')) {
+    const region = data.get('data.aws_region.current');
+    if (!object(region) || (region.name ?? region.region) !== authority.region) reject('AWS region mismatch');
+  }
+  if (data.has('data.aws_availability_zones.available')) {
+    const azs = data.get('data.aws_availability_zones.available');
+    if (!object(azs) || !Array.isArray(azs.names) || zones.some((zone, index) => azs.names[index] !== zone)) reject('AWS availability-zone selection mismatch');
+  }
   for (const address of expected.keys()) if (!seen.has(address)) reject(`${address}: missing planned resource`);
   if (!Array.isArray(plan.resource_changes)) reject('missing resource changes');
   const changes = new Map();

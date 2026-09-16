@@ -58,6 +58,9 @@ jobs:
           region = "eu-north-1"
           EOF
           tofu init -input=false -backend-config=/tmp/flexexa-backend.hcl
+          echo "::group::Resolved public provider lock for review"
+          cat .terraform.lock.hcl
+          echo "::endgroup::"
 
       - name: Validate dev configuration
         working-directory: infra/opentofu/environments/dev
