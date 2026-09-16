@@ -49,7 +49,7 @@ jobs:
           action-timeout-s: 10
 
       - name: Check formatting
-        run: tofu fmt -check -recursive infra/opentofu
+        run: tofu fmt -check -diff -recursive infra/opentofu
 
       - name: Initialize dev backend with reviewed provider lock
         working-directory: infra/opentofu/environments/dev
