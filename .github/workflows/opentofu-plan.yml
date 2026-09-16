@@ -3,10 +3,6 @@ name: OpenTofu AWS plan
 on:
   pull_request:
     branches: [main, phase/0-foundation]
-    paths:
-      - "infra/opentofu/**"
-      - ".github/workflows/opentofu-plan.yml"
-      - ".github/workflows/opentofu-apply.yml"
 
 permissions:
   contents: read
@@ -18,10 +14,19 @@ concurrency:
 
 jobs:
   plan-dev:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Reject untrusted planning context
+        env:
+          PR_HEAD_REPO_ID: ${{ github.event.pull_request.head.repo.id }}
+          PR_HEAD_REPO_NAME: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          test "$GITHUB_EVENT_NAME" = 'pull_request'
+          test "$GITHUB_REPOSITORY" = 'heke99/flexexa'
+          test "$GITHUB_REPOSITORY_ID" = '1362385793'
+          test "$PR_HEAD_REPO_ID" = "$GITHUB_REPOSITORY_ID"
+          test "$PR_HEAD_REPO_NAME" = "$GITHUB_REPOSITORY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
