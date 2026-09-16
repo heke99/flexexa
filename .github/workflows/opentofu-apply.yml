@@ -18,10 +18,17 @@ concurrency:
 
 jobs:
   apply-dev:
-    if: github.ref == 'refs/heads/main' && inputs.confirm == 'APPLY_DEV'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'APPLY_DEV'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+
+      - name: Test fail-closed development plan gate
+        run: node --test infra/opentofu/scripts/verify-dev-plan.test.mjs
 
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
@@ -56,36 +63,39 @@ jobs:
         working-directory: infra/opentofu/environments/dev
         run: tofu validate
 
-      - name: Create reviewed apply plan
+      - name: Create first-foundation apply plan
         working-directory: infra/opentofu/environments/dev
-        run: tofu plan -input=false -no-color -out=tfplan
+        run: tofu plan -input=false -lock-timeout=5m -no-color -out=tfplan
 
-      - name: Render pre-apply plan
+      - name: Reject unreviewed changes before apply
         working-directory: infra/opentofu/environments/dev
-        run: tofu show -no-color tfplan > pre-apply-plan.txt
+        run: |
+          trap 'rm -f /tmp/flexexa-dev-plan.json' EXIT
+          tofu show -json tfplan > /tmp/flexexa-dev-plan.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-dev-plan.json pre-apply-safety.json
+          tofu show -no-color tfplan > pre-apply-plan.txt
 
-      - name: Apply reviewed plan
+      - name: Apply the validated saved plan
         working-directory: infra/opentofu/environments/dev
-        run: tofu apply -input=false -auto-approve tfplan
+        run: tofu apply -input=false -lock-timeout=5m -auto-approve tfplan
 
       - name: Verify zero drift after apply
         working-directory: infra/opentofu/environments/dev
         shell: bash
         run: |
           set +e
-          tofu plan -input=false -lock=false -detailed-exitcode -no-color > post-apply-plan.txt
+          tofu plan -input=false -lock-timeout=5m -detailed-exitcode -no-color -out=post-apply.tfplan > post-apply-plan.txt
           code=$?
           set -e
-          if [ "$code" -eq 0 ]; then
-            echo "Post-apply verification: zero drift."
-          elif [ "$code" -eq 2 ]; then
-            echo "Post-apply verification found drift." >&2
+          if [ "$code" -ne 0 ]; then
             cat post-apply-plan.txt
-            exit 2
-          else
-            cat post-apply-plan.txt
+            echo "Post-apply verification failed or found drift." >&2
             exit "$code"
           fi
+          trap 'rm -f /tmp/flexexa-post-apply.json' EXIT
+          tofu show -json post-apply.tfplan > /tmp/flexexa-post-apply.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-post-apply.json post-apply-safety.json
+          echo "Post-apply verification: zero drift and reviewed dev scope."
 
       - name: Upload apply evidence
         if: always()
@@ -94,5 +104,8 @@ jobs:
           name: flexexa-opentofu-dev-apply-evidence
           path: |
             infra/opentofu/environments/dev/pre-apply-plan.txt
+            infra/opentofu/environments/dev/pre-apply-safety.json
             infra/opentofu/environments/dev/post-apply-plan.txt
+            infra/opentofu/environments/dev/post-apply-safety.json
           if-no-files-found: warn
+          retention-days: 7

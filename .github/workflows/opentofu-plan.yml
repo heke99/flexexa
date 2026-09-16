@@ -2,8 +2,7 @@ name: OpenTofu AWS plan
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main, phase/0-foundation]
     paths:
       - "infra/opentofu/**"
       - ".github/workflows/opentofu-plan.yml"
@@ -13,11 +12,23 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: flexexa-opentofu-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   plan-dev:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+
+      - name: Test fail-closed development plan gate
+        run: node --test infra/opentofu/scripts/verify-dev-plan.test.mjs
 
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
@@ -56,6 +67,13 @@ jobs:
         working-directory: infra/opentofu/environments/dev
         run: tofu plan -input=false -lock=false -no-color -out=tfplan
 
+      - name: Enforce reviewed first-foundation scope
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          trap 'rm -f /tmp/flexexa-dev-plan.json' EXIT
+          tofu show -json tfplan > /tmp/flexexa-dev-plan.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-dev-plan.json dev-plan-safety.json
+
       - name: Render plan
         working-directory: infra/opentofu/environments/dev
         run: tofu show -no-color tfplan > tfplan.txt
@@ -64,5 +82,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: flexexa-opentofu-dev-plan
-          path: infra/opentofu/environments/dev/tfplan.txt
+          path: |
+            infra/opentofu/environments/dev/tfplan.txt
+            infra/opentofu/environments/dev/dev-plan-safety.json
           if-no-files-found: error
+          retention-days: 7
