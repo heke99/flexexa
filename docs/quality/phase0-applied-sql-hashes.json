@@ -20,7 +20,8 @@
     "supabase/migrations/20260910094434_phase0_country_pack_defaults.sql": "f272e7cf87e25991c46fd4586aef8c1210ab723e933d145d59cc636df744b8e9",
     "supabase/migrations/20260910131811_phase0_outbox_delivery.sql": "a809b4e5281d590070a874632502d4911b1ae6eff163cd5fc908517140b1a8b3",
     "supabase/migrations/20260910142645_phase0_policy_registry.sql": "9ef425da9994645678b7c8292f090b88e4852d7f06cacd993a4644ac1ba350a1",
-    "supabase/migrations/20260910145540_phase0_policy_inbox.sql": "a811298ccad01f483385922370691911ba285ff2988346eed6f487c22fe11033"
+    "supabase/migrations/20260910145540_phase0_policy_inbox.sql": "a811298ccad01f483385922370691911ba285ff2988346eed6f487c22fe11033",
+    "supabase/migrations/20260917070939_phase0_database_performance.sql": "5e500ab698f1243825f31facbbce1f422c21f87b46d972ce73c9e6e4c0bbbca2"
   },
   "appended_dev_verified_versions": [
     "20260909135947",
@@ -34,6 +35,7 @@
     "20260910094434",
     "20260910131811",
     "20260910142645",
-    "20260910145540"
+    "20260910145540",
+    "20260917070939"
   ]
 }
