@@ -1,0 +1,27 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.2.7-distroless@sha256:3040d3639d24b8edc14eac38bcf916edc7da177e0586c23cdab75bac3dc6928a
+    user: "101:101"
+    entrypoint: ["/usr/bin/clickhouse", "server", "--config-file=/etc/clickhouse-server/config.xml"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    volumes:
+      - ./config.xml:/etc/clickhouse-server/config.xml:ro
+      - ${FLEXEXA_CLICKHOUSE_USERS:?ephemeral users required}:/etc/clickhouse-server/users.xml:ro
+      - data:/var/lib/clickhouse
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=0700,size=64m
+      - /var/log/clickhouse-server:uid=101,gid=101,mode=0700,size=32m
+    ports: ["127.0.0.1::8123"]
+    healthcheck:
+      test: [CMD, /usr/bin/clickhouse, client, --user, health, --query, "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+volumes:
+  data:

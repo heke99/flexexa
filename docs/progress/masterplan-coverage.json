@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "source_path": "FLEXEXA_MASTER_BUILD_PROMPT_V1.md",
+  "source_sha256": "5b1f7abdbff8c291082f9b48be5a1713ac910098898dc654115a13c82b7d687e",
+  "catalog_sha256": "7affb9bb810d2bc20ea2453c966e4647f4a282cfa295ab677ad41edcde1ba09a",
+  "point_count": 3701,
+  "sections": [
+    {"id": 0, "status": "partial", "note": "Not fully verified."},
+    {"id": 1, "status": "partial", "note": "Not fully verified."},
+    {"id": 2, "status": "partial", "note": "Not fully verified."},
+    {"id": 3, "status": "partial", "note": "Not fully verified."},
+    {"id": 4, "status": "partial", "note": "Not fully verified."},
+    {"id": 5, "status": "partial", "note": "Not fully verified."},
+    {"id": 6, "status": "partial", "note": "Not fully verified."},
+    {"id": 7, "status": "partial", "note": "Not fully verified."},
+    {"id": 8, "status": "planned", "note": "Planned."},
+    {"id": 9, "status": "planned", "note": "Planned."},
+    {"id": 10, "status": "planned", "note": "Planned."},
+    {"id": 11, "status": "planned", "note": "Planned."},
+    {"id": 12, "status": "planned", "note": "Planned."},
+    {"id": 13, "status": "planned", "note": "Planned."},
+    {"id": 14, "status": "planned", "note": "Planned."},
+    {"id": 15, "status": "partial", "note": "Not fully verified."},
+    {"id": 16, "status": "partial", "note": "Not fully verified."},
+    {"id": 17, "status": "partial", "note": "Not fully verified."},
+    {"id": 18, "status": "partial", "note": "Human authorization and machine preflight exist; full resource-specific machine workflows remain."},
+    {"id": 19, "status": "partial", "note": "Not fully verified."},
+    {"id": 20, "status": "partial", "note": "Not fully verified."},
+    {"id": 21, "status": "partial", "note": "Not fully verified."},
+    {"id": 22, "status": "partial", "note": "Not fully verified."},
+    {"id": 23, "status": "planned", "note": "Planned."},
+    {"id": 24, "status": "planned", "note": "Planned."},
+    {"id": 25, "status": "partial", "note": "Not fully verified."},
+    {"id": 26, "status": "planned", "note": "Planned."},
+    {"id": 27, "status": "planned", "note": "Planned."},
+    {"id": 28, "status": "partial", "note": "Not fully verified."},
+    {"id": 29, "status": "planned", "note": "Planned."},
+    {"id": 30, "status": "planned", "note": "Planned."},
+    {"id": 31, "status": "planned", "note": "Planned."},
+    {"id": 32, "status": "partial", "note": "Not fully verified."},
+    {"id": 33, "status": "partial", "note": "Not fully verified."},
+    {"id": 34, "status": "planned", "note": "Planned."},
+    {"id": 35, "status": "partial", "note": "Not fully verified."},
+    {"id": 36, "status": "partial", "note": "Enode is optional; canonical routing/registry exists. Live Enode and first-party connectivity not verified."},
+    {"id": 37, "status": "partial", "note": "Not fully verified."},
+    {"id": 38, "status": "planned", "note": "Planned."},
+    {"id": 39, "status": "planned", "note": "Planned."},
+    {"id": 40, "status": "planned", "note": "Planned."},
+    {"id": 41, "status": "partial", "note": "Not fully verified."},
+    {"id": 42, "status": "planned", "note": "Planned."},
+    {"id": 43, "status": "planned", "note": "Planned."},
+    {"id": 44, "status": "planned", "note": "Planned."},
+    {"id": 45, "status": "planned", "note": "Planned."},
+    {"id": 46, "status": "planned", "note": "Planned."},
+    {"id": 47, "status": "planned", "note": "Planned."},
+    {"id": 48, "status": "planned", "note": "Planned."},
+    {"id": 49, "status": "planned", "note": "Planned."},
+    {"id": 50, "status": "planned", "note": "Planned."},
+    {"id": 51, "status": "planned", "note": "Planned."},
+    {"id": 52, "status": "planned", "note": "Planned."},
+    {"id": 53, "status": "planned", "note": "Planned."},
+    {"id": 54, "status": "planned", "note": "Planned."},
+    {"id": 55, "status": "planned", "note": "Planned."},
+    {"id": 56, "status": "planned", "note": "Planned."},
+    {"id": 57, "status": "planned", "note": "Planned."},
+    {"id": 58, "status": "planned", "note": "Planned."},
+    {"id": 59, "status": "planned", "note": "Planned."},
+    {"id": 60, "status": "planned", "note": "Planned."},
+    {"id": 61, "status": "planned", "note": "Planned."},
+    {"id": 62, "status": "planned", "note": "Planned."},
+    {"id": 63, "status": "planned", "note": "Planned."},
+    {"id": 64, "status": "planned", "note": "Planned."},
+    {"id": 65, "status": "planned", "note": "Planned."},
+    {"id": 66, "status": "planned", "note": "Planned."},
+    {"id": 67, "status": "partial", "note": "Not fully verified."},
+    {"id": 68, "status": "partial", "note": "Machine preflight and identity administration exist; trusted provisioning, token custody and signed external webhooks remain."},
+    {"id": 69, "status": "planned", "note": "Planned."},
+    {"id": 70, "status": "partial", "note": "Not fully verified."},
+    {"id": 71, "status": "partial", "note": "Not fully verified."},
+    {"id": 72, "status": "planned", "note": "Planned."},
+    {"id": 73, "status": "planned", "note": "Planned."},
+    {"id": 74, "status": "planned", "note": "Planned."},
+    {"id": 75, "status": "partial", "note": "Not fully verified."},
+    {"id": 76, "status": "partial", "note": "Not fully verified."},
+    {"id": 77, "status": "partial", "note": "Pinned application/database CI exists. Full runtime/image/restore/security/production deployment gates remain."},
+    {"id": 78, "status": "partial", "note": "Not fully verified."},
+    {"id": 79, "status": "partial", "note": "Not fully verified."},
+    {"id": 80, "status": "planned", "note": "Planned."},
+    {"id": 81, "status": "planned", "note": "Planned."},
+    {"id": 82, "status": "planned", "note": "Planned."},
+    {"id": 83, "status": "partial", "note": "Phase 0 is in progress; phases 1–13 remain planned. PR numbers are not phase numbers."},
+    {"id": 84, "status": "partial", "note": "Not fully verified."},
+    {"id": 85, "status": "partial", "note": "Not fully verified."},
+    {"id": 86, "status": "partial", "note": "Not fully verified."},
+    {"id": 87, "status": "partial", "note": "Not fully verified."}
+  ],
+  "phases": [
+    {"id": 0, "status": "partial", "note": "All 21 foundation entries reviewed individually. Isolated verification is recorded; AWS apply/hosted operations and remaining workflows prevent Phase 0 completion."},
+    {"id": 1, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 2, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 3, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 4, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 5, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 6, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 7, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 8, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 9, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 10, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 11, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 12, "status": "planned", "note": "Not delivered or approved."},
+    {"id": 13, "status": "planned", "note": "Not delivered or approved."}
+  ],
+  "assessments": [
+  {
+    "point_id": "S83-f252f19ef532e2fd-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "In progress. Isolated foundation evidence exists through PR #36; isolated logical restore is verified in PR #37 candidate CI. Hosted runtime, operational recovery and remaining foundation workflows are not accepted."
+  },
+  {
+    "point_id": "S83-052a72be6e01041b-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Pinned workspace, canonical packages and full lint/typecheck/test/build run in CI. Evidence: PR #4 and current foundation CI; aggregate main promotion remains pending."
+  },
+  {
+    "point_id": "S83-b3ba984e31dd3c37-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Six application/database/runtime jobs execute real invariants and image scans. Main branch protection/review and infrastructure apply gates still need final acceptance."
+  },
+  {
+    "point_id": "S83-5c0402fb824ed966-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Identity, RabbitMQ, Valkey, ClickHouse and Collector have real isolated container verification and exact-image scans (PR #24, #26–31). Hosted runtime acceptance remains pending."
+  },
+  {
+    "point_id": "S83-f39b03756f1afed1-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Authoritative foundation code and bootstrap/state/OIDC exist. Reviewed 52-resource plan was not applied; no fresh post-apply zero-drift proof."
+  },
+  {
+    "point_id": "S83-c5a293fcedc0b7f7-1",
+    "status": "blocked",
+    "evidence_ids": [],
+    "note": "2026-09-10T15:35:47Z readback: account 938095765653, eu-north-1 has no ECS clusters and no flexexa-dev-vpc. Approved main-only workflow_dispatch start is not exposed by the current connector. Do not bypass its trust boundary."
+  },
+  {
+    "point_id": "S83-b8339fb143dad685-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "19 applied/pinned migrations and 1,322 application catalog objects matched development at PR #36. PR #37 candidate CI verifies actual isolated logical restore; hosted backup/PITR and final fresh readback remain gates."
+  },
+  {
+    "point_id": "S83-9a73e0eda0826c8e-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "PR #28 verifies actual typed tenant telemetry, isolation, retention, restart and exact migration hashes. Hosted ingestion, access and operational recovery remain pending."
+  },
+  {
+    "point_id": "S83-9ec702cf3118df3a-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "PR #27 verifies actual broker failures/restart; PR #34/#36 verify SQL outbox/inbox and lost-confirm/lost-ACK recovery. Hosted workers, other consumers and operational DLQ recovery remain pending."
+  },
+  {
+    "point_id": "S83-95cc240da1bca4bd-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "PR #26 verifies protocol/isolation, concurrent leases, expiry/restart and scan. Hosted deployment and application-specific usage remain pending."
+  },
+  {
+    "point_id": "S83-35fc50c15cd4b84d-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Canonical organizations, tenants and memberships have SQL constraints, temporal authorization and two-tenant negative tests (PR #5–7). Scoped foundation behavior is verified; full operational acceptance remains pending."
+  },
+  {
+    "point_id": "S83-ff4c3d43a9f967bd-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Canonical core, Connect, identity, policy, audit and events use synchronized SQL/TypeScript contracts and immutable migration history. Later product schemas remain in their locked phases; foundation workflow gaps remain tracked."
+  },
+  {
+    "point_id": "S83-5f9c161f1ae5650b-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Database tests reject cross-tenant relationships for implemented tenant-owned models. PR #37 additionally tests enforcement after restore. New domains must retain the same invariant."
+  },
+  {
+    "point_id": "S83-af2f8d614cf9f62b-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Live-session, permission-based RLS and negative tenant tests execute in clean replay. Default-deny unimplemented paths remain denied; no implied grant from table existence."
+  },
+  {
+    "point_id": "S83-81526892e20b8011-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Temporal tenant roles, MFA platform policy administration and scoped service grants have real expiry/revocation/concurrency tests. Credential lifecycle and general approval/break-glass workflows remain pending."
+  },
+  {
+    "point_id": "S83-5f8c769666a04b0b-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "PR #32–36 verify deterministic limits, Ed25519 primitives, immutable sandbox registry, independent approval, readiness and inbox. Binding administration, trusted signing/distribution and production criteria remain open."
+  },
+  {
+    "point_id": "S83-446393ec16f64760-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Canonical versioned event validation, transactional outbox/inbox and actual broker redelivery are verified. Hosted delivery, neutral-event classification and remaining consumers are open."
+  },
+  {
+    "point_id": "S83-6c3d738c6f5ef712-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Strict canonical parsers, typed RPC transport, real HTTP Auth/provisioning, idempotency and correlation are verified. Hosted API access/credential lifecycle and applicable public API acceptance remain open."
+  },
+  {
+    "point_id": "S83-a1f7dfc87271a679-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Transactional append-only human/platform/service audit and tenant linkage are tested. Hosted archival/access/recovery and remaining audited workflows remain open."
+  },
+  {
+    "point_id": "S83-e8b6cd59a9bf9086-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "PR #29–31 verify redacted correlation, real SDK span parentage and Collector forwarding/retry/self-metrics. Durable destination, retention/access, domain metrics, dashboards and alerts remain open."
+  },
+  {
+    "point_id": "S83-e500a50852b390f5-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "Provider-neutral Connect registry/accounts/routing and replaceable Enode adapter are implemented and tested. Consent/link/discovery and operational provider lifecycle remain open; live charging/OCPP demo stays in Phase 1."
+  },
+  {
+    "point_id": "S83-b21dd5e610e43369-1",
+    "status": "partial",
+    "evidence_ids": [],
+    "note": "PR #25 verifies immutable Swedish metadata and SQL/API defaults. Tax/market implementations and country expansion remain in their later locked phases; structure does not qualify live market behavior."
+  }
+],
+  "evidence": []
+}

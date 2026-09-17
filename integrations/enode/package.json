@@ -1,0 +1,23 @@
+{
+  "name": "@flexexa/enode-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./normalize-soc": "./src/normalize-soc.ts",
+    "./webhook-integrity": "./src/webhook-integrity.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@flexexa/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2"
+  }
+}

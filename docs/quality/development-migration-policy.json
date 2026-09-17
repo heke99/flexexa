@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "project_id": "zhgwlvmtvwjftyjmgljw",
+  "historical_exceptions": {
+    "20260909104034": {
+      "source_sha256": "7ff71974a20be3fb73e1a3dddeb5d2855eb1d65973f48f3198cab0348d6161b2",
+      "recorded_sha256": "a07a78ed64dde94a40a3d29321c23930d45b799be60a9fff6f3a8d9fb3649c60",
+      "recorded_bytes": 11572,
+      "reason": "Reviewed historical comments/formatting difference; literal-preserving SQL token comparison matched. No generic normalization is permitted for new migrations."
+    },
+    "20260909104116": {
+      "source_sha256": "39b57eef587d4facb7ef14569fccfea9b20dfab4099405f9c19e5cdb39335c29",
+      "recorded_sha256": "8e14f620c93e450903ea1b309f7bdb2a34b2572bd7d6771f6d8fcb871bf66919",
+      "recorded_bytes": 10089,
+      "reason": "Reviewed historical comments/formatting difference; literal-preserving SQL token comparison matched. No generic normalization is permitted for new migrations."
+    },
+    "20260909104210": {
+      "source_sha256": "7050604ff1429f60cb7baa16aba004939da201b77886005d8783059551fcc8b5",
+      "recorded_sha256": "0a1aaf33b3bdc673debe8165c61106407f234ce4c3c0200ca79beadd8100d2ab",
+      "recorded_bytes": 6806,
+      "reason": "Reviewed historical comments/formatting difference; literal-preserving SQL token comparison matched. No generic normalization is permitted for new migrations."
+    },
+    "20260909112319": {
+      "source_sha256": "b6fc8259f91b7fff722a2ffd3f6c270fdb3ed39568c6315ccd1b07670b881b9b",
+      "recorded_sha256": "64b769d24619b13d1dfddbbb944494dd01e640b7cc3abe70e6ace59188571af6",
+      "recorded_bytes": 6556,
+      "reason": "Reviewed historical comments/formatting difference; literal-preserving SQL token comparison matched. No generic normalization is permitted for new migrations."
+    }
+  }
+}

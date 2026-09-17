@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { tenantId, DomainError } from '@flexexa/domain';
+import { parseCreateCustomerRequest, publicError } from '../src/index.ts';
+const A=tenantId('a0000000-0000-4000-8000-000000000001');
+const base=()=>({tenant_id:A,idempotency_key:'customer-001',correlation_id:A,payload:{customer_type:'person',display_name:'Test'}});
+test('create request uses canonical tenant and idempotency scope',()=>{const p=parseCreateCustomerRequest(base(),A);assert.equal(p.payload.external_customer_id,null);assert.equal(p.tenant_id,A);});
+test('body cannot change actor, permissions, state or tenant',()=>{assert.throws(()=>parseCreateCustomerRequest({...base(),tenant_id:'b0000000-0000-4000-8000-000000000001'},A),{code:'TENANT_MISMATCH'});for(const field of ['actor_id','role','is_admin','policy_version','status'])assert.throws(()=>parseCreateCustomerRequest({...base(),[field]:'spoofed'},A));assert.throws(()=>parseCreateCustomerRequest({...base(),payload:{...base().payload,tenant_id:A}},A));});
+test('invalid keys and payload types reject without coercion',()=>{for(const key of ['',null,' leading','trailing ','a\nsecret','x'.repeat(129)])assert.throws(()=>parseCreateCustomerRequest({...base(),idempotency_key:key},A));assert.throws(()=>parseCreateCustomerRequest({...base(),payload:{customer_type:['person'],display_name:'x'}},A));});
+test('public errors never expose internal SQL or credentials',()=>{assert.equal(publicError(new Error('password=fixture SQL select'),A).message,'INTERNAL_ERROR');assert.equal(publicError(new DomainError('PERMISSION_DENIED','internal detail'),A).message,'PERMISSION_DENIED');});
