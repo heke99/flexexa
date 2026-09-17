@@ -1,6 +1,6 @@
 # Phase 0 — child-FK indexes and statement-cached caller identity
 
-Date: 2026-09-17. Candidate; final CI/live evidence must be recorded in its PR.
+Date: 2026-09-17. Development applied and read back; final tracked-version CI/merge evidence is recorded in PR #47.
 Base: foundation `687541ae53e65686db5f562a10abb8a14cf3d78e`.
 
 ## Scope and routing
@@ -39,8 +39,9 @@ Do not blindly add an index for the provisioning-completion triple FK: existing
 UNIQUE (tenant_id, request_id) bounds a matching lookup to at most one row. Existing
 partial indexes with only `FK-column IS NOT NULL` remain valid for FK equality
 lookups. Unused-index notices in an empty dev database do not justify deletion.
-The advisor may still report the bounded unique-subset case; that is documented
-rather than suppressed or padded with a redundant index.
+The advisor can still report reordered composite equality keys and the bounded
+unique-subset case; these must be assessed against actual indexes, not hidden or
+padded with redundant indexes merely to remove advisory notices.
 
 The new PostgreSQL test checks *every* public/private FK, including future additions.
 It accepts valid/live/ready default B-tree searchable prefixes, simple implied
@@ -69,9 +70,59 @@ The migration bounds lock waits to 5 seconds and statements to 60 seconds. It is
 transactional; larger populated installations must plan online index builds
 separately instead of removing those safeguards.
 
-Before foundation merge: pass complete CI; apply exact SQL only to verified dev;
-reread server-recorded version/content hash; rename only this candidate and append
-the verified ledger entry; rerun full CI and compare fresh live catalog/history.
+Before foundation merge: final tracked-version CI, fresh history/catalog comparison
+and exact-head review must still pass. Applied SQL is now immutable.
+
+## Actual development deployment and evidence
+
+Source candidate `bfa4242f6d2c4723bf8143ec2d505a561cbbed5d` passed quality
+`35192256800`, actual AWS plan `35192256772` and all seven database/runtime jobs
+in `35192256858`. Real PostgreSQL tests: 869 passing assertions across 17 files,
+including 234 new catalog/index/adversarial/RLS/EXPLAIN assertions. All 179 current
+public/private FKs passed the coverage classifier. Logical restore verified 1,338
+application catalog objects, 72 tables (23 Auth), 20 replayed migration rows and
+26 restoration assertions. Existing real Auth, concurrent RPC, RabbitMQ and
+Collector crash-recovery tests and image scans remained enabled and passed.
+
+The first apply attempt was blocked by the tool safety-status check, whose error
+explicitly advised retrying later. At 07:07:01Z the complete application catalog
+and 19 migration rows were still unchanged. One later retry used the same
+`apply_migration` endpoint and exactly the same SQL, without another route,
+splitting statements or changing any safety controls; it succeeded.
+
+Server-recorded migration version: **20260917070939**. The CLI-generated candidate
+filename alone was renamed to match it. SQL: 3,398 bytes, SHA-256
+`5e500ab698f1243825f31facbbce1f422c21f87b46d972ce73c9e6e4c0bbbca2`.
+The 07:09:56Z live readback confirmed the exact name, length and hash, all prior
+19 recorded versions, new indexes present and the superseded prefix removed.
+The applied ledger appends only this version; all historical exceptions remain
+unchanged. No local guess or normalization is used for the server version.
+
+Full catalog comparison uses the existing canonical catalog query: sort every
+(kind,key) by C/UTF-8 order, hash the LF-joined kind<TAB>key<TAB>object-hash list
+without a trailing LF, and also verify object/unique-key counts. Baseline clean
+replay and fresh pre-apply dev both had 1,322 objects and root
+`9f23ff0bdf37bf16383dea881c82a0fb3bac145d732b4e850ea88f6a896f3b77`.
+The complete candidate clean artifact (10484153376) has 1,338 unique objects and
+root `427ec9ca4fb3d5fe9fc7abcd095bac4bceb8c73692a0d31c7ecf1c49cc892265`.
+Fresh live readback at 07:10:48Z has that same complete root and count. This is
+comparison of the entire object-hash map, not only counts or selected tables.
+Full baseline/candidate comparison found exactly 19 added indexes, three removed
+prefix indexes and two changed policies; no other catalog objects differ.
+Final tracked-version CI must independently reproduce this catalog.
+
+Post-apply advisors: both auth_rls_initplan warnings are gone. Security findings
+remain the same 12 informational default-deny/no-policy notices, no WARN/ERROR.
+The performance advisor still reports five FK INFO notices: four use reversed
+composite equality key order (inbox_events, outbox_events, membership_roles and
+role_permissions); provisioning completions uses the unique tenant/request
+subset bounding its triple FK lookup. The exhaustive catalog/negative tests
+verify these access paths. The notices are not suppressed. Existing audit-policy
+composition and Auth-connection-strategy notices are separate follow-up work;
+unused-index notices are expected in this small dev catalog and are not a reason
+to delete otherwise useful indexes. No production speedup is claimed.
+
+Advisor reference: https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys
 
 ## Unresolved hosted boundary
 
