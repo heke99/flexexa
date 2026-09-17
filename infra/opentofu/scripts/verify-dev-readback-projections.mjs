@@ -13,7 +13,7 @@ const reviewed = new Map([
 const routeFields = new Set([
   'cidr_block', 'gateway_id', 'ipv6_cidr_block', 'destination_prefix_list_id',
   'carrier_gateway_id', 'core_network_arn', 'egress_only_gateway_id',
-  'local_gateway_id', 'nat_gateway_id', 'network_interface_id',
+  'local_gateway_id', 'nat_gateway_id', 'network_interface_id', 'odb_network_arn',
   'transit_gateway_id', 'vpc_endpoint_id', 'vpc_peering_connection_id',
 ]);
 const known = (value) => value === false || (object(value) && Object.values(value).every(known))

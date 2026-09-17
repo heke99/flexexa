@@ -24,7 +24,7 @@ function fixture() {
   const vpc = 'vpc-11111111111111111'; const gateway = 'igw-22222222222222222'; const table = 'rtb-33333333333333333';
   Object.assign(get('aws_vpc.this'), { id: vpc, owner_id: '938095765653' });
   Object.assign(get('aws_internet_gateway.this'), { id: gateway, vpc_id: vpc, owner_id: '938095765653' });
-  Object.assign(get('aws_route_table.public'), { id: table, vpc_id: vpc, owner_id: '938095765653', route: [{ cidr_block: '0.0.0.0/0', gateway_id: gateway, nat_gateway_id: '', ipv6_cidr_block: '' }] });
+  Object.assign(get('aws_route_table.public'), { id: table, vpc_id: vpc, owner_id: '938095765653', route: [{ cidr_block: '0.0.0.0/0', gateway_id: gateway, nat_gateway_id: '', ipv6_cidr_block: '', odb_network_arn: '' }] });
   Object.assign(get('aws_route.public_internet'), { route_table_id: table, gateway_id: gateway, state: 'active', origin: 'CreateRoute' });
   for (const purpose of ['raw', 'audit', 'settlement']) {
     const bucket = `flexexa-dev-${purpose}-938095765653`;
@@ -116,6 +116,7 @@ for (const [name, mutate] of negative) test(`rejects ${name}`, () => {
 });
 for (const [name, fn] of [
   ['second route', (v) => v.route.push({ ...v.route[0] })],
+  ['ODB alternate target', (v) => { v.route[0].odb_network_arn = 'arn:aws:odb:eu-north-1:938095765653:odb-network/unreviewed'; }],
   ['alternate target', (v) => { v.route[0].nat_gateway_id = 'nat-44444444444444444'; }],
   ['unknown route attribute', (v) => { v.route[0].unreviewed = ''; }],
   ['route projection wrong gateway', (v) => { v.route[0].gateway_id = 'igw-44444444444444444'; }],
