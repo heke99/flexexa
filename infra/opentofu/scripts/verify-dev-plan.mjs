@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { verifyReadbackProjections } from './verify-dev-readback-projections.mjs';
 
 // This is an intentionally narrow first-foundation gate, not a general apply policy.
 // Expanding this manifest requires review; updates, imports and destroys fail closed.
@@ -107,11 +108,11 @@ function checkValues(resource, expected) {
   }
 }
 
-export function verifyDevPlan(plan) {
+export function verifyDevPlan(plan, { requireNoop = false, requireConverged = false } = {}) {
   if (!object(plan) || typeof plan.format_version !== 'string' || !/^1\.[0-9]+$/.test(plan.format_version)) reject('unsupported plan JSON format');
   if (plan.errored === true || plan.complete === false) reject('errored or incomplete plan');
   if (own(plan, 'deferred_changes') && (!Array.isArray(plan.deferred_changes) || plan.deferred_changes.length !== 0)) reject('deferred changes');
-  if (own(plan, 'resource_drift') && (!Array.isArray(plan.resource_drift) || plan.resource_drift.length !== 0)) reject('unreviewed resource drift');
+  if (own(plan, 'resource_drift') && !Array.isArray(plan.resource_drift)) reject('unreviewed resource drift');
   if (own(plan, 'checks')) {
     if (!Array.isArray(plan.checks) || plan.checks.some((check) => !object(check) || check.status !== 'pass')) reject('failed or unresolved checks');
   }
@@ -176,19 +177,23 @@ export function verifyDevPlan(plan) {
     checkValues({ address: entry.address, type: entry.type, values: entry.change.after }, expected.get(entry.address));
   }
   for (const address of expected.keys()) if (!changes.has(address)) reject(`${address}: missing managed change`);
+  const reviewedReadbackProjections = verifyReadbackProjections(plan, new Map(resources.map((resource) => [resource.address, resource])), changes);
+  if ((requireNoop || requireConverged) && (create !== 0 || noOp !== expected.size)) reject('reconciliation requires every resource to be no-op');
+  if (requireConverged && reviewedReadbackProjections !== 0) reject('post-apply state has not converged');
   return { gate: 'dev-foundation-plan-v1', status: 'passed', ...authority, managedResources: expected.size, create, noOp, update: 0, destroy: 0,
+    reviewedReadbackProjections,
     scope: 'Reviewed first dev foundation only; no service deployment or Phase 0 completion claim.' };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    const [input, output, ...extra] = process.argv.slice(2);
-    if (!input || !output || extra.length) reject('usage: node verify-dev-plan.mjs <tofu-show.json> <summary.json>');
-    const result = verifyDevPlan(JSON.parse(readFileSync(input, 'utf8')));
+    const [input, output, flag, ...extra] = process.argv.slice(2);
+    if (!input || !output || extra.length || (flag && !['--require-noop', '--require-converged'].includes(flag))) reject('usage: node verify-dev-plan.mjs <tofu-show.json> <summary.json> [--require-noop|--require-converged]');
+    const result = verifyDevPlan(JSON.parse(readFileSync(input, 'utf8')), { requireNoop: flag === '--require-noop', requireConverged: flag === '--require-converged' });
     writeFileSync(output, `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     console.log(JSON.stringify(result));
   } catch (error) {
-    console.error(error instanceof Error ? error.message : 'DEV_FOUNDATION_PLAN_REJECTED');
+    console.error(error instanceof Error && error.message.startsWith('DEV_FOUNDATION_PLAN_REJECTED:') ? error.message : 'DEV_FOUNDATION_PLAN_REJECTED: invalid input or output');
     process.exitCode = 1;
   }
 }
