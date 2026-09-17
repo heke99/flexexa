@@ -1,0 +1,31 @@
+{
+  "sourceCommit": "2de68443640de60755bf4b36556753e2491da34d",
+  "sourceTree": "c788e7718c653d8bf319a8c87002755f62c8dc41",
+  "scope": "Existing public web shell and build tooling only; not the full foundation application.",
+  "files": {
+    ".flexexa/impact-config.json": "94ec4f829c3cd2ed28ca45ca4f6dbfb03410ceaa",
+    ".gitignore": "49ab3b70972a5df36e6ef6b5a137c6dfcbad3994",
+    "apps/web/next.config.ts": "2f6491cfba10ee06776b2acad06b2a5e440360b1",
+    "apps/web/package.json": "ffd152fbe98e74db979056827f7a4afb7a77a4dd",
+    "apps/web/src/app/globals.css": "05f4ebb18d8586a4d8af12d3e664c4f3bf00abbe",
+    "apps/web/src/app/layout.tsx": "39cdaf960da7757d95096d14b0bf3b4c1c0e5498",
+    "apps/web/src/app/page.tsx": "27520220ce7b12add0a89768e1143e99f1ec055e",
+    "apps/web/src/lib/public-config.ts": "82fb6d3f8ab25ae11f407955dd72f13d3fc800e1",
+    "apps/web/test/public-config.test.mjs": "2a154814c442a9c999645e6d49cb780649456c16",
+    "apps/web/tsconfig.json": "bed9923fbcb067ae69120989f55c27b6036ca4d1",
+    "docs/progress/masterplan-coverage.json": "72cee7c150854076930d2b42500bdf5424d3336b",
+    "eslint.config.mjs": "9ffc4cf5a7ace5c5dd7c18f2b65146fdf2c99a2e",
+    "pnpm-lock.yaml": "b316c7e15d5e91790fbfbf2c0ae3c163e6fe4628",
+    "pnpm-workspace.yaml": "601078d2fcdafaff40f26c7f01bb273c597f6b38",
+    "scripts/quality/build-codebase-index.mjs": "4c5db03e6d48b90ff8750139a21f141f515d40b9",
+    "scripts/quality/impact-analysis.mjs": "7b2efba17b03900a4701d585bdf4fce81e98b340",
+    "scripts/quality/impact-core.mjs": "6064b619475b83b33bb79df1c2e60a934edb6359",
+    "scripts/quality/impact.test.mjs": "4c5b17d354285c2d1a505736a8e0b685ef587aac",
+    "scripts/quality/index-core.mjs": "794da65b7518d9ea28e5c3782c43c5c8af33352d",
+    "scripts/quality/masterplan-core.mjs": "b40de5bf07ab6d0a7ca23e6016c995daafdce143",
+    "scripts/quality/masterplan-report.mjs": "be64e1b014aa589e14642b1e188e7168fc14d29c",
+    "scripts/quality/masterplan.test.mjs": "bb1d56c058ef8ffa9a8f98fedd4bc21196efd832",
+    "tsconfig.base.json": "f0344cad231286dfe51a22bff1c09b0f72439188",
+    "turbo.json": "8ebd1e5239da6ad610d2618666690fa886e36e65"
+  }
+}
