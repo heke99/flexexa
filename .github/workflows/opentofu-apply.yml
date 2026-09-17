@@ -94,6 +94,13 @@ jobs:
         working-directory: infra/opentofu/environments/dev
         run: tofu apply -input=false -lock-timeout=5m -auto-approve tfplan
 
+      - name: Reconcile reviewed readback projections
+        working-directory: infra/opentofu/environments/dev
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLEXEXA_APPLY_CONFIRM: ${{ inputs.confirm }}
+        run: bash ../../scripts/converge-dev-readback.sh
+
       - name: Verify zero drift after apply
         working-directory: infra/opentofu/environments/dev
         shell: bash
@@ -109,7 +116,7 @@ jobs:
           fi
           trap 'rm -f /tmp/flexexa-post-apply.json' EXIT
           tofu show -json post-apply.tfplan > /tmp/flexexa-post-apply.json
-          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-post-apply.json post-apply-safety.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-post-apply.json post-apply-safety.json --require-converged
           echo "Post-apply verification: zero drift and reviewed dev scope."
 
       - name: Upload apply evidence
@@ -120,6 +127,8 @@ jobs:
           path: |
             infra/opentofu/environments/dev/pre-apply-plan.txt
             infra/opentofu/environments/dev/pre-apply-safety.json
+            infra/opentofu/environments/dev/readback-plan.txt
+            infra/opentofu/environments/dev/readback-safety.json
             infra/opentofu/environments/dev/post-apply-plan.txt
             infra/opentofu/environments/dev/post-apply-safety.json
           if-no-files-found: warn
