@@ -1,0 +1,51 @@
+name: Flexexa web deployment verification
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: flexexa-web-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  web-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Verify reviewed source provenance before installation
+        run: node scripts/web/source-parity.mjs
+      - name: Install the reviewed dependency lock
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.3.4 --activate
+          pnpm install --frozen-lockfile
+      - name: Inventory master plan and full change impact
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pnpm plan:check
+          pnpm index:codebase
+          pnpm impact -- --base "$IMPACT_BASE"
+      - name: Verify the complete deployed web workspace
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+          pnpm verify:web:source
+      - name: Verify actual production HTTP and static assets
+        run: pnpm test:web:http
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-web-verification
+          path: .flexexa/index/*.json
+          if-no-files-found: warn
+          retention-days: 7
