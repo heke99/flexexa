@@ -40,12 +40,14 @@ jobs:
           pnpm test
           pnpm build
           pnpm verify:web:source
-      - name: Verify actual production HTTP and static assets
+      - name: Verify production HTTP and desktop/mobile Chromium
         run: pnpm test:web:http
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: flexexa-web-verification
-          path: .flexexa/index/*.json
+          path: |
+            .flexexa/index/*.json
+            .flexexa/index/web-*.png
           if-no-files-found: warn
           retention-days: 7

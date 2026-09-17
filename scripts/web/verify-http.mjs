@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { assertPage, staticAssets, canary } from './http-contract.mjs';
+import { verifyBrowser } from './verify-browser.mjs';
 
 // Exercise the actual production build on loopback only. This is an HTTP/asset
 // smoke gate, not a browser interaction, Auth, tenant isolation or device test.
@@ -44,6 +45,7 @@ try {
     assert.equal(missing.status, 404, 'WEB_NEGATIVE_ROUTE');
     await missing.body?.cancel();
   }
+  await verifyBrowser(base);
   const report = { gate: 'web-production-http-v1', status: 'passed', page: true, staticAssets: assets.length,
     negativeRoutes: 2, secretCanaryAbsent: true, scope: 'Public shell HTTP/asset verification only; no Auth, browser interaction or operational platform claim.' };
   mkdirSync('.flexexa/index', { recursive: true });
