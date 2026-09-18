@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "source_path": "docs/plans/FLEXEXA_DELIVERY_ACCEPTANCE_V1_1.md",
+  "source_sha256": "93ca213bf21d6e17e6cf965996f09c0f2d3421b8db4457243cc0c980156c5bfc",
+  "baseline_sha256": "5b1f7abdbff8c291082f9b48be5a1713ac910098898dc654115a13c82b7d687e",
+  "requirements": [
+    {
+      "id": "FXP-01",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-02",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-03",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-04",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-05",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-06",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-07",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-08",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-09",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    },
+    {
+      "id": "FXP-10",
+      "status": "planned",
+      "evidence_ids": [],
+      "note": "Acceptance criteria specified; implementation and required evidence are not accepted."
+    }
+  ],
+  "evidence": []
+}
