@@ -24,6 +24,9 @@ outside the repository and image, and removed with the fixture. Only the public 
 certificate is mounted. Docker inspection output never includes runtime environment.
 The fixture verifies Docker health, non-root UID, read-only root and clean SIGTERM exit.
 
+The original candidate below is historical evidence; the 2026-10-02 refresh and its
+current verification gate are recorded in `phase0-identity-security-refresh.md`.
+
 CI verifies the base image signature against the published Distroless identity/issuer
 using Cosign 3.1.3 and builds the resolved digest. The reviewed base digest is `7781e8b4fccf59240bd539af6738cccf8dad4be303165c3a1fa065c48699b937`;
 Cosign and Trivy images are also digest-pinned. CI scans the tested image archive using digest-pinned Trivy 0.74.0, retains a JSON report and

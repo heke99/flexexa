@@ -8,8 +8,14 @@ named volume and temporary credentials. It publishes one dynamically assigned AM
 port on 127.0.0.1; no management UI or public network listener is exposed on the host.
 
 RabbitMQ 4.3.5 Alpine and Pika 1.4.4 are version/hash pinned from publisher metadata.
-The derived image pins libcrypto3/libssl3 to 3.5.8-r0 to fix CVE-2026-14456
-found by CI in the original publisher image. No scan exclusion is used.
+The derived image pins libcrypto3/libssl3 to 3.5.9-r0, retaining the fix for
+CVE-2026-14456 found by CI in the original publisher image. The runtime gate reads
+back both installed package versions. No scan exclusion is used.
+On 2026-10-02 the earlier 3.5.8-r0 pin failed to build; the image's publisher
+manifest identifies Alpine 3.23, whose official x86_64 package index now provides
+3.5.9-r0. The immutable RabbitMQ base, repository configuration and ABI stay unchanged.
+Sources: https://pkgs.alpinelinux.org/package/v3.23/main/x86_64/libcrypto3 and
+https://pkgs.alpinelinux.org/package/v3.23/main/x86_64/libssl3.
 The broker uses UID 999, a read-only root, dropped capabilities, and bounded resources.
 The only durable fixture data lives in its named volume, removed on test completion.
 The bootstrap definition file contains ephemeral salted password hashes and distinct
