@@ -105,7 +105,7 @@ export function assessDeliveryAcceptance(scan, ledger, baselineSha, implementati
     for (const id of r.evidence_ids) {
       const e = evidence.get(id);
       if (!e || !relevant.has(e.case_id)) fail('DELIVERY_EVIDENCE_SCOPE_INVALID');
-      if (r.status === 'verified' && e.implementation_sha256 !== implementationSha) fail('DELIVERY_STALE_EVIDENCE');
+      if (e.implementation_sha256 !== implementationSha) fail('DELIVERY_STALE_EVIDENCE');
       covered.add(e.case_id); used.add(id);
     }
     if (r.status === 'verified') {

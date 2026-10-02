@@ -54,6 +54,19 @@ test('verified without execution evidence is rejected', () => { const l = fresh(
 test('missing one case prevents requirement acceptance', () => { const l = prove(fresh(), 0); l.requirements[0].evidence_ids.pop(); l.evidence.pop(); assert.throws(() => assess(l), /DELIVERY_VERIFIED_WITHOUT_EVIDENCE/u); });
 test('physical/operations proof cannot be replaced by CI', () => { const l = prove(fresh(), 0); l.evidence[2].kind = 'ci'; assert.throws(() => assess(l), /DELIVERY_EVIDENCE_KIND_INVALID/u); });
 test('old implementation evidence cannot approve current code', () => { const l = prove(fresh(), 0); l.evidence[0].implementation_sha256 = 'd'.repeat(64); assert.throws(() => assess(l), /DELIVERY_STALE_EVIDENCE/u); });
+test('stale linked evidence is rejected for every incomplete requirement status', () => {
+  for (const status of ['planned', 'partial', 'blocked']) {
+    const l = prove(fresh(), 0); l.requirements[0].status = status;
+    l.evidence[0].implementation_sha256 = 'd'.repeat(64);
+    assert.throws(() => assess(l), /DELIVERY_STALE_EVIDENCE/u, status);
+  }
+});
+test('current linked evidence remains valid for incomplete requirement statuses without approving delivery', () => {
+  for (const status of ['planned', 'partial', 'blocked']) {
+    const l = prove(fresh(), 0); l.requirements[0].status = status;
+    assert.equal(assess(l).recorded_delivery_ready, false, status);
+  }
+});
 test('skipped or neutral runs are not successful evidence', () => { for (const result of ['skipped', 'neutral', 'failure']) { const l = prove(fresh(), 0); l.evidence[0].result = result; assert.throws(() => assess(l), /DELIVERY_EVIDENCE_INVALID/u); } });
 test('evidence must refer to the acceptance case owned by the requirement', () => { const l = prove(fresh(), 0); l.evidence[0].case_id = 'FXP-02-T1'; assert.throws(() => assess(l), /DELIVERY_EVIDENCE_SCOPE_INVALID/u); });
 test('dependency cannot be accepted by accepting its successor', () => assert.throws(() => assess(prove(fresh(), 1)), /DELIVERY_DEPENDENCY_NOT_READY/u));

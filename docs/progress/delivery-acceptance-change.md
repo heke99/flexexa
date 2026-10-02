@@ -38,3 +38,34 @@ verification or live-schema parity is claimed.
 Acceptance of this PR means the plan and its integrity checks are delivered. It does
 not accept the 31 specified product/hardware/operational/partner cases. Evidence for
 those cases must be collected during the corresponding implementation phases.
+
+## Review remediation — 2026-10-02
+
+Both CodeRabbit findings on head `88c8122a2665e79b61b4bacac0b44e176e03c7b0`
+were checked against the actual code and confirmed. Linked evidence now requires
+the current implementation digest for planned, partial and blocked requirements as
+well as verified requirements. Two regression tests cover rejection across all three
+incomplete statuses and acceptance of current evidence without approving delivery.
+The stale-evidence regression failed before the fix and passed afterwards.
+AGENTS explicitly separates offline metadata checks from independent review or
+verifiable provenance; simulators remain prohibited as substitutes for real evidence.
+
+The repository clone is now available locally. Frozen installation with pnpm 12.3.4
+passed on Node 24.19.0. The existing verify:affected application-only route passed
+quality regressions, workspace lint, typecheck, tests and production build. The
+delivery suite contains 30 tests. Its child pnpm tasks used the runtime's pnpm
+11.25.0; ordinary CI must still verify the final published candidate with the pinned
+12.3.4 toolchain. Index/impact review remains HIGH with application and masterplan
+source/evidence review required. Twenty PostgreSQL migrations and both ClickHouse
+migrations retain exact historical bytes; no live schema readback is claimed.
+The unchanged V1 catalogue retains 88 sections, 14 phases and 3,701 source points.
+All ten FXP requirements remain planned, with no product evidence; plan readiness
+remains false. No AWS apply, device/market action or payout was performed.
+
+Activated: codebase-index, impact-analysis, affected-verification, code-review,
+security-review, test-strategy and verification (including its upstream guidance).
+Story: normative catalogue -> evidence ledger -> validator -> plan CLI readiness;
+its direct report/test consumers and CI invocation were reviewed. Database, browser,
+provider and cloud mutations are intentionally outside this remediation's scope.
+Final-head CI and review remain mandatory before merge; prior-head green checks
+are not evidence for the corrected candidate.

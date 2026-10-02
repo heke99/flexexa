@@ -208,8 +208,11 @@ tests. Record scoped evidence in `docs/progress/delivery-acceptance-coverage.jso
 after checking actual runs, artifacts, deployed/physical results and external approvals.
 
 `pnpm plan:check` validates both catalogues. `pnpm plan:ready` requires both recorded
-coverage sets and clean source; no missing, stale or simulator-only evidence may be
-upgraded to verified delivery. Existing Phase 0 gates stay open until actually accepted.
+coverage sets and clean source. The offline validators check catalogue completeness,
+case-kind labels, hashes, statuses and references; they do not authenticate remote runs,
+physical results or partner approvals. Independent review or verifiable provenance is
+mandatory before recording evidence. Never upgrade missing, stale or simulator-only
+evidence to verified delivery. Existing Phase 0 gates stay open until actually accepted.
 Preserve Phase 1 real charging, Phase 4 flex shadow and Phase 5 partner pilot boundaries,
 as well as Phases 2/3 and the full later roadmap. Never infer a Bixia API, signed pilot,
 market approval or physical control capability from this documentation change.
