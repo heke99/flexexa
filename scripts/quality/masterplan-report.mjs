@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {scanMasterplan,assessMasterplan} from './masterplan-core.mjs';
+import {scanDeliveryAcceptance,assessDeliveryAcceptance,combinePlanReadiness,DELIVERY_SOURCE,DELIVERY_COVERAGE} from './delivery-acceptance.mjs';
 const root=path.resolve(import.meta.dirname,'../..'),args=process.argv.slice(2);
 if(args.some(a=>!['--check','--require-ready'].includes(a))||args.length!==new Set(args).size)throw Error('PLAN_ARGUMENT_INVALID');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
@@ -17,10 +18,15 @@ for(const file of files){
  const bytes=fs.readFileSync(absolute);digest.update(`${file}\0${bytes.length}\0`);digest.update(bytes);
 }
 const scan=scanMasterplan(read('FLEXEXA_MASTER_BUILD_PROMPT_V1.md'));
-const report=assessMasterplan(scan,JSON.parse(read('docs/progress/masterplan-coverage.json')),digest.digest('hex'));
+const implementationSha=digest.digest('hex');
+const report=assessMasterplan(scan,JSON.parse(read('docs/progress/masterplan-coverage.json')),implementationSha);
+report.delivery_acceptance=assessDeliveryAcceptance(scanDeliveryAcceptance(read(DELIVERY_SOURCE)),JSON.parse(read(DELIVERY_COVERAGE)),scan.source_sha256,implementationSha);
+report.baseline_recorded_plan_ready=report.recorded_plan_ready;
 report.clean_worktree=execFileSync('git',['status','--porcelain','--untracked-files=all'],{cwd:root,encoding:'utf8'}).trim()==='';
-report.recorded_plan_ready &&= report.clean_worktree;
+report.recorded_plan_ready=combinePlanReadiness(report.baseline_recorded_plan_ready,report.delivery_acceptance.recorded_delivery_ready,report.clean_worktree);
 const output=path.join(root,'.flexexa/index/masterplan-report.json');fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify({coverage_integrity:report.coverage_integrity,sections:scan.sections.length,phases:scan.phases.length,
- source_points:report.point_count,point_assessments:report.counts,recorded_plan_ready:report.recorded_plan_ready,clean_worktree:report.clean_worktree}));
-if(args.includes('--require-ready')&&!report.recorded_plan_ready){console.error('PLAN_NOT_READY: unverified points/phases or uncommitted source remain.');process.exitCode=2;}
+ source_points:report.point_count,point_assessments:report.counts,delivery_requirements:report.delivery_acceptance.requirement_count,
+ delivery_acceptance_cases:report.delivery_acceptance.case_count,delivery_assessments:report.delivery_acceptance.counts,
+ recorded_plan_ready:report.recorded_plan_ready,clean_worktree:report.clean_worktree}));
+if(args.includes('--require-ready')&&!report.recorded_plan_ready){console.error('PLAN_NOT_READY: unverified baseline/delivery requirements or uncommitted source remain.');process.exitCode=2;}

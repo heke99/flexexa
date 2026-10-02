@@ -198,3 +198,21 @@ section and phase. Coverage integrity is not implementation or production approv
 Record only actually reviewed evidence for the exact scope and current source snapshot.
 Run `pnpm plan:ready` before claiming the entire plan complete; a failing readiness check
 must not be hidden by a green application, coverage or simulator job.
+
+## Delivery acceptance addendum — mandatory continuation context
+Read `docs/plans/FLEXEXA_DELIVERY_ACCEPTANCE_V1_1.md` before continuing product work.
+It supplements the unchanged V1 baseline; it does not replace or renumber phases.
+Map each implementation batch to its FXP requirement/case IDs and existing V1 source
+points. The ten FXP requirements and 31 acceptance cases are specifications, not passed
+tests. Record scoped evidence in `docs/progress/delivery-acceptance-coverage.json` only
+after checking actual runs, artifacts, deployed/physical results and external approvals.
+
+`pnpm plan:check` validates both catalogues. `pnpm plan:ready` requires both recorded
+coverage sets and clean source. The offline validators check catalogue completeness,
+case-kind labels, hashes, statuses and references; they do not authenticate remote runs,
+physical results or partner approvals. Independent review or verifiable provenance is
+mandatory before recording evidence. Never upgrade missing, stale or simulator-only
+evidence to verified delivery. Existing Phase 0 gates stay open until actually accepted.
+Preserve Phase 1 real charging, Phase 4 flex shadow and Phase 5 partner pilot boundaries,
+as well as Phases 2/3 and the full later roadmap. Never infer a Bixia API, signed pilot,
+market approval or physical control capability from this documentation change.
