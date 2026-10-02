@@ -50,6 +50,8 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         assert run([*compose, 'exec', '-T', 'rabbitmq', 'id', '-u'], env).stdout.strip() == '999'
         version = run([*compose, 'exec', '-T', 'rabbitmq', 'rabbitmq-diagnostics', '-q', 'server_version'], env).stdout.strip()
         assert version == '4.3.5', version
+        openssl_packages = sorted(run([*compose, 'exec', '-T', 'rabbitmq', 'apk', 'info', '-v', 'libcrypto3', 'libssl3'], env).stdout.strip().splitlines())
+        assert openssl_packages == ['libcrypto3-3.5.9-r0', 'libssl3-3.5.9-r0'], openssl_packages
         port = int(run([*compose, 'port', 'rabbitmq', '5672'], env).stdout.strip().rsplit(':', 1)[1])
         def connect(user='tenant_a', vhost='ci_tenant_a', password=None):
             return pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1', port, vhost,
@@ -153,7 +155,7 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         run([*compose,'stop','--timeout','15','rabbitmq'],env)
         assert run(['inspect','--format','{{.State.ExitCode}}',container],env).stdout.strip()=='0'
         image=run(['inspect','--format','{{.Image}}',container],env).stdout.strip()
-        report={'image':image,'server_version':version,'publisher_confirms':True,'canonical_event_roundtrip':True,'unauthorized_cases':negatives,
+        report={'image':image,'server_version':version,'openssl_packages':openssl_packages,'publisher_confirms':True,'canonical_event_roundtrip':True,'unauthorized_cases':negatives,
             'unroutable_return':True,'unacked_redelivered':True,'dead_letter_verified':True,'duplicate_deliveries':2,'bounded_failed_deliveries':3,
             'persistent_message_survives_restart':True,'non_root_uid':999,'read_only':True,'loopback_amqp_only':True,
             'production_deployed':False,'durable_business_deduplication':False}
