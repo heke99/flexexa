@@ -11,7 +11,8 @@ test('RabbitMQ keeps its immutable base and explicit reviewed OpenSSL patch pins
 });
 test('runtime acceptance checks and reports both installed OpenSSL package versions', () => {
   const source = fs.readFileSync(new URL('scripts/runtime/rabbitmq/verify.py', root), 'utf8');
-  assert.match(source, /'apk', 'info', '-v', 'libcrypto3', 'libssl3'/u);
-  assert.match(source, /assert openssl_packages == \['libcrypto3-3\.5\.9-r0', 'libssl3-3\.5\.9-r0'\]/u);
+  assert.match(source, /'apk', 'info', '--exists', \*openssl_packages/u);
+  assert.match(source, /openssl_packages = \['libcrypto3=3\.5\.9-r0', 'libssl3=3\.5\.9-r0'\]/u);
+  assert.match(source, /assert sorted\(installed\) == \['libcrypto3', 'libssl3'\]/u);
   assert.match(source, /'openssl_packages':openssl_packages/u);
 });

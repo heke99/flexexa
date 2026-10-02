@@ -50,8 +50,10 @@ with tempfile.TemporaryDirectory(prefix='flexexa-rabbit-') as temporary:
         assert run([*compose, 'exec', '-T', 'rabbitmq', 'id', '-u'], env).stdout.strip() == '999'
         version = run([*compose, 'exec', '-T', 'rabbitmq', 'rabbitmq-diagnostics', '-q', 'server_version'], env).stdout.strip()
         assert version == '4.3.5', version
-        openssl_packages = sorted(run([*compose, 'exec', '-T', 'rabbitmq', 'apk', 'info', '-v', 'libcrypto3', 'libssl3'], env).stdout.strip().splitlines())
-        assert openssl_packages == ['libcrypto3-3.5.9-r0', 'libssl3-3.5.9-r0'], openssl_packages
+        openssl_packages = ['libcrypto3=3.5.9-r0', 'libssl3=3.5.9-r0']
+        # --exists checks exact installed version constraints, not package descriptions.
+        installed = run([*compose, 'exec', '-T', 'rabbitmq', 'apk', 'info', '--exists', *openssl_packages], env).stdout.strip().splitlines()
+        assert sorted(installed) == ['libcrypto3', 'libssl3'], installed
         port = int(run([*compose, 'port', 'rabbitmq', '5672'], env).stdout.strip().rsplit(':', 1)[1])
         def connect(user='tenant_a', vhost='ci_tenant_a', password=None):
             return pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1', port, vhost,

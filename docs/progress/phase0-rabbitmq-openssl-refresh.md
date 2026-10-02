@@ -33,3 +33,12 @@ the separate PR #51 scope and all historical PostgreSQL/ClickHouse migrations.
 Ordinary final-head application/database/AMQP and HIGH/CRITICAL image/client scans
 must pass and actual artifacts/reviews must be inspected before merge. No hosted
 deployment, physical control, market access or Phase 0 completion is claimed.
+
+Initial published candidate 80c47f8b5b30c1d25396c0b5340c442ded7d6b0b built
+and started the image (job 110751262676), but its new apk info -v query returned
+descriptions rather than version IDs. This candidate is not accepted. The corrected
+runner uses apk info --exists with exact name=version constraints and checks both
+returned package names before recording the validated constraints. The upstream
+apk-tools query/manual documents version constraint matching and installed-status
+exit codes; https://raw.githubusercontent.com/alpinelinux/apk-tools/v3.0.4/doc/apk-query.8.scd
+was read directly. Final-head runtime and security results remain mandatory.
