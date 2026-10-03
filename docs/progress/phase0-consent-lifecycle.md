@@ -1,6 +1,8 @@
 # Attested customer consent lifecycle
 
 Source base: PR #55 follow-up `0d68e6024b5b0b0874d9c34a4b6e32c77c703df9`.
+The PR targets `phase/0-foundation`, where ordinary CI is enabled, and retains
+the prerequisite merge order #51 -> #53 -> #54 -> #55 before this package.
 Scope: V1 §§18–21, 66, 71, 79, 83; preparation for FXP-02-T1/T2.
 This is a foundation transaction package, not Phase 1 acceptance.
 Relevant source-point IDs include `S21-3547ffa2ba6529bd-1` (grant),
