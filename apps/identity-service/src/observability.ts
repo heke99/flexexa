@@ -10,7 +10,7 @@ export interface RequestLog {
  readonly service:'identity-service';
  readonly request_id:string;
  readonly correlation_id:string;
- readonly route:'/health/live'|'/v1/identity/provisioning/execute'|'unmatched';
+ readonly route:'/health/live'|'/health/ready'|'/v1/identity/provisioning/execute'|'unmatched';
  readonly method:'GET'|'POST'|'other';
  readonly status_code:number;
  readonly duration_ms:number;
@@ -29,7 +29,7 @@ export function observeRequest(request:IncomingMessage,response:ServerResponse,s
  const requestId=randomUUID(),header=request.headers['x-correlation-id'];
  let correlationId=typeof header==='string'&&uuid.test(header)?header.toLowerCase():requestId;
  const started=performance.now();let emitted=false;
- const route=request.url==='/health/live'?'/health/live':request.url==='/v1/identity/provisioning/execute'?'/v1/identity/provisioning/execute':'unmatched';
+ const route=request.url==='/health/live'?'/health/live':request.url==='/health/ready'?'/health/ready':request.url==='/v1/identity/provisioning/execute'?'/v1/identity/provisioning/execute':'unmatched';
  const method=request.method==='GET'?'GET':request.method==='POST'?'POST':'other';
  const requestTrace=serverTrace(request.headers.traceparent,route,method,requestId,correlationId);
  response.setHeader('X-Request-Id',requestId);response.setHeader('X-Correlation-Id',correlationId);

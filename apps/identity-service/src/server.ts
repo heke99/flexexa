@@ -1,5 +1,5 @@
 import {createServer} from 'node:http';
-import type {IncomingMessage} from 'node:http';
+import type {IncomingMessage,Server} from 'node:http';
 import {DomainError,entityId,record,tenantId} from '@flexexa/domain';
 import {connectEnvironment} from '@flexexa/domain/connect';
 import {createProvisioner} from './provision.ts';
@@ -7,6 +7,11 @@ import {createCallerRpc,createReservedAuthAdmin} from './supabase.ts';
 import type {Connection} from './supabase.ts';
 import {observeRequest} from './observability.ts';
 import type {LogSink} from './observability.ts';
+const drains=new WeakMap<Server,()=>void>();
+/** Stop new business admissions before closing HTTP; already admitted requests can finish. */
+export function beginIdentityDrain(server:Server){
+ const drain=drains.get(server);if(!drain)throw Error('IDENTITY_SERVER_UNKNOWN');drain();
+}
 async function body(request:IncomingMessage){
  const chunks:Buffer[]=[];let size=0;
  for await(const chunk of request){size+=chunk.length;if(size>4096)throw new DomainError('VALIDATION_ERROR');chunks.push(chunk);}
@@ -15,15 +20,20 @@ async function body(request:IncomingMessage){
 export function createIdentityServer(config:Connection & {publishableKey:string;adminKey:string;environment:string;logSink?:LogSink}){
  const environment=connectEnvironment(config.environment);
  createReservedAuthAdmin(config,config.adminKey); // Validate configuration before accepting requests.
- let active=0;
- const server=createServer(async(req,res)=>{
+ let active=0,draining=false;
+ // Node checks incomplete requests periodically; its 30s default would hold the
+ // eight admission slots well beyond our 10s receive budget. This is a receive
+ // timeout only: an already received request keeps its transaction/recovery path.
+ const server=createServer({requestTimeout:10000,headersTimeout:10000,connectionsCheckingInterval:1000,keepAliveTimeout:5000},async(req,res)=>{
   const observation=observeRequest(req,res,config.logSink);
   return observation.run(async()=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.setHeader('X-Content-Type-Options','nosniff');
   const reply=(status:number,data:unknown)=>{res.statusCode=status;res.end(JSON.stringify(data));};
   if(req.method==='GET'&&req.url==='/health/live'){reply(200,{status:'alive'});return;}
+  // Admission readiness only; this endpoint does not attest upstream Auth/DB or hosted deployment.
+  if(req.method==='GET'&&req.url==='/health/ready'){reply(draining?503:200,{status:draining?'draining':'ready'});return;}
   if(req.method!=='POST'||req.url!=='/v1/identity/provisioning/execute'){reply(404,{error:'NOT_FOUND'});return;}
-  if(active>=8){reply(503,{error:'UNAVAILABLE'});return;}
+  if(draining||active>=8){reply(503,{error:'UNAVAILABLE'});return;}
   active++;
   try{
    if(req.headers['content-type']?.split(';')[0]?.trim()!=='application/json'||req.headers['content-encoding'])throw new DomainError('VALIDATION_ERROR');
@@ -45,6 +55,8 @@ export function createIdentityServer(config:Connection & {publishableKey:string;
   }finally{active--;}
   });
  });
- server.requestTimeout=10000;server.headersTimeout=10000;server.keepAliveTimeout=5000;server.maxHeadersCount=30;
+ drains.set(server,()=>{draining=true;});
+ server.once('close',()=>{draining=true;});
+ server.maxHeadersCount=30;
  return server;
 }
