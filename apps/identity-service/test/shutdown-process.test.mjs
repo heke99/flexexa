@@ -30,7 +30,8 @@ async function fixture(t){
    SUPABASE_PUBLISHABLE_KEY:credential,SUPABASE_AUTH_ADMIN_KEY:credential},stdio:['ignore','pipe','pipe','ipc']});
  let output='';child.stdout.on('data',data=>{output+=data;});child.stderr.on('data',data=>{output+=data;});
  const exited=once(child,'exit');
- t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;
+ const closed=once(child,'close');
+ t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;await closed;
   assert(!output.includes(credential));assert(!output.includes(id(1)));});
  const origin='http://127.0.0.1:'+port;
  let ready=false;
