@@ -188,6 +188,7 @@ jobs:
           python3 scripts/database/verify-core.py
           python3 scripts/database/verify-connect.py
           python3 scripts/database/verify-provider-accounts.py
+          node --experimental-strip-types scripts/database/verify-consents.mjs
           node --experimental-strip-types scripts/database/verify-rpc-transport.mjs
           node --experimental-strip-types scripts/database/verify-machine-authorization.mjs
           node --experimental-strip-types scripts/database/verify-identity-administration.mjs
