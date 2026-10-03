@@ -1,8 +1,8 @@
 # Attested customer consent lifecycle
 
 Source base: PR #55 follow-up `0d68e6024b5b0b0874d9c34a4b6e32c77c703df9`.
-The PR targets `phase/0-foundation`, where ordinary CI is enabled, and retains
-the prerequisite merge order #51 -> #53 -> #54 -> #55 before this package.
+The PR targets `phase/0-foundation`, where ordinary CI is enabled. Prerequisites
+#51 and the reviewed #53/#54/#55 stack are merged at foundation `3f3952db`.
 Scope: V1 §§18–21, 66, 71, 79, 83; preparation for FXP-02-T1/T2.
 This is a foundation transaction package, not Phase 1 acceptance.
 Relevant source-point IDs include `S21-3547ffa2ba6529bd-1` (grant),
@@ -74,9 +74,25 @@ This package does not implement a command queue or prove cancellation of physica
 
 Final source/run/artifact evidence is recorded in the PR discussion after inspecting
 the actual jobs. No candidate-only result is recorded as verified FXP delivery.
-The CLI-generated new migration is pending/unpinned. The 20 applied migrations and
-their ledger/checksums are unchanged. Hosted promotion needs reviewed successful
-candidate CI followed by exact migration-history and schema readback.
+The CLI-generated candidate was reviewed at `7e7ce1c`; its final exclusion-wait
+follow-up was independently inspected at `c87b24b`. All ordinary final-head
+workflows passed: quality `37155554445`, database/runtime `37155554405` (seven jobs),
+and AWS plan `37155554414`. The actual database job passed 874 SQL assertions,
+171 shared fixtures, 60 concurrent calls and the observed actor-suspension case.
+Final atomic counts are six consents, five revoked, eleven receipts/audits/outbox
+facts each and zero unfinished receipts; no physical commands were sent.
+
+The exact reviewed SQL was promoted to development on 2026-10-03. Supabase assigned
+authoritative version `20261003214306`; the source filename now follows that history
+entry and the applied ledger pins its unchanged SQL hash
+`ee724c3005027c5bf87a03294f763e4f504e03e660e7661a0cccfcb951249737` (20,196 bytes).
+All preceding 20 versions/names/bytes/hashes and source files remain unchanged.
+Readback at 21:43 UTC has 21 migration entries and exactly the 1,396 reviewed clean
+CI catalog fingerprints, with zero additions/removals/changed fingerprints relative
+to that artifact. The new table has zero rows, two consent permissions are present,
+management requires MFA, and no public table lacks RLS. No customer data was seeded.
+This schema promotion does not verify a hosted customer/Auth/UI/control flow.
+The filename/ledger/readback metadata follow-up retains ordinary source CI gates.
 
 The `assets` owner-key constraint builds a blocking unique index. Read-only development
 inspection at 2026-10-03 21:30 UTC found zero asset rows and 114,688 relation bytes,
