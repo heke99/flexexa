@@ -175,6 +175,9 @@ begin
   update public.consents set status='revoked',revoked_at=clock_timestamp(),revoked_by=actor,revocation_reason=n->>'reason_code' where tenant_id=p_tenant_id and id=resource;
   outcome:='revoked';
  end if;
+ -- An INSERT may wait on the exclusion constraint after the earlier actor check.
+ -- Reauthorize after that wait before recording any successful transaction facts.
+ perform private.flexexa_assert_permission(p_tenant_id,'consents.manage');
  response:=jsonb_build_object('tenant_id',p_tenant_id,'resource_type','consent','resource_id',resource,'environment',n->>'environment',
   'correlation_id',p_correlation_id,'idempotency_key',p_idempotency_key,'status',outcome);
  select organization_id into org from public.tenants where id=p_tenant_id;

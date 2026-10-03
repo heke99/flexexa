@@ -65,7 +65,9 @@ This package does not implement a command queue or prove cancellation of physica
 - `verify-consents.mjs` exercises real typed SQL round trips and 60 concurrent calls:
   same-key grants, conflicting payloads, distinct-key overlaps, and same/distinct-key
   revocations. Real held transactions test both read/revoke lock directions; a later
-  check rejects the old consent after revocation and regrant.
+  check rejects the old consent after revocation and regrant. Another held revocation
+  forces a grant to wait on the exclusion constraint; after observing its actual lock
+  wait, the test suspends the actor and verifies denial/rollback after the wait.
 - Full `verify:affected -- --base 0d68e602` passed local application lint/typecheck/tests/
   build. Exit 2 explicitly retains specialized database/workflow/review gates. Local
   Docker is unavailable; clean Supabase replay and actual concurrency run in ordinary CI.
@@ -75,6 +77,13 @@ the actual jobs. No candidate-only result is recorded as verified FXP delivery.
 The CLI-generated new migration is pending/unpinned. The 20 applied migrations and
 their ledger/checksums are unchanged. Hosted promotion needs reviewed successful
 candidate CI followed by exact migration-history and schema readback.
+
+The `assets` owner-key constraint builds a blocking unique index. Read-only development
+inspection at 2026-10-03 21:30 UTC found zero asset rows and 114,688 relation bytes,
+so that build is bounded for this specific small development target. Recheck size and
+lock availability immediately before promotion. Larger populated installations require
+a separately reviewed concurrent index build outside the migration transaction,
+then `ADD CONSTRAINT ... UNIQUE USING INDEX`; this is not a production online-build plan.
 
 ## Consumer and skill routing
 

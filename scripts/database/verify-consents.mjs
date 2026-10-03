@@ -101,8 +101,11 @@ async function held(command, probe) {
   child.stdin.write(`${begin} ${command}\n\\echo CONSENT_LOCK_HELD\n`);
   try {
     await ready;
-    const result = await query(`${begin} set local lock_timeout='100ms'; ${probe} commit;`);
-    assert.notEqual(result.code, 0); assert.match(result.err, /lock timeout/u);
+    if (typeof probe === 'function') await probe();
+    else {
+      const result = await query(`${begin} set local lock_timeout='100ms'; ${probe} commit;`);
+      assert.notEqual(result.code, 0); assert.match(result.err, /lock timeout/u);
+    }
     child.stdin.end('commit;\n');
     assert.equal(await done, 0, err);
   } finally {clearTimeout(timer); if (child.exitCode === null) child.kill('SIGKILL');}
@@ -111,6 +114,34 @@ await held(rpc('check', pinned(regrant)), rpc('revoke', revocation(regrant), 'bl
 assert.equal((await api.checkConsent(pinned(regrant))).valid, true);
 await held(rpc('revoke', revocation(regrant), 'held-revoke'), rpc('check', pinned(regrant)));
 assert.equal((await api.checkConsent(pinned(regrant))).valid, false, 'committed revocation blocks a later queued check');
+// A grant may wait on the exclusion constraint after its actor/parent checks.
+// Observe the actual lock wait before suspending the actor and committing revoke.
+const waitingPayload = {...grant, consent_type:'location'};
+const waitingConsent = await api.grantConsent(request(waitingPayload, 'waiting-actor-initial'));
+const applicationName = `consent-wait-${randomUUID()}`;
+let pendingGrant;
+try {
+  await held(rpc('revoke', revocation(waitingConsent), 'waiting-actor-revoke'), async () => {
+    let finished = false;
+    pendingGrant = query(`${begin} set local application_name=${literal(applicationName)}; ${rpc('grant', waitingPayload, 'suspended-after-exclusion-wait')} commit;`);
+    pendingGrant.then(() => {finished=true;});
+    let blocked = false;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && !finished) {
+      const probe = await query(`select exists(select 1 from pg_stat_activity where application_name=${literal(applicationName)} and wait_event_type='Lock' and cardinality(pg_blocking_pids(pid))>0);`);
+      assert.equal(probe.code, 0, probe.err);
+      if (probe.out === 't') {blocked=true; break;}
+    }
+    assert.equal(blocked, true, 'grant must actually wait behind held revocation');
+    sql(`update public.memberships set status='suspended' where tenant_id='${tenant}' and id='${member}';`);
+  });
+  const denied = await pendingGrant;
+  assert.notEqual(denied.code, 0, 'suspended actor cannot commit after exclusion wait');
+  assert.match(denied.err, /PERMISSION_DENIED/u);
+} finally {
+  sql(`update public.memberships set status='active' where tenant_id='${tenant}' and id='${member}';`);
+}
+assert.equal((await api.checkConsent({...pinned(waitingConsent), consent_type:'location'})).valid, false);
 const counts = JSON.parse(sql(`select jsonb_build_object(
  'consents',(select count(*) from public.consents where tenant_id='${tenant}'),
  'revoked',(select count(*) from public.consents where tenant_id='${tenant}' and status='revoked'),
@@ -118,6 +149,7 @@ const counts = JSON.parse(sql(`select jsonb_build_object(
  'audits',(select count(*) from public.audit_events where tenant_id='${tenant}'),
  'outbox',(select count(*) from public.outbox_events where tenant_id='${tenant}'),
  'unfinished',(select count(*) from public.idempotency_records where tenant_id='${tenant}' and status<>'completed'));`));
-assert.deepEqual(counts, {consents:5, revoked:4, receipts:9, audits:9, outbox:9, unfinished:0});
+assert.deepEqual(counts, {consents:6, revoked:5, receipts:11, audits:11, outbox:11, unfinished:0});
 console.log(JSON.stringify({sharedConsentContractCases:cases.length, concurrentConsentRpcCalls:concurrentCalls,
- exactScopeTypedRoundTrips:true, readAndRevocationLocksVerified:true, oldQueuedConsentDenied:true, atomicCounts:counts, physicalCommandsSent:0}));
+ exactScopeTypedRoundTrips:true, readAndRevocationLocksVerified:true, actorRevokedDuringExclusionWaitDenied:true,
+ oldQueuedConsentDenied:true, atomicCounts:counts, physicalCommandsSent:0}));
