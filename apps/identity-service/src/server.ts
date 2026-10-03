@@ -21,7 +21,10 @@ export function createIdentityServer(config:Connection & {publishableKey:string;
  const environment=connectEnvironment(config.environment);
  createReservedAuthAdmin(config,config.adminKey); // Validate configuration before accepting requests.
  let active=0,draining=false;
- const server=createServer(async(req,res)=>{
+ // Node checks incomplete requests periodically; its 30s default would hold the
+ // eight admission slots well beyond our 10s receive budget. This is a receive
+ // timeout only: an already received request keeps its transaction/recovery path.
+ const server=createServer({requestTimeout:10000,headersTimeout:10000,connectionsCheckingInterval:1000,keepAliveTimeout:5000},async(req,res)=>{
   const observation=observeRequest(req,res,config.logSink);
   return observation.run(async()=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.setHeader('X-Content-Type-Options','nosniff');
@@ -54,6 +57,6 @@ export function createIdentityServer(config:Connection & {publishableKey:string;
  });
  drains.set(server,()=>{draining=true;});
  server.once('close',()=>{draining=true;});
- server.requestTimeout=10000;server.headersTimeout=10000;server.keepAliveTimeout=5000;server.maxHeadersCount=30;
+ server.maxHeadersCount=30;
  return server;
 }
