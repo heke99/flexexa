@@ -53,8 +53,10 @@ create index consents_revoked_by_idx on public.consents(revoked_by) where revoke
 create function private.flexexa_preserve_consent() returns trigger language plpgsql set search_path='' as $$
 begin
  if tg_op='DELETE' then raise exception using errcode='23514',message='CONSENT_HISTORY_IMMUTABLE'; end if;
- if (to_jsonb(new)-array['status','revoked_at','revoked_by','revocation_reason']) is distinct from
-    (to_jsonb(old)-array['status','revoked_at','revoked_by','revocation_reason']) or old.status<>'granted' or new.status<>'revoked' then
+ -- Stored generated columns are calculated AFTER BEFORE triggers. Compare their
+ -- immutable source IDs, not NEW.scope_type (still null at this boundary).
+ if (to_jsonb(new)-array['scope_type','status','revoked_at','revoked_by','revocation_reason']) is distinct from
+    (to_jsonb(old)-array['scope_type','status','revoked_at','revoked_by','revocation_reason']) or old.status<>'granted' or new.status<>'revoked' then
   raise exception using errcode='23514',message='CONSENT_HISTORY_IMMUTABLE';
  end if;
  return new;
