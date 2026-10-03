@@ -43,6 +43,8 @@ test('deleted requirement is rejected', () => assert.throws(() => scanDeliveryAc
 test('deleted acceptance case is rejected', () => assert.throws(() => scanDeliveryAcceptance(source.replace(/^- FXP-04-T4 .*\n/mu, '')), /DELIVERY_CASE_SET_INVALID/u));
 test('duplicate case is rejected', () => assert.throws(() => scanDeliveryAcceptance(source.replace('FXP-04-T4 [ci]', 'FXP-04-T3 [ci]')), /DELIVERY_CASE_SET_INVALID/u));
 test('simulator proof cannot be named physical proof', () => assert.throws(() => scanDeliveryAcceptance(source.replace('[physical]', '[simulator]')), /DELIVERY_CASE_INVALID/u));
+test('required physical evidence cannot be relabeled CI after source reconciliation', () => assert.throws(() => scanDeliveryAcceptance(source.replace('FXP-02-T3 [physical]', 'FXP-02-T3 [ci]')), /DELIVERY_CASE_INVALID/u));
+test('empty acceptance descriptions are rejected', () => assert.throws(() => scanDeliveryAcceptance(source.replace(/(^- FXP-02-T3 \[physical\]: ).+$/mu, '$1   ')), /DELIVERY_CASE_INVALID/u));
 test('invalid section mapping is rejected', () => assert.throws(() => scanDeliveryAcceptance(source.replace('Sections: 3, 77', 'Sections: 99, 77')), /DELIVERY_MAPPING_INVALID/u));
 test('future/cyclic dependency is rejected', () => assert.throws(() => scanDeliveryAcceptance(source.replace('Depends on: none', 'Depends on: FXP-10')), /DELIVERY_DEPENDENCY_INVALID/u));
 test('changed normative source needs explicit register reconciliation', () => { const l = fresh(); l.source_sha256 = 'd'.repeat(64); assert.throws(() => assess(l), /DELIVERY_SOURCE_DRIFT/u); });

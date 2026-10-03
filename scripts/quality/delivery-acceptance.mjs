@@ -8,6 +8,14 @@ const sha1 = value => typeof value === 'string' && /^[a-f0-9]{40}$/u.test(value)
 const kinds = ['ci', 'physical', 'operations', 'partner'];
 const expectedIds = Array.from({ length: 10 }, (_, i) => `FXP-${String(i + 1).padStart(2, '0')}`);
 const expectedCases = [3, 3, 3, 4, 3, 3, 3, 3, 3, 3];
+// Required evidence kinds are part of the acceptance contract. Reconciling an
+// edited source hash must never downgrade physical/operations/partner evidence.
+const expectedKinds = [
+  ['ci', 'ci', 'operations'], ['ci', 'ci', 'physical'], ['ci', 'ci', 'ci'],
+  ['ci', 'ci', 'physical', 'ci'], ['ci', 'ci', 'ci'], ['ci', 'ci', 'partner'],
+  ['ci', 'ci', 'partner'], ['ci', 'physical', 'partner'], ['ci', 'ci', 'ci'],
+  ['ci', 'operations', 'partner'],
+];
 export const DELIVERY_SOURCE = 'docs/plans/FLEXEXA_DELIVERY_ACCEPTANCE_V1_1.md';
 export const DELIVERY_COVERAGE = 'docs/progress/delivery-acceptance-coverage.json';
 
@@ -58,7 +66,10 @@ export function scanDeliveryAcceptance(source) {
     }
     const criterion = line.match(/^- (FXP-\d{2}-T\d+) \[(ci|physical|operations|partner)\]: (.+)$/u);
     if (line.startsWith('- FXP-') && !criterion) fail('DELIVERY_CASE_INVALID');
-    if (criterion) current.cases.push({ id: criterion[1], kind: criterion[2], description: criterion[3] });
+    if (criterion) {
+      if (!text(criterion[3])) fail('DELIVERY_CASE_INVALID');
+      current.cases.push({ id: criterion[1], kind: criterion[2], description: criterion[3] });
+    }
   }
   if (requirements.length !== expectedIds.length) fail('DELIVERY_REQUIREMENT_SET_INVALID');
   for (const [i, requirement] of requirements.entries()) {
@@ -66,6 +77,7 @@ export function scanDeliveryAcceptance(source) {
         !requirement.phases?.length || !Array.isArray(requirement.dependencies)) fail('DELIVERY_REQUIREMENT_SET_INVALID');
     if (requirement.dependencies.some(id => !expectedIds.slice(0, i).includes(id))) fail('DELIVERY_DEPENDENCY_INVALID');
     if (requirement.cases.length !== expectedCases[i] || requirement.cases.some((c, j) => c.id !== `${requirement.id}-T${j + 1}`)) fail('DELIVERY_CASE_SET_INVALID');
+    if (requirement.cases.some((c, j) => c.kind !== expectedKinds[i][j])) fail('DELIVERY_CASE_INVALID');
   }
   return { source_sha256: digest(source), requirements, case_count: requirements.reduce((n, r) => n + r.cases.length, 0) };
 }
