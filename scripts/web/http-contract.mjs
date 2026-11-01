@@ -4,9 +4,9 @@ export function assertPage(status, contentType, html) {
   assert.equal(status, 200, 'WEB_HTTP_STATUS');
   assert.match(contentType ?? '', /^text\/html\b/i, 'WEB_HTTP_CONTENT_TYPE');
   assert.match(html, /<html\b[^>]*lang="sv"/, 'WEB_HTTP_LANGUAGE');
-  assert.match(html, /<title>Flexexa<\/title>/, 'WEB_HTTP_TITLE');
-  assert.match(html, /<h1>Energy flexibility infrastructure\.<\/h1>/, 'WEB_HTTP_HEADING');
-  assert.ok(html.includes('Phase 0 foundation is being built from canonical contracts outward.'), 'WEB_HTTP_SCOPE');
+  assert.match(html, /<title>Flexexa — energi i rätt riktning<\/title>/, 'WEB_HTTP_TITLE');
+  assert.match(html, /<h1>Mer kraft\.[\s\S]*?friktion\.[\s\S]*?<\/h1>/, 'WEB_HTTP_HEADING');
+  assert.ok(html.includes('Under utveckling'), 'WEB_HTTP_SCOPE');
   assert.ok(!html.includes(canary), 'WEB_HTTP_SECRET_CANARY');
 }
 export function staticAssets(html) {

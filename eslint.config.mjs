@@ -6,7 +6,7 @@ import nextTypescript from 'eslint-config-next/typescript';
 export default defineConfig([
   ...fixupConfigRules([...nextVitals, ...nextTypescript]),
   {
-    settings: { react: { version: '19.2.8' }, next: { rootDir: 'apps/web/' } },
+    settings: { react: { version: '19.2.8' }, next: { rootDir: './' } },
     // Next defaults these to warnings. Flexexa treats them as CI failures.
     rules: {
       '@typescript-eslint/no-unused-vars': 'error',

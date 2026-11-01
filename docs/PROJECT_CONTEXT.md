@@ -17,7 +17,7 @@ Användaren har beslutat ett vanligt projekt/repo, ingen monorepo, en sammanhän
 
 Supabase flexexa-dev: zhgwlvmtvwjftyjmgljw, eu-north-1. Projekt- och public-tabellmetadata kunde läsas 2026-11-01. RLS aktiverat på listade tabeller är inte ett semantiskt policytest. Inga DB-skrivningar gjorda för planuppdraget.
 
-Main vid uppdragsstart: df59d718869b152b72c15723f871c1078b0380ae. Befintlig kod använder apps/web och pnpm/Turbo. Foundation-grenen innehåller mer kod; sammanförande och omstrukturering återstår. Planen ändrar inte befintliga versionslås eller driftsinställningar i denna leverans.
+Main vid uppdragsstart: df59d718869b152b72c15723f871c1078b0380ae. Vid uppdragsstart använde koden apps/web och pnpm/Turbo. Webb har därefter flyttats till ett rotprojekt. Foundation-grenen innehåller mer backendkod; kontrollerat sammanförande återstår. Planen ändrar inte befintliga versionslås eller driftsinställningar i denna leverans.
 
 ## Profiler och skills
 
@@ -29,13 +29,15 @@ Aktiverat för planuppdraget: Supabase-skill och repo-overlay för läsåtkomst/
 
 | Kommando | Omfattning och förutsättning |
 |---|---|
-| pnpm lint | Befintlig webb, låst installation krävs |
+| pnpm lint | Gemensam webb, låst installation krävs |
 | pnpm typecheck | Befintlig webb, låst installation krävs |
 | pnpm test | Befintliga webb-/kvalitetstester, installation krävs |
-| pnpm build | Befintlig Turbo-build; ändras först i strukturleveransen |
+| pnpm build | Next.js i rotprojektet |
 | node scripts/quality/masterplan-report.mjs --check | V1 coverage-integritet; Node-miljö; inte funktionsbevis |
 | node scripts/quality/masterplan-report.mjs --require-ready | Ska neka hela planens färdigstatus när krav saknar evidens |
 | python3 tools/engineering/check_standard.py --project . --mode project | Statisk standardstruktur och dokumentlänkar |
 | git diff --check | Whitespace/felmarkörer i ändringen |
 
 Runtimekrav hämtas från package.json/lockfil innan implementation. Faktiskt körda kontroller finns i PROJECT_STATE. Produktionsdrift, branchskydd, återställning och externa integrationsavtal är inte verifierade i detta uppdrag.
+
+Kontakt: info@flexexa.com. Användaren har angivit Trafexa Nordic som ansvarig verksamhet. Organisationsnummer/adress är inte bekräftade.

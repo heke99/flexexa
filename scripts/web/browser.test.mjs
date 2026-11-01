@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertSnapshot, verifyBrowser } from './verify-browser.mjs';
-const valid = { title: 'Flexexa', language: 'sv', heading: 'Energy flexibility infrastructure.', mainCount: 1,
+const valid = { title: 'Flexexa — energi i rätt riktning', language: 'sv', heading: 'Mer kraft.Mindre friktion.', mainCount: 1,
   errorOverlay: false, secretVisible: false, viewport: 390, pageWidth: 390, contentLength: 120, headingFontSize: 40 };
 test('accepts the rendered mobile shell with loaded CSS', () => assertSnapshot(valid, 390));
 for (const [field, value] of [['title', ''], ['language', 'en'], ['heading', ''], ['mainCount', 0], ['errorOverlay', true],

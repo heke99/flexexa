@@ -7,7 +7,9 @@ Branch: docs/charge-masterplan-startkit-20261101. Bas: main df59d718869b152b72c1
 
 - Masterplan, kontext, beslut och startkit: implementerat i dokumentgren.
 - Supabase flexexa-dev projekt-/public-tabellmetadata: verifierad läsåtkomst 2026-11-01.
-- Enprojektomstrukturering: planerad; befintlig kod använder fortfarande Turbo/workspaces.
+- Webbprojektets rotflytt: implementerad och lokalt byggverifierad. Foundation-backendens infogning kvarstår.
+- Webb och appförhandsvisning: implementerade; detaljer i work/2026-11-01-web-foundation.md.
+- Integritet, cookies och webbplatsvillkor: implementerade för informationsversionen; bolagsdetaljer återstår.
 - Laddabonnemang, betalningar, hemersättning och laddpartner: planerat, inte verifierat.
 - Dokumentändringars driftläge: ej driftsatt; ingen databas-/infrastrukturändring.
 
@@ -20,12 +22,14 @@ Slutlig kontroll: check_standard --mode project passerade med 0 fel och 1 genere
 AGENTS.engineering.md. Aktiv AGENTS.md hänvisar uttryckligen till den; automatisk laddning
 i andra agentmiljöer påstås inte verifierad. V1 plan:check passerade med coverage_integrity=true;
 recorded_plan_ready=false (förväntat, ingen produktfärdigstatus). git diff --check passerade.
-Ingen appbuild, migration, RLS-funktionstest, betalning eller fysisk laddning körd i detta uppdrag.
+Webbleverans: lint, typkontroll, 82 tester, produktionsbuild och HTTP-smoke passerade lokalt.
+Produktionsbrowser-QA för navigation/laddförhandsvisning och mobil layout genomförd.
+Ingen migration, RLS-funktionstest, betalning eller fysisk laddning körd.
 
 ## Nästa exakta handling
 
 Inventera phase/0-foundation mot main och dev-databasens fullständiga schema/migrationshistorik.
-Registrera kanonisk återanvändning och verifieringsbaslinje. Genomför därefter fas B enligt
+Registrera kanonisk återanvändning och verifieringsbaslinje. Fortsätt därefter identitets-/backendkoppling enligt
 [masterplanen](FLEXEXA_MASTERPLAN_2026-11-01.md), utan nya konkurrerande modeller.
 
 ## Kvarstående frågor

@@ -6,24 +6,33 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "pnpm --filter @flexexa/web lint",
-    "typecheck": "pnpm --filter @flexexa/web typecheck",
-    "test": "node --test scripts/web/*.test.mjs scripts/quality/impact.test.mjs scripts/quality/masterplan.test.mjs && pnpm --filter @flexexa/web test",
+    "build": "next build",
+    "dev": "node scripts/web/dev.mjs",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/web/*.test.mjs scripts/quality/impact.test.mjs scripts/quality/masterplan.test.mjs && node --experimental-strip-types --test test/*.test.mjs",
     "index:codebase": "node scripts/quality/build-codebase-index.mjs",
     "impact": "node scripts/quality/impact-analysis.mjs",
     "plan:check": "node scripts/quality/masterplan-report.mjs --check",
     "plan:ready": "node scripts/quality/masterplan-report.mjs --require-ready",
-    "verify:web:source": "node scripts/web/source-parity.mjs",
-    "test:web:http": "node scripts/web/verify-http.mjs"
+    "verify:web:source": "node scripts/web/project-structure.mjs",
+    "test:web:http": "node scripts/web/verify-http.mjs",
+    "start": "next start"
   },
   "devDependencies": {
-    "turbo": "2.10.12",
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "eslint": "10.10.0",
     "eslint-config-next": "16.3.4",
-    "@eslint/compat": "2.1.1"
+    "@eslint/compat": "2.1.1",
+    "@types/node": "24.3.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7"
+  },
+  "type": "module",
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   }
 }

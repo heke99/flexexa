@@ -19,8 +19,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24.20.0'
-      - name: Verify reviewed source provenance before installation
-        run: node scripts/web/source-parity.mjs
+      - name: Verify unified project structure before installation
+        run: node scripts/web/project-structure.mjs
       - name: Install the reviewed dependency lock
         run: |
           corepack enable
@@ -33,7 +33,7 @@ jobs:
           pnpm plan:check
           pnpm index:codebase
           pnpm impact -- --base "$IMPACT_BASE"
-      - name: Verify the complete deployed web workspace
+      - name: Verify the unified web application
         run: |
           pnpm lint
           pnpm typecheck
