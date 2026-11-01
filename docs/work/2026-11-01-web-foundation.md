@@ -40,3 +40,7 @@ Vercelprojektet är befintligt flexexa, team_e3htkJPyBNSw3Ix1KQLlf180. Endast fl
 ## Vercel-build och korrigerad installationspolicy
 
 Första previewn nekades av den gamla projektinställningen rootDirectory=apps/web. Den återställdes till projektroten för framtida byggen. Andra previewn nekades av pnpm ERR_PNPM_IGNORED_BUILDS för unrs-resolver. Ingen beroendekod godkändes för körning: installation i Vercel/CI gör nu explicit --ignore-scripts, samma policy som fungerande lokal installation. Konfiguration och regressionstest uppdaterades tillsammans. Produktionsalias och skydd ändrades inte.
+
+## Produktionspresentation — användarbeslut
+
+Användaren begärde att den publika hemsidan inte ska säga ”under utveckling” eller ge ett ofärdigt intryck. Startsida, företagssida, laddsida, kontakt, sidfot och metadata har fått direkt produkt-/kontaktorienterat språk. Utvecklings- och pilotmarkörer är borttagna. Villkor och integritetsinformation beskriver fortsatt verklig omfattning utan utvecklingsstatus som marknadsbudskap. Ingen falsk köp-, nätverks- eller styrfunktion har aktiverats. Ladddemon behåller tydlig märkning av exempeldata. Lint, typkontroll, 82 tester, produktionsbuild och produktions-HTTP-smoke passerade för ändringen.

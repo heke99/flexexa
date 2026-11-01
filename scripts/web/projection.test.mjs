@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { validateManifest } from './source-parity.mjs';
 import { assertPage, staticAssets, canary } from './http-contract.mjs';
 const manifest = JSON.parse(readFileSync('.flexexa/web-projection.json', 'utf8'));
-const html = '<html lang="sv"><title>Flexexa — energi i rätt riktning</title><h1>Mer kraft.<br/>Mindre friktion.</h1><p>Under utveckling</p><script src="/_next/static/chunks/app.js"></script><link href="/_next/static/css/app.css"></html>';
+const html = '<html lang="sv"><title>Flexexa — energi i rätt riktning</title><h1>Mer kraft.<br/>Mindre friktion.</h1><p>För bilförare, elbolag och energipartner.</p><script src="/_next/static/chunks/app.js"></script><link href="/_next/static/css/app.css"></html>';
 for (const key of ['sourceCommit', 'sourceTree']) test(`rejects invalid ${key}`, () => {
   assert.throws(() => validateManifest({ ...manifest, [key]: 'main' }), /WEB_SOURCE_PARITY_REJECTED/);
 });
