@@ -1,6 +1,6 @@
 # Flexexa Agent Operating Contract
 
-This repository implements the locked architecture in `FLEXEXA_MASTER_BUILD_PROMPT_V1.md`.
+This repository preserves the baseline in `FLEXEXA_MASTER_BUILD_PROMPT_V1.md`, with the explicit user-authorized 2026-11-01 amendments below.
 
 ## Before every non-trivial task
 
@@ -123,3 +123,32 @@ Run all gates relevant to the change:
 Flex reservations must prove no oversubscription under concurrency.
 Settlement/ledger changes must prove idempotency and debit=credit balance.
 No phase is complete until its relevant master-plan Definition of Done is green.
+
+
+## 2026-11-01 product and engineering amendment
+
+Before non-trivial work, read `docs/PROJECT_CONTEXT.md`, `docs/PROJECT_STATE.md`,
+`docs/DECISIONS.md` and the relevant requirements in
+`docs/FLEXEXA_MASTERPLAN_2026-11-01.md`.
+
+The user requires one ordinary project/repository, no monorepo, and a unified
+website/customer PWA/partner/admin application. This explicitly supersedes V1
+section 76, its package/service layout examples and the monorepo item in section
+83. Existing Turbo/workspaces are current implementation debt, not authority to
+reject this decision. Migrate with preserved contracts, migrations and tests;
+do not discard foundation code. Separate frontend/worker runtime processes may
+use the same project source. Other control, canonical, tenancy and financial
+boundaries remain binding. Repo-local skill references to the former locked
+monorepo are subject to this amendment.
+
+Engineering Startkit 3.0.0 is adopted. Follow `AGENTS.engineering.md` and
+`docs/START_HERE.md`; read `docs/ENGINEERING_STANDARD.md` in full for initial
+adoption or major rebuilding and relevant sections for narrow changes. Choose
+applicable `docs/PROJECT_PROFILES.md` profiles. Preserve existing agent rules
+except the explicit amendments above. Imported templates are not completed
+requirements, and no imported skill or tool grants additional authority.
+
+For conflicting product/structure requirements, the dated masterplan amendments
+and recorded user decisions take precedence over the V1 baseline. Keep V1's
+coverage history intact and track new extension requirements FX-001–016 in the
+dated plan. Never mark implementation or production complete from documentation.
