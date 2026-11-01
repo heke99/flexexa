@@ -36,3 +36,7 @@ Bolagets organisationsnummer och registrerade kontaktadress har inte lämnats. I
 Nästa produktleverans är verifierad kundidentitet och koppling mot befintliga kanoniska Flexexa-API:er. Foundation-grenens backend/migrationer ska inventeras och föras över kontrollerat; de har inte kastats eller ersatts med mockade kunddata.
 
 Vercelprojektet är befintligt flexexa, team_e3htkJPyBNSw3Ix1KQLlf180. Endast flexexa.vercel.app är konfigurerad domän i läst lista; flexexa.com är inte verifierat ansluten. Projektet har SSO-skydd på förhandsvisningsdomäner. Detta ändras inte tyst.
+
+## Vercel-build och korrigerad installationspolicy
+
+Första previewn nekades av den gamla projektinställningen rootDirectory=apps/web. Den återställdes till projektroten för framtida byggen. Andra previewn nekades av pnpm ERR_PNPM_IGNORED_BUILDS för unrs-resolver. Ingen beroendekod godkändes för körning: installation i Vercel/CI gör nu explicit --ignore-scripts, samma policy som fungerande lokal installation. Konfiguration och regressionstest uppdaterades tillsammans. Produktionsalias och skydd ändrades inte.

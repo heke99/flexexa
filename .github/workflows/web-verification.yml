@@ -25,7 +25,7 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile --ignore-scripts
       - name: Inventory master plan and full change impact
         env:
           IMPACT_BASE: ${{ github.event.pull_request.base.sha }}

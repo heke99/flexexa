@@ -31,7 +31,7 @@ test('requires real JS/CSS assets and rejects unsafe local paths', () => {
 });
 test('Vercel installs and builds the unified root project', () => {
   const config = JSON.parse(readFileSync('vercel.json', 'utf8'));
-  assert.equal(config.installCommand, 'corepack pnpm@12.3.4 install --frozen-lockfile');
+  assert.equal(config.installCommand, 'corepack pnpm@12.3.4 install --frozen-lockfile --ignore-scripts');
   assert.equal(config.buildCommand, 'corepack pnpm@12.3.4 build');
   assert.equal(config.framework, 'nextjs');
 });
