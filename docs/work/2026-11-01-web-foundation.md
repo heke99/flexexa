@@ -44,3 +44,7 @@ Första previewn nekades av den gamla projektinställningen rootDirectory=apps/w
 ## Produktionspresentation — användarbeslut
 
 Användaren begärde att den publika hemsidan inte ska säga ”under utveckling” eller ge ett ofärdigt intryck. Startsida, företagssida, laddsida, kontakt, sidfot och metadata har fått direkt produkt-/kontaktorienterat språk. Utvecklings- och pilotmarkörer är borttagna. Villkor och integritetsinformation beskriver fortsatt verklig omfattning utan utvecklingsstatus som marknadsbudskap. Ingen falsk köp-, nätverks- eller styrfunktion har aktiverats. Ladddemon behåller tydlig märkning av exempeldata. Lint, typkontroll, 82 tester, produktionsbuild och produktions-HTTP-smoke passerade för ändringen.
+
+## Cookiebanner och inställningar
+
+På användarens begäran tillagd informationsbanner med ”Endast nödvändiga” och inställningsdialog. Ingen valfri spårning aktiveras. Native dialog ger tangentbordsfokus och Escape-stängning. Val sparas i versionerad localStorage i 180 dagar; felaktigt/utgånget värde visar bannern igen, blockerad lagring hanteras med sessionens stängning och förklarande status. Inställningarna nås via sidfoten. Cookiesidan beskriver faktisk lagring. Lint, typkontroll, produktionsbuild och HTTP-smoke passerade. Browserbeteende verifieras på driftsatt version eftersom managed preview inte blev tillgänglig vid omstart.
