@@ -1,3 +1,7 @@
+# Senaste tillägg: 2026-11-02
+
+Ansökningsflöde för elbilsabonnemang implementerat. Supabase-migrationer och smal ägarautentiseringsfunktion driftsatta. Superadmin: hekmat.h@div3rsa.com, verifierad e-postinloggning och befintlig kanonisk plattformsroll. Produktionspublicering och leveranskontroll följs i work/2026-11-02-subscription-applications.md. Nedanstående äldre checkpoint är historik.
+
 # Aktuell checkpoint
 
 Datum: 2026-11-01. Uppdrag: masterplan och införande av Engineering Startkit 3.0.0.

@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "corepack pnpm@12.3.4 install --frozen-lockfile --ignore-scripts",
-  "buildCommand": "corepack pnpm@12.3.4 build"
+  "buildCommand": "corepack pnpm@12.3.4 build",
+  "crons": [
+    {
+      "path": "/api/internal/application-emails",
+      "schedule": "*/10 * * * *"
+    }
+  ]
 }
