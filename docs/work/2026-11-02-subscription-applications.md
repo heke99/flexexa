@@ -20,3 +20,9 @@ Verifieringsjournal: lint och typkontroll, 82 befintliga tester, produktionsbuil
 Detta är ansökningsflödet. Kommersiell prislista, bindande abonnemang, partneranslutningar, betalning och fysisk laddning är inte verifierade av dessa tester.
 
 Säkerhetsrådgivning: nya privata tabeller har avsiktlig default-deny utan klientpolicies. RPC:ns explicita anon/authenticated EXECUTE ger två rådgivningsvarningar; varje anrop verifierar 256-bitars serverkapabilitet före operation och admin kräver dessutom aktuell JWT/roll. Ingen hemlighet finns i klientbundle. Negativa åtkomsttester passerade. Se Supabase database-linter 0028/0029 för bakgrund; detta är ett medvetet server-API, inte generell anonym DB-åtkomst.
+
+Produktionsverifiering 2026-11-02: deployment dpl_HbCSWrH6P1DatT68oUUnzrUHhfY9 READY på www.flexexa.com, källcommit60ebe9027c61f8e905540b24e97fd1d48c295bfe. Browser: formulär skickat med officiell Resend-simulator, tackmeddelande visat, räknaren kvar93/907. DB: is_test=true, position=null, email_state=sent, ett försök. Resend01a19bd9-49af-7850-a53f-c50902cb1466 rapporterad delivered.
+
+Produktions-API: obehörig admin401, fel Origin403, ägarens Supabase-engångstoken verifierad, aktiv kanonisk superadminroll och skyddad listning200, utloggning åter401, återanvänd token401. Worker utan Bearer401, med giltig hemlighet200. Ny oanvänd inloggningslänk skickad till godkänd ägaradress; Resend01a19bdc-1976-762d-b9fb-3e53ae365c7c rapporterad delivered. Ingen inloggningshemlighet sparas i repo eller rapport.
+
+Slutlig lokal testsvit84/84; lint, typkontroll, build och HTTP-gate passerade. Privat förvärvsregister är plattformsägt; två-tenant-affärsdata ändras inte och ingen tenantkoppling härleds från frontend.
