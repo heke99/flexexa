@@ -1,3 +1,11 @@
+# Aktuell checkpoint: 2026-11-03
+
+Uppdrag: utöka masterplanen med fordonsbundet abonnemang, skydd mot annan bil hemma/publikt samt API-kontrakt. Masterplan version2.1, nya krav FX-017–026, är dokumenterade och **planerade**. Inga nya fordons-/laddintegrationer, schemaändringar eller kontroller har driftsatts i detta uppdrag. Se [arbetsloggen](work/2026-11-03-vehicle-entitlement-plan.md) för granskning, källor och kontroller.
+
+Nästa handling för denna del: inventera foundation-adaptrar/schema och kandidatpartnernas faktiska API-/hårdvarustöd mot §§9.1–11.4; välj en hemkombination och en publik partner för fysisk rätt-/fel-bil-pilot enligt §17.1 innan aktivering av fordonsbundet erbjudande.
+
+Nedanstående checkpoints är historik.
+
 # Senaste tillägg: 2026-11-02
 
 Ansökningsflöde för elbilsabonnemang implementerat. Supabase-migrationer och smal ägarautentiseringsfunktion driftsatta. Superadmin: hekmat.h@div3rsa.com, verifierad e-postinloggning och befintlig kanonisk plattformsroll. Produktionspublicering och leveranskontroll följs i work/2026-11-02-subscription-applications.md. Nedanstående äldre checkpoint är historik.

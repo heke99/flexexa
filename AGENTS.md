@@ -150,5 +150,5 @@ requirements, and no imported skill or tool grants additional authority.
 
 For conflicting product/structure requirements, the dated masterplan amendments
 and recorded user decisions take precedence over the V1 baseline. Keep V1's
-coverage history intact and track new extension requirements FX-001–016 in the
+coverage history intact and track new extension requirements FX-001–026 in the
 dated plan. Never mark implementation or production complete from documentation.

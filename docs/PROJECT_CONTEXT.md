@@ -4,7 +4,7 @@ Datum: 2026-11-01. Repo: heke99/flexexa. Marknad: Sverige. Domän: flexexa.com.
 
 ## Dokumentkarta och auktoritet
 
-- [Aktuell masterplan](FLEXEXA_MASTERPLAN_2026-11-01.md): laddabonnemang, gemensam webb/PWA, ett projekt utan monorepo och krav FX-001–016.
+- [Aktuell masterplan](FLEXEXA_MASTERPLAN_2026-11-01.md): laddabonnemang, gemensam webb/PWA, ett projekt utan monorepo och krav FX-001–026.
 - [V1-baslinje](../FLEXEXA_MASTER_BUILD_PROMPT_V1.md): bevarade långsiktiga energi-/marknadskrav. Den nya planens uttryckliga strukturändringar har företräde.
 - [Beslut](DECISIONS.md), [checkpoint](PROJECT_STATE.md), [arbetslogg](work/2026-11-01-masterplan.md).
 - [Byggstandard](ENGINEERING_STANDARD.md), antagen Engineering Startkit 3.0.0.
