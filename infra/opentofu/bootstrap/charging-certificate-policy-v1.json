@@ -1,0 +1,69 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RequestChargingDevDnsCertificate",
+      "Effect": "Allow",
+      "Action": [
+        "acm:RequestCertificate"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-north-1",
+          "acm:ValidationMethod": "DNS",
+          "aws:RequestTag/Project": "flexexa",
+          "aws:RequestTag/Environment": "dev"
+        },
+        "ForAllValues:StringEquals": {
+          "acm:DomainNames": [
+            "api-staging.flexexa.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadAndTagChargingDevCertificate",
+      "Effect": "Allow",
+      "Action": [
+        "acm:DescribeCertificate",
+        "acm:ListTagsForCertificate",
+        "acm:AddTagsToCertificate",
+        "acm:RemoveTagsFromCertificate"
+      ],
+      "Resource": "arn:aws:acm:eu-north-1:938095765653:certificate/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-north-1",
+          "aws:ResourceTag/Project": "flexexa",
+          "aws:ResourceTag/Environment": "dev"
+        }
+      }
+    },
+    {
+      "Sid": "TagNewChargingCertificate",
+      "Effect": "Allow",
+      "Action": [
+        "acm:AddTagsToCertificate"
+      ],
+      "Resource": "arn:aws:acm:eu-north-1:938095765653:certificate/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-north-1",
+          "aws:RequestTag/Project": "flexexa",
+          "aws:RequestTag/Environment": "dev"
+        },
+        "Null": {
+          "aws:ResourceTag/Project": "true"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Project",
+            "Environment",
+            "ManagedBy"
+          ]
+        }
+      }
+    }
+  ]
+}
