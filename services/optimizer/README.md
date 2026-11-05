@@ -89,3 +89,7 @@ protection remains required. Caller verifies identity/consent/capabilities and
 filters active charging demand before requesting current. No API/UI/database or
 AWS resources change. V1 §§35–45,69 and preparatory FXP-04-T2/T4 apply; no full
 acceptance case is approved by these software tests. Existing notices retained.
+
+## Interval and cost slice
+
+Install requirements.txt for your supported wheel platform, or the hash-locked requirements-linux-cp312.lock for CI Linux x86_64 CPython 3.12. The bounded MILP supports at most 10 vehicles and 192 time slots, waits at most five seconds, and emits no executable command. Read docs/progress/charging-five-parts-20261105.md for exact scope, missing production chain and API/UI evidence limits. Planning requires independently authorized, verified identity, phase topology, capability, consent and forecast inputs. Forecast headroom is not a physical safety mechanism. An infeasible result is a model verdict, not proof of hardware inability.

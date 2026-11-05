@@ -43,3 +43,5 @@ are represented by current_allocation.py with explicit policy-rank inputs and
 per-phase budgets. phase_budget.py and plan_explanation.py are accompanying
 AGPL-3.0-only module code. No implied voltage, 60/40 split, hidden priority,
 provider command, household state, concurrency guarantee or full GPM port.
+
+Five-part slice, 2026-11-05: interval_optimizer.py adapts planning responsibilities; charging_cost.py replaces lumped nordpool.py price assumptions with explicit components; export_preview.py produces synthetic data. These Python modules remain AGPL-3.0-only. No original household/provider command code is enabled.
