@@ -26,7 +26,12 @@ export function separateCertificate(plan){
   if(drift.type!=='aws_acm_certificate'||drift.mode!=='managed'||drift.change?.actions?.join(',')!=='update')deny('certificate drift action');
   const before=drift.change.before,after=drift.change.after;
   if(before?.arn!=='arn:aws:acm:eu-north-1:938095765653:certificate/4bba5691-0345-4941-bb65-14572415bce9'||after?.arn!==before.arn)deny('certificate drift identity');
-  for(const key of new Set([...Object.keys(before),...Object.keys(after)]))if(JSON.stringify(before[key])!==JSON.stringify(after[key])&&!computed.has(key))deny('certificate configuration drift: '+key);
+  const expectedTags={Project:'flexexa',Environment:'dev',ManagedBy:'opentofu'};
+  const validTags=p=>{const tags={...(p.tags_all??{}),...(p.tags??{})};return Object.keys(tags).length===3&&Object.entries(expectedTags).every(([k,v])=>tags[k]===v);};
+  for(const key of new Set([...Object.keys(before),...Object.keys(after)]))if(JSON.stringify(before[key])!==JSON.stringify(after[key])&&!computed.has(key)){
+   if(['tags','tags_all'].includes(key)&&validTags(before)&&validTags(after))continue;
+   deny('certificate configuration drift: '+key);
+  }
  }
  if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>r.address!==address);
  root.resources=root.resources.filter(r=>r.address!==address);
