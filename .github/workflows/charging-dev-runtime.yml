@@ -87,6 +87,19 @@ jobs:
           tofu output -raw charging_api_load_balancer_dns > charging-api-load-balancer.txt
           aws ecs wait services-stable --cluster flexexa-dev --services flexexa-dev-charging-api
           aws ecs describe-services --cluster flexexa-dev --services flexexa-dev-charging-api --query 'services[].{name:serviceName,running:runningCount,pending:pendingCount,desired:desiredCount,deployments:deployments}' > charging-api-service-readback.json
+      - name: Verify real HTTPS and anonymous denial through the healthy load balancer
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          lb=$(cat charging-api-load-balancer.txt)
+          curl --fail-with-body --silent --show-error --max-time 15 \
+            --connect-to "api-staging.flexexa.com:443:$lb:443" \
+            https://api-staging.flexexa.com/health/live -o charging-api-health.json
+          code=$(curl --silent --show-error --max-time 15 \
+            --connect-to "api-staging.flexexa.com:443:$lb:443" \
+            https://api-staging.flexexa.com/v1/companies/f7000000-0000-4000-8000-000000000001/charging-inventory \
+            -o charging-api-anonymous.json -w '%{http_code}')
+          test "$code" = 401
+          printf '{"https_live":200,"anonymous_inventory":%s}\n' "$code" > charging-api-http-readback.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -96,5 +109,7 @@ jobs:
             infra/opentofu/environments/dev/charging-runtime-plan.txt
             infra/opentofu/environments/dev/charging-api-load-balancer.txt
             infra/opentofu/environments/dev/charging-api-service-readback.json
+            infra/opentofu/environments/dev/charging-api-health.json
+            infra/opentofu/environments/dev/charging-api-http-readback.json
           if-no-files-found: warn
           retention-days: 30
