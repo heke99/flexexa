@@ -45,3 +45,5 @@ AGPL-3.0-only module code. No implied voltage, 60/40 split, hidden priority,
 provider command, household state, concurrency guarantee or full GPM port.
 
 Five-part slice, 2026-11-05: interval_optimizer.py adapts planning responsibilities; charging_cost.py replaces lumped nordpool.py price assumptions with explicit components; export_preview.py produces synthetic data. These Python modules remain AGPL-3.0-only. No original household/provider command code is enabled.
+
+Live price slice, 2026-11-05: spot_price_input.py connects normalized external spot-price inputs to explicit optimizer intervals and separate tariff inputs. It is AGPL-3.0-only. Public source and COPYING remain available in this repository.

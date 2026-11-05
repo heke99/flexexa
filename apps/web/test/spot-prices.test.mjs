@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createPriceReader} from '../src/lib/spot-prices.ts';
+const start=Date.parse('2026-11-04T23:00:00Z');
+const raw=Array.from({length:96},(_,i)=>({SEK_per_kWh:.8,time_start:new Date(start+i*900000).toISOString().replace('.000Z','Z'),time_end:new Date(start+(i+1)*900000).toISOString().replace('.000Z','Z')}));
+test('cache coalesces requests and preserves source timestamp',async()=>{let calls=0;const read=createPriceReader(async()=>{calls++;return Response.json(raw);});const [a,b]=await Promise.all([read('SE3','2026-11-05'),read('SE3','2026-11-05')]);assert.equal(calls,1);assert.equal(a,b);assert.equal((await read('SE3','2026-11-05')).fetched_at,a.fetched_at);});
+test('unpublished day is not replaced by another date',async()=>{const read=createPriceReader(async()=>new Response('',{status:404}));await assert.rejects(read('SE3','2026-11-06'));});
+test('failed refresh never returns expired cached prices',async()=>{let at=start,calls=0;const read=createPriceReader(async()=>++calls===1?Response.json(raw):new Response('',{status:500}),()=>new Date(at));await read('SE3','2026-11-05');at+=300001;await assert.rejects(read('SE3','2026-11-05'));});
+test('invalid area never reaches the network',async()=>{let called=false;const read=createPriceReader(async()=>{called=true;return Response.json(raw);});await assert.rejects(read('../x','2026-11-05'));assert.equal(called,false);});
+test('HTML or incomplete upstream data rejected',async()=>{await assert.rejects(createPriceReader(async()=>new Response('<html/>'))('SE3','2026-11-05'));await assert.rejects(createPriceReader(async()=>Response.json(raw.slice(1)))('SE3','2026-11-05'));});
