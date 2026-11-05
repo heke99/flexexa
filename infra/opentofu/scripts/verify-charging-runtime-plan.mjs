@@ -45,7 +45,7 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
    }
    if(r.address===prefix+'aws_eip.egress'&&['association_id','network_interface','network_interface_owner_id','private_ip'].includes(key)&&(before[key]==null||before[key]==='')){
     const nat=rows.find(row=>row.address===prefix+'aws_nat_gateway.egress').values;
-    if(after.id==='eipalloc-0cbdaaab41d1ac508'&&nat.allocation_id===after.id&&after.network_interface===nat.network_interface_id&&after.private_ip===nat.private_ip&&after.network_interface_owner_id==='938095765653'&&/^eipassoc-[a-f0-9]+$/.test(after.association_id))continue;
+    if(after.id==='eipalloc-0cbdaaab41d1ac508'&&nat.allocation_id===after.id&&after.network_interface===nat.network_interface_id&&after.private_ip===nat.private_ip&&(after.network_interface_owner_id==null||after.network_interface_owner_id==='938095765653')&&after.association_id==='eipassoc-037319886320a1af2')continue;
    }
    if(r.address===prefix+'aws_iam_role.execution'&&key==='inline_policy'){
     const policy=rows.find(row=>row.address===prefix+'aws_iam_role_policy.execution').values;
