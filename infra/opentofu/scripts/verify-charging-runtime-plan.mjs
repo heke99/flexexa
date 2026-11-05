@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {verifyCertificatePlan,separateCertificate} from './verify-charging-certificate-plan.mjs';
 const prefix='module.charging_api[0].';
+const natTableAddresses=['eu-north-1a','eu-north-1b'].map(z=>'module.foundation.aws_route_table.private[\"'+z+'\"]');
 export const runtimeAddresses=['aws_security_group.edge','aws_security_group.task','aws_vpc_security_group_ingress_rule.https','aws_vpc_security_group_egress_rule.edge_task','aws_vpc_security_group_ingress_rule.task_edge','aws_vpc_security_group_egress_rule.tls','aws_lb.api','aws_lb_target_group.api','aws_lb_listener.https','aws_iam_role.execution','aws_iam_role.task','aws_iam_role_policy.execution','aws_ecs_task_definition.api','aws_ecs_service.api','aws_eip.egress','aws_nat_gateway.egress','aws_route.egress["0"]','aws_route.egress["1"]'];
 function canonical(value){if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])]));return value;}
 export function normalizeContainerReadback(value){const containers=JSON.parse(value);for(const c of containers){for(const key of ['mountPoints','systemControls','volumesFrom'])if(Array.isArray(c[key])&&c[key].length===0)delete c[key];if(c.linuxParameters?.capabilities?.add?.length===0)delete c.linuxParameters.capabilities.add;for(const port of c.portMappings??[])if(port.hostPort===port.containerPort)delete port.hostPort;}return JSON.stringify(canonical(containers));}
@@ -43,6 +44,10 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     if(['placement_constraints','inference_accelerator','volume','proxy_configuration','ephemeral_storage','runtime_platform'].includes(key)&&before[key]==null&&Array.isArray(after[key])&&after[key].length===0)continue;
     if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
    }
+   if(r.address===prefix+'aws_eip.egress'&&['association_id','network_interface','network_interface_owner_id','private_ip','private_dns'].includes(key)&&(before[key]==null||before[key]==='')){
+    const nat=rows.find(row=>row.address===prefix+'aws_nat_gateway.egress').values;
+    if(after.id==='eipalloc-0cbdaaab41d1ac508'&&nat.allocation_id===after.id&&after.network_interface===nat.network_interface_id&&after.private_ip===nat.private_ip&&(after.network_interface_owner_id==null||after.network_interface_owner_id==='938095765653')&&after.association_id==='eipassoc-037319886320a1af2'&&(key!=='private_dns'||after.private_dns==='ip-'+nat.private_ip.replaceAll('.','-')+'.eu-north-1.compute.internal'))continue;
+   }
    if(r.address===prefix+'aws_iam_role.execution'&&key==='inline_policy'){
     const policy=rows.find(row=>row.address===prefix+'aws_iam_role_policy.execution').values;
     const matches=list=>Array.isArray(list)&&list.length===1&&list[0].name===policy.name&&JSON.stringify(canonical(JSON.parse(list[0].policy)))===JSON.stringify(canonical(JSON.parse(policy.policy)));
@@ -52,9 +57,19 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
   }
  }
  if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>!r.address.startsWith(prefix));
+ for(const drift of clean.resource_drift??[]){
+  if(!natTableAddresses.includes(drift.address))continue;
+  const before=drift.change?.before,after=drift.change?.after,nat=rows.find(r=>r.address===prefix+'aws_nat_gateway.egress').values;
+  const route=rows.find(r=>r.type==='aws_route'&&r.values.route_table_id===after?.id)?.values;
+  const withoutRoute=p=>Object.fromEntries(Object.entries(p).filter(([k])=>k!=='route'));
+  if(drift.type!=='aws_route_table'||drift.mode!=='managed'||drift.change.actions?.join(',')!=='update'||!before||!after||before.id!==after.id||after.region!=='eu-north-1'||!Array.isArray(before.route)||before.route.length!==0||after.route?.length!==1||JSON.stringify(canonical(withoutRoute(before)))!==JSON.stringify(canonical(withoutRoute(after)))||!route||route.nat_gateway_id!==nat.id||route.destination_cidr_block!=='0.0.0.0/0'||route.state!=='active'||route.origin!=='CreateRoute')reject('private route owner projection');
+  const value=after.route[0],fields=new Set(['cidr_block','gateway_id','ipv6_cidr_block','destination_prefix_list_id','carrier_gateway_id','core_network_arn','egress_only_gateway_id','local_gateway_id','nat_gateway_id','network_interface_id','odb_network_arn','transit_gateway_id','vpc_endpoint_id','vpc_peering_connection_id']);
+  if(value.cidr_block!=='0.0.0.0/0'||value.nat_gateway_id!==nat.id||Object.entries(value).some(([k,v])=>!fields.has(k)||(!['cidr_block','nat_gateway_id'].includes(k)&&v!==''&&v!==null)))reject('private route projection fields');
+ }
+ if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>!natTableAddresses.includes(r.address));
  root.child_modules=root.child_modules.filter(m=>m.address!=='module.charging_api[0]');
  clean.resource_changes=clean.resource_changes.filter(r=>!r.address.startsWith(prefix));
  return {review_only_tainted_task:changes.some(r=>r.change.actions.join(',')==='delete,create'),runtime_resources:runtimeAddresses.length,runtime_creates:changes.filter(r=>r.change.actions[0]==='create').length,runtime_noop:changes.filter(r=>r.change.actions[0]==='no-op').length,foundation:verifyCertificatePlan(clean)};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){try{const plan=JSON.parse(readFileSync(process.argv[2],'utf8')),result=verifyRuntimePlan(plan,{reviewTaintedTask:process.argv.includes('--review-tainted-task')});
- if(process.argv[4]){const clean=structuredClone(plan);clean.planned_values.root_module.child_modules=clean.planned_values.root_module.child_modules.filter(m=>m.address!=='module.charging_api[0]');clean.resource_changes=clean.resource_changes.filter(r=>!r.address.startsWith(prefix));if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>!r.address.startsWith(prefix));writeFileSync(process.argv[4],JSON.stringify(separateCertificate(clean).foundation),{flag:'wx',mode:0o600});}if(process.argv[3])writeFileSync(process.argv[3],JSON.stringify(result,null,2),{flag:'wx',mode:0o600});console.log(JSON.stringify(result));}catch(e){console.error(e.message);process.exitCode=1;}}
+ if(process.argv[4]){const clean=structuredClone(plan);clean.planned_values.root_module.child_modules=clean.planned_values.root_module.child_modules.filter(m=>m.address!=='module.charging_api[0]');clean.resource_changes=clean.resource_changes.filter(r=>!r.address.startsWith(prefix));if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>!r.address.startsWith(prefix)&&!natTableAddresses.includes(r.address));writeFileSync(process.argv[4],JSON.stringify(separateCertificate(clean).foundation),{flag:'wx',mode:0o600});}if(process.argv[3])writeFileSync(process.argv[3],JSON.stringify(result,null,2),{flag:'wx',mode:0o600});console.log(JSON.stringify(result));}catch(e){console.error(e.message);process.exitCode=1;}}

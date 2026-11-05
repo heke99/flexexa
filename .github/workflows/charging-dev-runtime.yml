@@ -1,4 +1,5 @@
 name: Reviewed charging dev Fargate release
+# Resume with scoped SG-rule creation and exact-VPC load-balancer validation.
 on:
   push:
     branches: [main]
