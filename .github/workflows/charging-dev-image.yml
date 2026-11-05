@@ -26,7 +26,9 @@ jobs:
         id: reviewed
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node infra/opentofu/scripts/verify-charging-release-source.mjs
+        run: |
+          node infra/opentofu/scripts/verify-charging-release-source.mjs
+          cp infra/opentofu/scripts/verify-charging-release-source.mjs "$RUNNER_TEMP/verify-reviewed-charging-source.mjs"
       - name: Verify release gates
         run: node --test infra/opentofu/scripts/*.test.mjs
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -77,6 +79,10 @@ jobs:
       - name: Remove isolated container
         if: always()
         run: docker rm -f charging-api-ci || true
+      - name: Reject stale main immediately before AWS credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/verify-reviewed-charging-source.mjs"
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-apply-dev
