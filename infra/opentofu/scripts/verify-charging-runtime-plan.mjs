@@ -43,6 +43,11 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     if(['placement_constraints','inference_accelerator','volume','proxy_configuration','ephemeral_storage','runtime_platform'].includes(key)&&before[key]==null&&Array.isArray(after[key])&&after[key].length===0)continue;
     if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
    }
+   if(r.address===prefix+'aws_iam_role.execution'&&key==='inline_policy'){
+    const policy=rows.find(row=>row.address===prefix+'aws_iam_role_policy.execution').values;
+    const matches=list=>Array.isArray(list)&&list.length===1&&list[0].name===policy.name&&JSON.stringify(canonical(JSON.parse(list[0].policy)))===JSON.stringify(canonical(JSON.parse(policy.policy)));
+    if((before.inline_policy==null||before.inline_policy.length===0||matches(before.inline_policy))&&matches(after.inline_policy))continue;
+   }
    reject('runtime drift field: '+r.type+':'+key);
   }
  }
