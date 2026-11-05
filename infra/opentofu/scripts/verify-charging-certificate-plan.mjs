@@ -20,6 +20,15 @@ export function separateCertificate(plan){
   if(p.tags_all?.Project!=='flexexa'||p.tags_all?.Environment!=='dev'||p.tags_all?.ManagedBy!=='opentofu')deny();
   if(p.options?.length!==1||p.options[0].certificate_transparency_logging_preference!=='ENABLED')deny();
  }
+ const computed=new Set(['status','certificate_body','certificate_chain','not_before','not_after','renewal_eligibility','renewal_summary','validation_emails','domain_validation_options']);
+ for(const drift of clean.resource_drift??[]){
+  if(drift.address!==address)continue;
+  if(drift.type!=='aws_acm_certificate'||drift.mode!=='managed'||drift.change?.actions?.join(',')!=='update')deny('certificate drift action');
+  const before=drift.change.before,after=drift.change.after;
+  if(before?.arn!=='arn:aws:acm:eu-north-1:938095765653:certificate/4bba5691-0345-4941-bb65-14572415bce9'||after?.arn!==before.arn)deny('certificate drift identity');
+  for(const key of new Set([...Object.keys(before),...Object.keys(after)]))if(JSON.stringify(before[key])!==JSON.stringify(after[key])&&!computed.has(key))deny('certificate configuration drift: '+key);
+ }
+ if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>r.address!==address);
  root.resources=root.resources.filter(r=>r.address!==address);
  clean.resource_changes=clean.resource_changes.filter(r=>r.address!==address);
  return {foundation:clean,certificate:{address,domain,action:actions[0]}};
