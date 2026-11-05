@@ -39,6 +39,8 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     if(key==='arn_without_revision'&&after[key]==='arn:aws:ecs:eu-north-1:938095765653:task-definition/flexexa-dev-charging-api'&&(before[key]==null||before[key]===after[key]))continue;
     if(key==='revision'&&after[key]===1&&(before[key]==null||before[key]===0))continue;
     if(key==='enable_fault_injection'&&after[key]===false&&before[key]==null)continue;
+    if(['ipc_mode','pid_mode'].includes(key)&&before[key]==null&&after[key]==='')continue;
+    if(['placement_constraints','inference_accelerator','volume','proxy_configuration','ephemeral_storage','runtime_platform'].includes(key)&&before[key]==null&&Array.isArray(after[key])&&after[key].length===0)continue;
     if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
    }
    reject('runtime drift field: '+r.type+':'+key);
