@@ -51,6 +51,18 @@ jobs:
             -backend-config=key=flexexa/dev/foundation.tfstate \
             -backend-config=region=eu-north-1
           tofu validate
+      - name: Verify existing task definition before metadata recovery
+        id: task_recovery
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          aws ecs describe-task-definition --task-definition flexexa-dev-charging-api:1 --include TAGS > /tmp/charging-task-live.json
+          tofu state pull > /tmp/charging-recovery-state.json
+          node ../../scripts/verify-charging-task-recovery.mjs /tmp/charging-task-live.json /tmp/charging-recovery-state.json
+          rm /tmp/charging-task-live.json /tmp/charging-recovery-state.json
+      - name: Restore verified successful task creation metadata
+        if: steps.task_recovery.outputs.untaint == 'true'
+        working-directory: infra/opentofu/environments/dev
+        run: tofu untaint 'module.charging_api[0].aws_ecs_task_definition.api'
       - name: Verify issued certificate and immutable published image
         working-directory: infra/opentofu/environments/dev
         run: |
