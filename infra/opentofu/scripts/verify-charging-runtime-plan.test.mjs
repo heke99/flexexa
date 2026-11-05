@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture as foundation} from './charging-plan.fixture.mjs';
-import {runtimeAddresses,verifyRuntimePlan} from './verify-charging-runtime-plan.mjs';
+import {runtimeAddresses,verifyRuntimePlan,normalizeContainerReadback} from './verify-charging-runtime-plan.mjs';
 function fixture(){
  const plan=foundation(),prefix='module.charging_api[0].',provider_name='registry.opentofu.org/hashicorp/aws';
  const role=name=>({name:'flexexa-dev-charging-api-'+name,permissions_boundary:'arn:aws:iam::938095765653:policy/FlexexaChargingTaskBoundaryDev',assume_role_policy:JSON.stringify({Statement:[{Principal:{Service:'ecs-tasks.amazonaws.com'},Action:'sts:AssumeRole'}]})});
@@ -29,3 +29,5 @@ test('foundation edits remain rejected',()=>{const p=fixture();p.resource_change
 test('partial verified create recovery and later no-op plan are accepted',()=>{const p=fixture();for(const r of p.resource_changes.filter(r=>r.address.startsWith('module.charging_api'))){r.change.actions=['no-op'];r.change.before=structuredClone(r.change.after);}assert.equal(verifyRuntimePlan(p).runtime_noop,18);p.resource_changes.at(-1).change.actions=['create'];p.resource_changes.at(-1).change.before=null;assert.equal(verifyRuntimePlan(p).runtime_creates,1);});
 
 test('tainted task is reviewable only in explicit read-only review mode',()=>{const p=fixture(),r=p.resource_changes.find(r=>r.type==='aws_ecs_task_definition');r.change.actions=['delete','create'];r.action_reason='replace_because_tainted';r.change.before={...r.change.after,arn:'arn:aws:ecs:eu-north-1:938095765653:task-definition/flexexa-dev-charging-api:1'};assert.throws(()=>verifyRuntimePlan(p));assert.equal(verifyRuntimePlan(p,{reviewTaintedTask:true}).runtime_resources,18);r.action_reason='replace_because_cannot_update';assert.throws(()=>verifyRuntimePlan(p,{reviewTaintedTask:true}));});
+
+test('only harmless ECS default arrays and same host port normalize',()=>{const a=[{portMappings:[{containerPort:8080}],linuxParameters:{capabilities:{drop:['ALL']}}}],b=structuredClone(a);b[0].portMappings[0].hostPort=8080;b[0].mountPoints=[];b[0].systemControls=[];b[0].volumesFrom=[];b[0].linuxParameters.capabilities.add=[];assert.equal(normalizeContainerReadback(JSON.stringify(a)),normalizeContainerReadback(JSON.stringify(b)));b[0].portMappings[0].hostPort=9000;assert.notEqual(normalizeContainerReadback(JSON.stringify(a)),normalizeContainerReadback(JSON.stringify(b)));});

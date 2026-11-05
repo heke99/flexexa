@@ -122,9 +122,10 @@ resource "aws_ecs_task_definition" "api" {
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
   container_definitions = jsonencode([{ name = "api", image = var.image, essential = true, user = "65532:65532", readonlyRootFilesystem = true,
-    portMappings     = [{ containerPort = 8080, protocol = "tcp" }],
+    portMappings     = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }],
+    mountPoints      = [], systemControls = [], volumesFrom = [],
     environment      = [{ name = "SUPABASE_URL", value = var.supabase_url }, { name = "SUPABASE_PUBLISHABLE_KEY", value = var.publishable_key }, { name = "PORT", value = "8080" }],
-    linuxParameters  = { capabilities = { drop = ["ALL"] } }, stopTimeout = 15,
+    linuxParameters  = { capabilities = { add = [], drop = ["ALL"] } }, stopTimeout = 15,
     healthCheck      = { command = ["CMD", "/usr/bin/node", "-e", "fetch('http://127.0.0.1:8080/health/live',{signal:AbortSignal.timeout(2000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval = 30, timeout = 5, retries = 3, startPeriod = 15 },
     logConfiguration = { logDriver = "awslogs", options = { "awslogs-group" = var.log_group, "awslogs-region" = "eu-north-1", "awslogs-stream-prefix" = "charging-api", "mode" = "blocking" } }
   }])

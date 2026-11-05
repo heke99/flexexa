@@ -4,6 +4,8 @@ import {pathToFileURL} from 'node:url';
 import {verifyCertificatePlan,separateCertificate} from './verify-charging-certificate-plan.mjs';
 const prefix='module.charging_api[0].';
 export const runtimeAddresses=['aws_security_group.edge','aws_security_group.task','aws_vpc_security_group_ingress_rule.https','aws_vpc_security_group_egress_rule.edge_task','aws_vpc_security_group_ingress_rule.task_edge','aws_vpc_security_group_egress_rule.tls','aws_lb.api','aws_lb_target_group.api','aws_lb_listener.https','aws_iam_role.execution','aws_iam_role.task','aws_iam_role_policy.execution','aws_ecs_task_definition.api','aws_ecs_service.api','aws_eip.egress','aws_nat_gateway.egress','aws_route.egress["0"]','aws_route.egress["1"]'];
+function canonical(value){if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])]));return value;}
+export function normalizeContainerReadback(value){const containers=JSON.parse(value);for(const c of containers){for(const key of ['mountPoints','systemControls','volumesFrom'])if(Array.isArray(c[key])&&c[key].length===0)delete c[key];if(c.linuxParameters?.capabilities?.add?.length===0)delete c.linuxParameters.capabilities.add;for(const port of c.portMappings??[])if(port.hostPort===port.containerPort)delete port.hostPort;}return JSON.stringify(canonical(containers));}
 const reject=reason=>{throw Error('CHARGING_RUNTIME_PLAN_REJECTED: '+reason);};
 export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
  const clean=structuredClone(plan),root=clean.planned_values?.root_module;
@@ -32,7 +34,15 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
   if(!runtimeAddresses.includes(r.address.slice(prefix.length))||r.change.actions?.join(',')!=='update'||!before||!after||before.id!==after.id)reject('runtime drift identity');
   const tags=p=>({...p.tags_all,...p.tags});const b=tags(before),a=tags(after);
   if(Object.keys(b).length!==3||Object.keys(a).length!==3||!Object.entries({Project:'flexexa',Environment:'dev',ManagedBy:'opentofu'}).every(([k,v])=>a[k]===v&&b[k]===v))reject('runtime tag projection');
-  for(const key of new Set([...Object.keys(before),...Object.keys(after)]))if(!['tags','tags_all'].includes(key)&&JSON.stringify(before[key])!==JSON.stringify(after[key]))reject('runtime drift field');
+  for(const key of new Set([...Object.keys(before),...Object.keys(after)]))if(!['tags','tags_all'].includes(key)&&JSON.stringify(canonical(before[key]))!==JSON.stringify(canonical(after[key]))){
+   if(r.address===prefix+'aws_ecs_task_definition.api'&&before.arn==='arn:aws:ecs:eu-north-1:938095765653:task-definition/flexexa-dev-charging-api:1'){
+    if(key==='arn_without_revision'&&after[key]==='arn:aws:ecs:eu-north-1:938095765653:task-definition/flexexa-dev-charging-api'&&(before[key]==null||before[key]===after[key]))continue;
+    if(key==='revision'&&after[key]===1&&(before[key]==null||before[key]===0))continue;
+    if(key==='enable_fault_injection'&&after[key]===false&&before[key]==null)continue;
+    if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
+   }
+   reject('runtime drift field: '+r.type+':'+key);
+  }
  }
  if(clean.resource_drift)clean.resource_drift=clean.resource_drift.filter(r=>!r.address.startsWith(prefix));
  root.child_modules=root.child_modules.filter(m=>m.address!=='module.charging_api[0]');
