@@ -37,3 +37,9 @@ Reviewed supplied-archive source SHA-256 values:
 - gpm.py: 82495b1cb1c01b4a2c9079ed7a57188c8753e8c5aba6373ecedf04a4625a6df1
 - plan_brief.py: 38b5f7b9e227181458abfdc1b18cfbf55e73069491de32d67da21672534660ad
 - timeline.py: e990040529de9deef3beece4a52cbd9743f0a1027809d9db394a5a5b05c41a83
+
+Next adaptation slice, 2026-11-05: EV arbitration responsibilities from gpm.py
+are represented by current_allocation.py with explicit policy-rank inputs and
+per-phase budgets. phase_budget.py and plan_explanation.py are accompanying
+AGPL-3.0-only module code. No implied voltage, 60/40 split, hidden priority,
+provider command, household state, concurrency guarantee or full GPM port.

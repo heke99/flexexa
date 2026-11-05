@@ -67,3 +67,25 @@ allocation. Both are pure and AGPL-3.0-only adaptations; see NOTICE.md and the t
 review at docs/reviews/energywizard-python-2026-11-05.md (from repository root).
 These decisions do not establish signatures, authentication, durable write authority,
 physical identity proof, freshness persistence or runtime readiness on their own.
+
+## Three-part current-allocation slice
+
+1. phase_budget.py derives whole-amp per-phase headroom, rounded down, from an
+   explicit verified limit and fresh synchronized other-load observations from
+   one meter. Other load must exclude controlled EV current; raw total current
+   cannot simply be substituted. Missing/old/mixed-time data yields no budget.
+2. current_allocation.py allocates a single snapshot by caller-supplied policy
+   rank, then asset ID. Minimum/maximum currents and confirmed phase indexes are
+   explicit; one physical connector cannot be assigned twice. Lower ranks are
+   served first. Equal ranks do not promise fairness or future departure success.
+3. plan_explanation.py joins matching goal/current decisions into language-neutral
+   reason codes for future API/UI integration. Unknown or disabled goals cannot
+   be presented as charging. Physical charging and departure feasibility are
+   explicitly unverified.
+
+This is not the LP/MILP interval optimizer, durable reservation/control fencing,
+phase switching or protection against concurrent controllers. Local electrical
+protection remains required. Caller verifies identity/consent/capabilities and
+filters active charging demand before requesting current. No API/UI/database or
+AWS resources change. V1 §§35–45,69 and preparatory FXP-04-T2/T4 apply; no full
+acceptance case is approved by these software tests. Existing notices retained.
