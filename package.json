@@ -10,14 +10,16 @@
     "dev": "turbo run dev",
     "lint": "node scripts/quality/lint-smoke.mjs && eslint country-packs --max-warnings=0 && turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "node --test scripts/quality/*.test.mjs && turbo run test",
+    "test": "pnpm test:optimizer && node --test scripts/quality/*.test.mjs && turbo run test",
     "test:quality": "node --test scripts/quality/*.test.mjs",
     "index:codebase": "node scripts/quality/build-codebase-index.mjs",
     "impact": "node scripts/quality/impact-analysis.mjs",
     "verify:affected": "node scripts/quality/verify-affected.mjs",
     "plan:check": "node scripts/quality/masterplan-report.mjs --check",
     "db:history:check": "node scripts/database/check-migration-history.mjs",
-    "plan:ready": "node scripts/quality/masterplan-report.mjs --require-ready"
+    "plan:ready": "node scripts/quality/masterplan-report.mjs --require-ready",
+    "test:optimizer": "PYTHONPATH=services/optimizer/src python3 -B -m unittest discover -s services/optimizer/tests -v",
+    "demo:optimizer": "PYTHONPATH=services/optimizer/src python3 -B -m flexexa_optimizer"
   },
   "devDependencies": {
     "turbo": "2.10.12",
