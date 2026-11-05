@@ -35,3 +35,7 @@ output "log_groups" {
     for service, log_group in aws_cloudwatch_log_group.service : service => log_group.name
   }
 }
+
+output "private_route_table_ids" {
+  value = [for route in aws_route_table.private : route.id]
+}

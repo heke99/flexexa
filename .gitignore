@@ -20,3 +20,5 @@ __pycache__/
 # Python optimizer bytecode
 __pycache__/
 *.py[cod]
+
+**/.terraform/
