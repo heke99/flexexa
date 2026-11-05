@@ -8,7 +8,7 @@ export function validateReleaseContext(env,branch,runs){
  for(const [key,value] of Object.entries({GITHUB_ACTIONS:'true',GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/main',GITHUB_REPOSITORY:'heke99/flexexa',GITHUB_REPOSITORY_ID:'1362385793',GITHUB_REPOSITORY_OWNER_ID:'129280077'}))if(env[key]!==value)reject();
  if(!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??'')||branch.protected!==true||branch.commit?.sha!==env.GITHUB_SHA)reject();
  for(const name of workflows)if(!runs.some(r=>r.name===name&&r.head_sha===sourceSha&&r.event==='pull_request'&&r.status==='completed'&&r.conclusion==='success'&&r.head_repository?.id===1362385793&&r.repository?.id===1362385793))reject();
- return {source_sha:sourceSha,main_sha:env.GITHUB_SHA,scope:'development certificate only; unchanged foundation'};
+ return {source_sha:sourceSha,main_sha:env.GITHUB_SHA,verified_source:true};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  try{
