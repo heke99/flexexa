@@ -43,6 +43,10 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     if(['placement_constraints','inference_accelerator','volume','proxy_configuration','ephemeral_storage','runtime_platform'].includes(key)&&before[key]==null&&Array.isArray(after[key])&&after[key].length===0)continue;
     if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
    }
+   if(r.address===prefix+'aws_eip.egress'&&['association_id','network_interface','network_interface_owner_id','private_ip'].includes(key)&&(before[key]==null||before[key]==='')){
+    const nat=rows.find(row=>row.address===prefix+'aws_nat_gateway.egress').values;
+    if(after.id==='eipalloc-0cbdaaab41d1ac508'&&nat.allocation_id===after.id&&after.network_interface===nat.network_interface_id&&after.private_ip===nat.private_ip&&after.network_interface_owner_id==='938095765653'&&/^eipassoc-[a-f0-9]+$/.test(after.association_id))continue;
+   }
    if(r.address===prefix+'aws_iam_role.execution'&&key==='inline_policy'){
     const policy=rows.find(row=>row.address===prefix+'aws_iam_role_policy.execution').values;
     const matches=list=>Array.isArray(list)&&list.length===1&&list[0].name===policy.name&&JSON.stringify(canonical(JSON.parse(list[0].policy)))===JSON.stringify(canonical(JSON.parse(policy.policy)));
