@@ -1,0 +1,88 @@
+name: Reviewed charging dev Fargate release
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/opentofu/environments/dev/charging-api.auto.tfvars'
+      - '.github/workflows/charging-dev-runtime.yml'
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: flexexa-opentofu-dev-apply
+  cancel-in-progress: false
+jobs:
+  runtime:
+    if: contains(github.event.head_commit.message, 'Deploy reviewed charging API dev runtime 20261105')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Check current protected main and exact verified source before AWS credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node infra/opentofu/scripts/verify-charging-release-source.mjs
+      - name: Verify strict certificate and foundation gates
+        run: node --test infra/opentofu/scripts/*.test.mjs
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-apply-dev
+          aws-region: eu-north-1
+          allowed-account-ids: 938095765653
+          role-session-name: charging-runtime-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 10
+      - name: Initialize existing protected development state
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          tofu fmt -check -recursive ../..
+          tofu init -input=false -lockfile=readonly \
+            -backend-config=bucket=flexexa-tofu-state-938095765653 \
+            -backend-config=key=flexexa/dev/foundation.tfstate \
+            -backend-config=region=eu-north-1
+          tofu validate
+      - name: Verify issued certificate and immutable published image
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          test "$(aws acm describe-certificate --certificate-arn arn:aws:acm:eu-north-1:938095765653:certificate/4bba5691-0345-4941-bb65-14572415bce9 --query 'Certificate.Status' --output text)" = ISSUED
+          digest=$(aws ecr describe-images --repository-name flexexa/dev/api --image-ids imageTag=charging-6c39394b78de49b0b987c6ed4550f2f15f6a303b --query 'imageDetails[0].imageDigest' --output text)
+          grep -F "api@$digest" charging-api.auto.tfvars
+      - name: Plan and enforce initial isolated runtime with unchanged foundation
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          tofu plan -input=false -no-color -out=charging-runtime.tfplan
+          tofu show -json charging-runtime.tfplan > /tmp/charging-runtime-plan.json
+          node ../../scripts/verify-charging-runtime-plan.mjs /tmp/charging-runtime-plan.json charging-runtime-safety.json
+          tofu show -no-color charging-runtime.tfplan > charging-runtime-plan.txt
+      - name: Reject stale protected main immediately before apply
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node infra/opentofu/scripts/verify-charging-release-source.mjs
+      - name: Apply exact reviewed runtime plan
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          tofu apply -input=false -no-color charging-runtime.tfplan
+          tofu output -raw charging_api_load_balancer_dns > charging-api-load-balancer.txt
+          aws ecs wait services-stable --cluster flexexa-dev --services flexexa-dev-charging-api
+          aws ecs describe-services --cluster flexexa-dev --services flexexa-dev-charging-api --query 'services[].{name:serviceName,running:runningCount,pending:pendingCount,desired:desiredCount,deployments:deployments}' > charging-api-service-readback.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-charging-runtime-release
+          path: |
+            infra/opentofu/environments/dev/charging-runtime-safety.json
+            infra/opentofu/environments/dev/charging-runtime-plan.txt
+            infra/opentofu/environments/dev/charging-api-load-balancer.txt
+            infra/opentofu/environments/dev/charging-api-service-readback.json
+          if-no-files-found: warn
+          retention-days: 30

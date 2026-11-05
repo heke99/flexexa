@@ -83,7 +83,7 @@ jobs:
         run: |
           trap 'rm -f /tmp/flexexa-dev-plan.json' EXIT
           tofu show -json tfplan > /tmp/flexexa-dev-plan.json
-          node ../../scripts/verify-charging-certificate-plan.mjs /tmp/flexexa-dev-plan.json /tmp/flexexa-foundation-only.json charging-certificate-safety.json
+          node ../../scripts/verify-charging-runtime-plan.mjs /tmp/flexexa-dev-plan.json charging-certificate-safety.json /tmp/flexexa-foundation-only.json
           node ../../scripts/describe-dev-drift.mjs /tmp/flexexa-foundation-only.json
           node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-foundation-only.json dev-plan-safety.json --require-noop
 
