@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture as foundation} from './charging-plan.fixture.mjs';
+import {runtimeAddresses,verifyRuntimePlan} from './verify-charging-runtime-plan.mjs';
+function fixture(){
+ const plan=foundation(),prefix='module.charging_api[0].',provider_name='registry.opentofu.org/hashicorp/aws';
+ const role=name=>({name:'flexexa-dev-charging-api-'+name,permissions_boundary:'arn:aws:iam::938095765653:policy/FlexexaChargingTaskBoundaryDev',assume_role_policy:JSON.stringify({Statement:[{Principal:{Service:'ecs-tasks.amazonaws.com'},Action:'sts:AssumeRole'}]})});
+ const values={
+ 'aws_iam_role.execution':role('execution'),'aws_iam_role.task':role('task'),
+ 'aws_ecs_task_definition.api':{family:'flexexa-dev-charging-api',cpu:'256',memory:'512',network_mode:'awsvpc',requires_compatibilities:['FARGATE'],container_definitions:JSON.stringify([{name:'api',user:'65532:65532',readonlyRootFilesystem:true,linuxParameters:{capabilities:{drop:['ALL']}},image:'938095765653.dkr.ecr.eu-north-1.amazonaws.com/flexexa/dev/api@sha256:'+'a'.repeat(64),environment:[{name:'SUPABASE_URL',value:'https://zhgwlvmtvwjftyjmgljw.supabase.co'},{name:'SUPABASE_PUBLISHABLE_KEY',value:'sb_publishable_fixture'},{name:'PORT',value:'8080'}]}])},
+ 'aws_ecs_service.api':{name:'flexexa-dev-charging-api',desired_count:1,launch_type:'FARGATE',network_configuration:[{assign_public_ip:false}],deployment_circuit_breaker:[{rollback:true}]},
+ 'aws_lb_listener.https':{port:443,protocol:'HTTPS',certificate_arn:'arn:aws:acm:eu-north-1:938095765653:certificate/4bba5691-0345-4941-bb65-14572415bce9'}
+ };
+ for(const [kind,name,port] of [['ingress','https',443],['ingress','task_edge',8080],['egress','edge_task',8080],['egress','tls',443]])values['aws_vpc_security_group_'+kind+'_rule.'+name]={from_port:port,to_port:port,ip_protocol:'tcp'};
+ const resources=runtimeAddresses.map(name=>({address:prefix+name,mode:'managed',type:name.split('.')[0],provider_name,values:values[name]??{}}));
+ plan.planned_values.root_module.child_modules.push({address:'module.charging_api[0]',resources});
+ plan.resource_changes.push(...resources.map(r=>({...r,change:{actions:['create'],before:null,after:structuredClone(r.values)}})));
+ return plan;
+}
+const runtime=p=>p.planned_values.root_module.child_modules.at(-1).resources;
+test('exact isolated initial runtime accepted',()=>assert.equal(verifyRuntimePlan(fixture()).runtime_creates,18));
+test('extra or missing runtime resource rejected',()=>{const p=fixture();runtime(p).pop();assert.throws(()=>verifyRuntimePlan(p));});
+test('replacement and update rejected',()=>{for(const actions of [['update'],['delete','create']]){const p=fixture();p.resource_changes.at(-1).change.actions=actions;assert.throws(()=>verifyRuntimePlan(p));}});
+test('unbounded IAM role rejected',()=>{const p=fixture();runtime(p).find(r=>r.type==='aws_iam_role').values.permissions_boundary='other';assert.throws(()=>verifyRuntimePlan(p));});
+test('root, mutable image, writeable root or service key rejected',()=>{for(const mutation of [c=>c.user='0',c=>c.image='node:latest',c=>c.readonlyRootFilesystem=false,c=>c.environment[1].value='service-role']){const p=fixture(),td=runtime(p).find(r=>r.type==='aws_ecs_task_definition').values,c=JSON.parse(td.container_definitions);mutation(c[0]);td.container_definitions=JSON.stringify(c);assert.throws(()=>verifyRuntimePlan(p));}});
+test('unsafe change-after cannot hide behind safe planned values',()=>{const p=fixture();p.resource_changes.find(r=>r.type==='aws_ecs_service').change.after.network_configuration[0].assign_public_ip=true;assert.throws(()=>verifyRuntimePlan(p));});
+test('foundation edits remain rejected',()=>{const p=fixture();p.resource_changes[0].change.actions=['update'];assert.throws(()=>verifyRuntimePlan(p));});
