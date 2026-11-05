@@ -57,3 +57,13 @@ provider consent/control and physical pilot. Preserve central Kernel authority.
 
 Skill routing: repository index, impact, affected verification, test strategy,
 code review and security review. No DB/IAM/live deployment/provider changes.
+
+## Reviewed observation/session primitives
+
+observation_health.py assesses source timestamps with explicit maximum age and clock
+tolerance. session_binding.py accepts already-authorized current-session observations
+and allowed canonical IDs; it never guesses a car from an active plug or previous
+allocation. Both are pure and AGPL-3.0-only adaptations; see NOTICE.md and the targeted
+review at docs/reviews/energywizard-python-2026-11-05.md (from repository root).
+These decisions do not establish signatures, authentication, durable write authority,
+physical identity proof, freshness persistence or runtime readiness on their own.

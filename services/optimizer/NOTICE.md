@@ -26,3 +26,14 @@ All source of this adaptation is present in this public repository. Any future
 network-served product using it must implement applicable source-offer and other
 licence obligations; this unhosted primitive does not settle the licence scope of
 a future combined product. Keep notices and licence when redistributing.
+
+Additional responsibility adaptations, 2026-11-05:
+- health.py -> observation_health.py: source timestamp freshness, strict values, immutable scoped result.
+- ev_handshake.py -> session_binding.py: explicit confirmed identity per current session, no guessing or inherited allocation.
+
+Reviewed supplied-archive source SHA-256 values:
+- health.py: ca47e316a6722eb18305151022d8793a7307dffd0d43eeb39be040e9c5fedede
+- ev_handshake.py: 13977c52870275e28d70b3cc5311dd3f13319007c178a7c9604829c1fab42412
+- gpm.py: 82495b1cb1c01b4a2c9079ed7a57188c8753e8c5aba6373ecedf04a4625a6df1
+- plan_brief.py: 38b5f7b9e227181458abfdc1b18cfbf55e73069491de32d67da21672534660ad
+- timeline.py: e990040529de9deef3beece4a52cbd9743f0a1027809d9db394a5a5b05c41a83
