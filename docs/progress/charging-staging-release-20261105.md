@@ -36,7 +36,7 @@ All application infrastructure was applied through reviewed saved OpenTofu plans
 
 The task is nonroot with a read-only root filesystem and all capabilities dropped. It has no public IP, an empty task identity policy, and a fixed permissions boundary. Its execution role can pull only the API image and write API logs. The ALB admits public HTTPS; port 8080 accepts only the ALB security group; task outbound traffic is HTTPS through the dev NAT.
 
-The follow-up plan guard recognizes computed SG views only when they exactly match their separately managed, unchanged security rules. Extra ports, CIDRs, rules or different owners are rejected. This supports an actual post-release no-op plan without weakening the no-update/no-delete gate.
+The follow-up plan guard recognizes computed SG and target-group views only when they exactly match their separately managed, unchanged security rules or HTTPS listener. Extra ports, CIDRs, rules or different owners are rejected. This supports an actual post-release no-op plan without weakening the no-update/no-delete gate.
 
 ## Remaining acceptance work
 

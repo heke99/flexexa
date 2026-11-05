@@ -44,6 +44,10 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     if(['placement_constraints','inference_accelerator','volume','proxy_configuration','ephemeral_storage','runtime_platform'].includes(key)&&before[key]==null&&Array.isArray(after[key])&&after[key].length===0)continue;
     if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
    }
+   if(r.address===prefix+'aws_lb_target_group.api'&&key==='load_balancer_arns'&&Array.isArray(before[key])&&before[key].length===0){
+    const lb=rows.find(row=>row.address===prefix+'aws_lb.api').values,listener=rows.find(row=>row.address===prefix+'aws_lb_listener.https').values,owner=changes.find(row=>row.address===prefix+'aws_lb_listener.https');
+    if(JSON.stringify(after.load_balancer_arns)===JSON.stringify([lb.arn])&&listener.load_balancer_arn===lb.arn&&listener.default_action?.length===1&&listener.default_action[0].type==='forward'&&listener.default_action[0].target_group_arn===after.arn&&owner.change.actions.join(',')==='no-op')continue;
+   }
    if(['aws_security_group.edge','aws_security_group.task'].map(n=>prefix+n).includes(r.address)&&['ingress','egress'].includes(key)&&(before[key]==null||before[key].length===0)){
     const edge=r.address.endsWith('.edge'),incoming=key==='ingress',publicRule=edge===incoming,peer=rows.find(row=>row.address===prefix+'aws_security_group.'+(edge?'task':'edge')).values;
     const ownerName=publicRule?(edge?'aws_vpc_security_group_ingress_rule.https':'aws_vpc_security_group_egress_rule.tls'):(edge?'aws_vpc_security_group_egress_rule.edge_task':'aws_vpc_security_group_ingress_rule.task_edge');
