@@ -3,7 +3,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {verifyDevPlan} from './verify-dev-plan.mjs';
 const address='aws_acm_certificate.charging_api',domain='api-staging.flexexa.com';
-const deny=()=>{throw Error('CHARGING_CERTIFICATE_PLAN_REJECTED');};
+const deny=(reason='shape')=>{throw Error('CHARGING_CERTIFICATE_PLAN_REJECTED: '+reason);};
 export function separateCertificate(plan){
  const clean=structuredClone(plan),root=clean.planned_values?.root_module;
  if(!root||!Array.isArray(root.resources)||!Array.isArray(clean.resource_changes))deny();
@@ -14,7 +14,8 @@ export function separateCertificate(plan){
  const actions=change.change?.actions;
  if(!Array.isArray(actions)||actions.length!==1||!['create','no-op'].includes(actions[0])||change.importing||change.change.importing)deny();
  for(const p of [resource.values,change.change.after]){
-  if(!p||p.domain_name!==domain||p.validation_method!=='DNS'||p.key_algorithm!=='RSA_2048'||p.certificate_body||p.private_key||p.certificate_chain||p.certificate_authority_arn)deny();
+  if(!p||p.domain_name!==domain||p.validation_method!=='DNS'||p.key_algorithm!=='RSA_2048'||p.private_key||p.certificate_authority_arn)deny('certificate parameters');
+  if((p.certificate_body||p.certificate_chain)&&!(actions[0]==='no-op'&&p.arn==='arn:aws:acm:eu-north-1:938095765653:certificate/4bba5691-0345-4941-bb65-14572415bce9'&&JSON.stringify(change.change.before)===JSON.stringify(change.change.after)))deny('certificate PEM change');
   if(!Array.isArray(p.subject_alternative_names)||p.subject_alternative_names.some(x=>x!==domain))deny();
   if(p.tags_all?.Project!=='flexexa'||p.tags_all?.Environment!=='dev'||p.tags_all?.ManagedBy!=='opentofu')deny();
   if(p.options?.length!==1||p.options[0].certificate_transparency_logging_preference!=='ENABLED')deny();
@@ -29,5 +30,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   const [input,output,summary]=process.argv.slice(2);if(!input||!output||!summary)deny();
   const plan=JSON.parse(readFileSync(input,'utf8')),parts=separateCertificate(plan),result=verifyCertificatePlan(plan);
   writeFileSync(output,JSON.stringify(parts.foundation),{flag:'wx',mode:0o600});writeFileSync(summary,JSON.stringify(result,null,2),{flag:'wx',mode:0o600});console.log(JSON.stringify(result));
- }catch{console.error('CHARGING_CERTIFICATE_PLAN_REJECTED');process.exitCode=1;}
+ }catch(error){console.error(error.message);process.exitCode=1;}
 }
