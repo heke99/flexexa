@@ -279,6 +279,10 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.3.4 --activate
           pnpm install --frozen-lockfile
+      - name: Install hash-locked optimizer wheels
+        run: |
+          python3 -c "import sys; assert sys.version_info[:2] == (3, 12)"
+          python3 -m pip install --require-hashes --only-binary=:all: -r services/optimizer/requirements-linux-cp312.lock
       - name: Verify application scope (database and infrastructure are separate gates)
         env:
           IMPACT_BASE: ${{ github.event.pull_request.base.sha }}

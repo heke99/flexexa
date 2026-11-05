@@ -19,7 +19,7 @@ preparation for V1.1 FXP-04/05. No phase acceptance or physical charging verdict
   snapshot from 2026-11-05 through normalization and MILP: optimal 1.3800 kWh for
   a synthetic vehicle/tariff/headroom replay. No physical saving is demonstrated.
 - `/portal` uses Supabase Auth password login, in-memory session/refresh, logout,
-  MFA verification using an already enrolled TOTP factor, company selection and
+  MFA enrollment (QR shown only to the signed-in user) and verification using a TOTP factor, company selection and
   strict live asset inventory. It cannot invent a live plan/cost when none exists.
   It uses the caller's JWT for the canonical database RPC. No service-role key.
   Auth changes invalidate displayed company/admin state and pending data results.
