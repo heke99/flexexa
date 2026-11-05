@@ -44,6 +44,14 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     if(['placement_constraints','inference_accelerator','volume','proxy_configuration','ephemeral_storage','runtime_platform'].includes(key)&&before[key]==null&&Array.isArray(after[key])&&after[key].length===0)continue;
     if(key==='container_definitions'&&normalizeContainerReadback(before[key])===normalizeContainerReadback(after[key]))continue;
    }
+   if(['aws_security_group.edge','aws_security_group.task'].map(n=>prefix+n).includes(r.address)&&['ingress','egress'].includes(key)&&(before[key]==null||before[key].length===0)){
+    const edge=r.address.endsWith('.edge'),incoming=key==='ingress',publicRule=edge===incoming,peer=rows.find(row=>row.address===prefix+'aws_security_group.'+(edge?'task':'edge')).values;
+    const ownerName=publicRule?(edge?'aws_vpc_security_group_ingress_rule.https':'aws_vpc_security_group_egress_rule.tls'):(edge?'aws_vpc_security_group_egress_rule.edge_task':'aws_vpc_security_group_ingress_rule.task_edge');
+    const owner=rows.find(row=>row.address===prefix+ownerName).values,ownerChange=changes.find(row=>row.address===prefix+ownerName);
+    const rule=after[key]?.[0],port=publicRule?443:8080;
+    const fields=['cidr_blocks','description','from_port','ipv6_cidr_blocks','prefix_list_ids','protocol','security_groups','self','to_port'];
+    if(after[key]?.length===1&&rule&&Object.keys(rule).every(k=>fields.includes(k))&&rule.from_port===port&&rule.to_port===port&&rule.protocol==='tcp'&&rule.self===false&&(rule.description===''||rule.description==null)&&rule.ipv6_cidr_blocks?.length===0&&rule.prefix_list_ids?.length===0&&JSON.stringify(rule.cidr_blocks)===(publicRule?'["0.0.0.0/0"]':'[]')&&JSON.stringify(rule.security_groups)===JSON.stringify(publicRule?[]:[peer.id])&&owner.security_group_id===after.id&&owner.from_port===port&&owner.to_port===port&&owner.ip_protocol==='tcp'&&(publicRule?owner.cidr_ipv4==='0.0.0.0/0':owner.referenced_security_group_id===peer.id)&&ownerChange.change.actions.join(',')==='no-op')continue;
+   }
    if(r.address===prefix+'aws_eip.egress'&&['association_id','network_interface','network_interface_owner_id','private_ip','private_dns'].includes(key)&&(before[key]==null||before[key]==='')){
     const nat=rows.find(row=>row.address===prefix+'aws_nat_gateway.egress').values;
     if(after.id==='eipalloc-0cbdaaab41d1ac508'&&nat.allocation_id===after.id&&after.network_interface===nat.network_interface_id&&after.private_ip===nat.private_ip&&(after.network_interface_owner_id==null||after.network_interface_owner_id==='938095765653')&&after.association_id==='eipassoc-037319886320a1af2'&&(key!=='private_dns'||after.private_dns==='ip-'+nat.private_ip.replaceAll('.','-')+'.eu-north-1.compute.internal'))continue;
