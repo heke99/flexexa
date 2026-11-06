@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseChargingInventory,parsePlatformInventory,parseChargingCompanies} from '../src/charging-inventory.ts';
+const id='f7000000-0000-4000-8000-000000000001',other='f7000000-0000-4000-8000-000000000002';
+const row={tenant_id:id,generated_at:'2026-11-05T12:00:00.000Z',mode:'live',assets:[],has_more:false};
+test('real empty inventory is distinct from simulation',()=>assert.equal(parseChargingInventory(row,id).mode,'live'));
+test('foreign tenant inventory rejected',()=>assert.throws(()=>parseChargingInventory({...row,tenant_id:other},id)));
+test('full total or provider fields cannot appear in inventory',()=>assert.throws(()=>parseChargingInventory({...row,total:'10'},id)));
+test('platform response excludes customer details',()=>assert.throws(()=>parsePlatformInventory({generated_at:row.generated_at,mode:'live',companies:[{tenant_id:id,label:'A',asset_count:0,customers:[]}],has_more:false})));
+test('company selector rejects duplicates and extra role claims',()=>{assert.throws(()=>parseChargingCompanies([{id,name:'A'},{id,name:'A'}]));assert.throws(()=>parseChargingCompanies([{id,name:'A',role:'admin'}]));});

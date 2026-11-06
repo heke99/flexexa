@@ -16,3 +16,9 @@ supabase/.temp/
 **/next-env.d.ts
 __pycache__/
 *.py[cod]
+
+# Python optimizer bytecode
+__pycache__/
+*.py[cod]
+
+**/.terraform/

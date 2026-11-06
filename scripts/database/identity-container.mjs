@@ -51,7 +51,7 @@ export async function startIdentityContainer(config){
   }
   assert(healthy);assert.equal((await fetch(origin+'/health/live')).status,200);
   const ready=await fetch(origin+'/health/ready');assert.equal(ready.status,200);assert.deepEqual(await ready.json(),{status:'ready'});
-  const user=docker(['exec',container,'/nodejs/bin/node','-e','console.log(process.getuid())']);assert.notEqual(user,'0');
+  const user=docker(['exec',container,'/usr/bin/node','-e','console.log(process.getuid())']);assert.notEqual(user,'0');
   const locked=docker(['inspect','--format','{{.HostConfig.ReadonlyRootfs}}',container]);assert.equal(locked,'true');
   return {origin,async close(){
    try{

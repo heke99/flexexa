@@ -1,0 +1,84 @@
+{
+  "company": {
+    "label": "Gridex EL · testföretag",
+    "overview": {
+      "tenant_id": "f7000000-0000-4000-8000-000000000001",
+      "generated_at": "2026-11-05T18:00:00Z",
+      "mode": "simulation",
+      "assets": [
+        {
+          "asset_id": "f7000000-0000-4000-8000-000000000101",
+          "site_id": "f7000000-0000-4000-8000-000000000011",
+          "label": "BMW 330e 2023 · simulerad",
+          "plan_status": "optimal",
+          "departure_at": "2026-11-05T21:00:00Z",
+          "energy_kwh": "1.38",
+          "electricity": "1.61",
+          "variable_total": "2.66",
+          "total": null,
+          "currency": "SEK"
+        },
+        {
+          "asset_id": "f7000000-0000-4000-8000-000000000102",
+          "site_id": "f7000000-0000-4000-8000-000000000011",
+          "label": "Elbil 2 · simulerad",
+          "plan_status": "optimal",
+          "departure_at": "2026-11-05T21:00:00Z",
+          "energy_kwh": "2.30",
+          "electricity": "2.67",
+          "variable_total": "4.43",
+          "total": null,
+          "currency": "SEK"
+        },
+        {
+          "asset_id": "f7000000-0000-4000-8000-000000000103",
+          "site_id": "f7000000-0000-4000-8000-000000000011",
+          "label": "Laddpunkt 3 · simulerad",
+          "plan_status": "blocked",
+          "departure_at": "2026-11-05T21:00:00Z",
+          "energy_kwh": "0",
+          "electricity": "0",
+          "variable_total": "0",
+          "total": null,
+          "currency": "SEK"
+        }
+      ]
+    },
+    "timeline": [
+      {
+        "asset_id": "f7000000-0000-4000-8000-000000000101",
+        "starts_at": "2026-11-05T19:00:00Z",
+        "ends_at": "2026-11-05T20:00:00Z",
+        "current_a": 6,
+        "energy_kwh": "1.38"
+      },
+      {
+        "asset_id": "f7000000-0000-4000-8000-000000000102",
+        "starts_at": "2026-11-05T19:00:00Z",
+        "ends_at": "2026-11-05T20:00:00Z",
+        "current_a": 10,
+        "energy_kwh": "2.30"
+      }
+    ]
+  },
+  "platform": {
+    "generated_at": "2026-11-05T18:00:00Z",
+    "mode": "simulation",
+    "companies": [
+      {
+        "tenant_id": "f7000000-0000-4000-8000-000000000001",
+        "label": "Gridex EL · testföretag",
+        "asset_count": 3,
+        "planned_count": 2,
+        "blocked_count": 1
+      },
+      {
+        "tenant_id": "f7000000-0000-4000-8000-000000000002",
+        "label": "Partner Energi · testföretag",
+        "asset_count": 3,
+        "planned_count": 2,
+        "blocked_count": 1
+      }
+    ]
+  }
+}
