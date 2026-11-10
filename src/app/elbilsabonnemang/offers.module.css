@@ -1,0 +1,53 @@
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(16px, 3vw, 32px);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(20px, 4vw, 40px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--white);
+}
+.gridex {
+  background: #eef4e8;
+  border-color: #c7d8c5;
+}
+.card h3 {
+  font-size: clamp(1.65rem, 3vw, 2.5rem);
+  margin: 12px 0 20px;
+}
+.terms {
+  margin: 0 0 22px;
+}
+.terms div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+.terms dd {
+  margin: 0;
+  font-weight: 700;
+}
+.card a {
+  align-self: flex-start;
+  margin-top: auto;
+}
+.note {
+  margin-top: 24px;
+  padding: 20px 0;
+}
+.note a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}
