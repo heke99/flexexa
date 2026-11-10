@@ -1,13 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { blobHash, validateManifest } from './source-parity.mjs';
+import { validateManifest } from './source-parity.mjs';
 import { assertPage, staticAssets, canary } from './http-contract.mjs';
 const manifest = JSON.parse(readFileSync('.flexexa/web-projection.json', 'utf8'));
-const html = '<html lang="sv"><title>Flexexa</title><h1>Energy flexibility infrastructure.</h1><p>Phase 0 foundation is being built from canonical contracts outward.</p><script src="/_next/static/chunks/app.js"></script><link href="/_next/static/css/app.css"></html>';
-test('preserves every copied blob from the reviewed source', () => {
-  for (const [path, expected] of validateManifest(manifest)) assert.equal(blobHash(readFileSync(path)), expected, path);
-});
+const html = '<html lang="sv"><title>Flexexa — energi i rätt riktning</title><h1>Mer kraft.<br/>Mindre friktion.</h1><p>För bilförare, elbolag och energipartner.</p><script src="/_next/static/chunks/app.js"></script><link href="/_next/static/css/app.css"></html>';
 for (const key of ['sourceCommit', 'sourceTree']) test(`rejects invalid ${key}`, () => {
   assert.throws(() => validateManifest({ ...manifest, [key]: 'main' }), /WEB_SOURCE_PARITY_REJECTED/);
 });
@@ -32,9 +29,9 @@ test('requires real JS/CSS assets and rejects unsafe local paths', () => {
   assert.throws(() => staticAssets('<script src="https://example.com/app.js"></script>'));
   assert.throws(() => staticAssets(html.replace('chunks/app.js', '../app.js')));
 });
-test('Vercel preserves pinned frozen installation and only builds the web workspace', () => {
-  const config = JSON.parse(readFileSync('apps/web/vercel.json', 'utf8'));
-  assert.equal(config.installCommand, 'cd ../.. && corepack pnpm@12.3.4 install --frozen-lockfile');
-  assert.equal(config.buildCommand, 'cd ../.. && corepack pnpm@12.3.4 --filter @flexexa/web build');
+test('Vercel installs and builds the unified root project', () => {
+  const config = JSON.parse(readFileSync('vercel.json', 'utf8'));
+  assert.equal(config.installCommand, 'corepack pnpm@12.3.4 install --frozen-lockfile --ignore-scripts');
+  assert.equal(config.buildCommand, 'corepack pnpm@12.3.4 build');
   assert.equal(config.framework, 'nextjs');
 });

@@ -8,9 +8,9 @@ import { join, resolve } from 'node:path';
 import { canary } from './http-contract.mjs';
 
 export function assertSnapshot(snapshot, width) {
-  assert.equal(snapshot?.title, 'Flexexa');
+  assert.equal(snapshot?.title, 'Flexexa — energi i rätt riktning');
   assert.equal(snapshot?.language, 'sv');
-  assert.equal(snapshot?.heading, 'Energy flexibility infrastructure.');
+  assert.equal(snapshot?.heading, 'Mer kraft.Mindre friktion.');
   assert.equal(snapshot?.mainCount, 1);
   assert.equal(snapshot?.errorOverlay, false);
   assert.equal(snapshot?.secretVisible, false);
