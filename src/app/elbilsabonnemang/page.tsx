@@ -51,9 +51,15 @@ export default function SubscriptionPage() {
             <span className="eyebrow">MED SEPARAT ELAVTAL</span>
             <h3 id="gridex-erbjudande">Flexexa med Gridex</h3>
             <dl className={styles.terms}>
-              <div><dt>Planerad bindningstid för elavtalet</dt><dd>Minst 2 månader</dd></div>
+              <div><dt>Uppsägningstid för elavtalet</dt><dd>1 månad</dd></div>
               <div><dt>Bindningstid för laddning</dt><dd>Meddelas före köp</dd></div>
               <div><dt>Rabattstart</dt><dd>Vid kvalificerande elleverans</dd></div>
+            </dl>
+            <h4>Välj elavtal vid teckning</h4>
+            <dl className={styles.terms}>
+              <div><dt>Månadspris</dt><dd>2 månaders bindning. Samma elpris per kWh inom månaden.</dd></div>
+              <div><dt>Kvartspris</dt><dd>2 månaders bindning. Elpriset följer elbörsen var 15:e minut.</dd></div>
+              <div><dt>Portföljförvaltat</dt><dd>3 månaders bindning. Gridex prissäkrar en del av elinköpen.</dd></div>
             </dl>
             <p>Gridex EL AB tecknar och fakturerar elavtalet separat. Rabatten gäller laddabonnemanget när den kvalificerande elleveransen är aktiv.</p>
             <p><strong>Köp med Gridex är ännu inte öppet.</strong></p>
