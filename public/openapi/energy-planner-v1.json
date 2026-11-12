@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://flexexa.com"
+      "url": "https://www.flexexa.com"
     }
   ],
   "paths": {
@@ -22,7 +22,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "https://flexexa.com"
+            "example": "https://www.flexexa.com"
           }
         ],
         "requestBody": {
