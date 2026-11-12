@@ -7,6 +7,7 @@ const links = [
   ["/energi", "För företag"],
   ["/ladda", "För bilförare"],
   ["/elbilsabonnemang", "Elbilsabonnemang"],
+  ["/energy-wizard", "Energy Wizard"],
 ] as const;
 
 export function SiteNav() {
