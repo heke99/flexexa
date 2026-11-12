@@ -1,0 +1,17 @@
+# Erbjudandesida och privatköp — 2026-11-12
+
+Marknadsgren `codex/paket1-2-release`, implementation `867325a`, PR 73. Grenen har hämtats och arbetskatalogen återställts. Ingen ändring av ansökan, räknare eller befintliga kunddata.
+
+Färska HTTPS-anrop når www.flexexa.com/elbilsabonnemang (200), ladda.flexexa.com (200), sandbox-API:s /health/ready (200), Supabase och Stripe. Den tidigare CONNECT-spärren är löst i den nya miljön. Dessa anrop verifierar åtkomst, inte köpflödet eller kommersiell produktionsberedskap.
+
+Sandboxwebben är READY på backendmatchande källrevision `15f0ab1`. Delad Chrome når Vercels inloggning; automatisk granskning avvisade verktyget som skapar en tillfällig delningslänk. Specifikt godkännande eller ägarinloggning behövs. Skyddet är oförändrat.
+
+GitHub-run 43007980708 kördes om 12 november och stoppades åter utan teststeg. Den nya annotationen bekräftar betalnings-/förbrukningsgränsen. Ägaren måste åtgärda Billing & plans. Marknads-PR:ns Vercel-kontroll passerar; det är inte bevis för godkänt backend-CI.
+
+Portal-PR 14 innehåller nu förberett isolerat v3-testavtal, PDF och köpstängd testpolicy. Databasens befintliga testprodukt ligger kvar på v2 med NULL contract_policy och tre befintliga order; inga data har ändrats.
+
+Produktbilagan kan inte godkännas från befintlig FAQ: verifierad partner-/stationslista, kompatibel utrustning samt exakt hemersättningsmodell saknas fortfarande i masterplanens öppna beslut. Ägaren har tillfrågats om befintligt godkänt underlag. Den redan beslutade energitilläggsregeln ändras inte och antas inte ange hemersättningssats.
+
+Full evidens och nästa exakta steg: `heke99/charging-subscription`, `docs/verification/CONTINUATION_2026_11_12.md`. Verkligt autentiserat Stripe-testköp, ånger/uppsägning med leverantörsreadback och produktionspromovering återstår. Inget paket markeras färdigt.
+
+Skill-routing: cloud runtime/desktop, Supabase, Vercel deployment/access samt lokala verification/investigation-overlays aktiverade. UI-, monorepo-, AI- och feature-flag-skills ej tillämpliga på denna evidensändring. Kontroll: git diff --check. Ingen ny applikationstestning påstås.
