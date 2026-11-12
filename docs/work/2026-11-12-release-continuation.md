@@ -1,5 +1,11 @@
 # Erbjudandesida och privatköp — 2026-11-12
 
+## Senaste genomförande
+
+Portal-PR 14 har nu kod för faktisk elhandelsprisbaserad hemersättning med kvart/månad/portfölj, kostnadsexkluderingar, väntande ofullständigt underlag, gemensam oföränderlig månadsbild för kredit och energitillägg samt momsskydd före fakturaskrivning. Full lokal backendkörning: 294 passerade, noll fel. Ingen ny driftsättning eller produktionsaktivering påstås.
+
+Ett separat riktigt Stripe-API-prov i Flexexas isolerade testkonto visade 480 kr överförd kredit, 100 kr förbrukad av nästa faktura och 380 kr kvar. Inga pengar drogs. Detta ersätter inte webbköpet eller verifierar slututbetalning. Testkunden är anonymiserad men väntar på radering eftersom connectorn saknar raderingsoperation; detaljer i portalrepots `docs/verification/HOME_RETAIL_2026_11_12.md`. Portalens befintliga kunddata, ansökan och räknare är bevarade.
+
 ## Senare komplettering: ägarens produktbeslut mottagna
 
 Ägaren har nu fastställt stations-/integrationskraven och hela hemersättningsmodellen; tidigare fråga om dessa affärsbeslut nedan är därmed besvarad. Se `docs/DECISIONS.md` och portalrepots nya v4-villkor/policy/PDF. Inga godkända stationer eller hemmaladdarintegrationer finns ännu. Listorna förblir tomma och köp spärrade.
