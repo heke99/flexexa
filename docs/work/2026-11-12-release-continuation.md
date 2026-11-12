@@ -1,5 +1,13 @@
 # Erbjudandesida och privatköp — 2026-11-12
 
+## Senaste sandboxdrift
+
+Portalens nya slutavräkningskod är implementerad och källrevision 43445cf är driftsatt endast i sandbox, tillsammans med matchande webbversion och migration 024. Slutavräkningen har beständig mottagar-/betalningsbindning, balanserad reserverad journal, återkörningsskydd och verifierad återbetalning före kreditsaldots nollställning. 305 backendtester passerar lokalt. Ångerflödets felaktiga krav på ett livemode-fält i Stripes Refund-objekt är också rättat.
+
+Sandboxens API, worker och ingress-probe har verifierade kontrollsummor och godkända beredskaps-/TLS-/rollprober. Webhooksignaturprov är godkänt men verifierar inte verklig Stripe-leverans. Testvillkorens PDF har öppnats i den riktiga webbläsaren från samma sandboxadress; testkatalog och matchande testpris är förberedda med köp spärrade. Tre äldre avtalssnapshots är oförändrade.
+
+Vercelåtkomsten fungerar nu. Nästa konkreta användarsteg är e-postbekräftelse av den nya testidentitet som ägaren angett. Inget verkligt autentiserat testköp eller slututbetalning påstås genomfört. GitHub-betalningsspärren och verifierade laddintegrationer kvarstår. Produktion, ansökningsformulär, räknare och befintliga kunddata är bevarade. Full evidens finns i portalrepots `docs/verification/CLOSING_CREDIT_2026_11_12.md`.
+
 ## Senaste genomförande
 
 Portal-PR 14 har nu kod för faktisk elhandelsprisbaserad hemersättning med kvart/månad/portfölj, kostnadsexkluderingar, väntande ofullständigt underlag, gemensam oföränderlig månadsbild för kredit och energitillägg samt momsskydd före fakturaskrivning. Full lokal backendkörning: 294 passerade, noll fel. Ingen ny driftsättning eller produktionsaktivering påstås.
