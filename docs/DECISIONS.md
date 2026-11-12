@@ -1,5 +1,16 @@
 # Beslut
 
+## Beslut 2026-11-12 — produktbilaga för privatköp
+
+Ägaren har fastställt produktbilagans regler. Fullständig version och maskinläsbar policy finns i portalrepot `heke99/charging-subscription`: `docs/web/private-terms-2026-11-12-v4-sv.md` och `docs/web/private-contract-policy-v4.json`.
+
+- Publik täckning får visas först för stationer med aktivt partneravtal och verifierad start, stopp och kWh-återrapportering. Ingen stationslista är ännu godkänd.
+- Hemmaladdare/integrationer kräver verifierade kWh per session och koppling till abonnemangets bil. Ingen modellista är ännu godkänd.
+- Hemersättning = laddboxens verifierade kWh × faktiskt rörligt elhandelspris inklusive moms för samma laddning. Kvartspris använder respektive kvart, rörligt månadspris fakturans rörliga kWh-pris för månaden och portföljpris det tillämpliga fakturerade rörliga kWh-priset. Rörliga kWh-påslag ingår; fasta avgifter, elnätsavgifter, effekttariffer och energiskatt undantas. Inget extra förlustpåslag. Ofullständigt underlag håller ersättningen väntande.
+- Separat kreditrad på Flexexafakturan, överskott till nästa faktura och kvarvarande saldo utbetalt vid slutavräkning. Hemersättning och energitillägg redovisas separat. Den beslutade tilläggströskeln 1,35 kr/kWh exklusive moms är oförändrad.
+
+Beslutade villkor är inte bevis för implementerad avräkning eller verifierade integrationer. Köp förblir spärrade. Detta ersätter äldre öppna beslut om ersättningskomponenter, förlustregel och utbetalning/kvittning; övrig historik nedan bevaras.
+
 | ID | Datum | Status | Beslut och skäl |
 |---|---|---|---|
 | ADR-20261101-01 | 2026-11-01 | Beslutat av användaren, genomförande planerat | Ett projekt/repo utan monorepo. Webb, kundapp, partner och admin är vyer i samma produkt. Ersätter V1:s monorepostruktur, inte dess domänkrav. |

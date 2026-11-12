@@ -1,5 +1,11 @@
 # Erbjudandesida och privatköp — 2026-11-12
 
+## Senare komplettering: ägarens produktbeslut mottagna
+
+Ägaren har nu fastställt stations-/integrationskraven och hela hemersättningsmodellen; tidigare fråga om dessa affärsbeslut nedan är därmed besvarad. Se `docs/DECISIONS.md` och portalrepots nya v4-villkor/policy/PDF. Inga godkända stationer eller hemmaladdarintegrationer finns ännu. Listorna förblir tomma och köp spärrade.
+
+Avräkningskoden är ännu inte verifierad för de nya kraven på faktiska kvartsspecifika elhandelspriser, överfört kreditsaldo och slututbetalning. Policyn publicerar därför inget löfte om färdig funktion. Energitilläggets fastställda beräkning är bevarad. Vercelåtkomst och GitHub-betalningsspärren återstår enligt tidigare checkpoint.
+
 Marknadsgren `codex/paket1-2-release`, implementation `867325a`, PR 73. Grenen har hämtats och arbetskatalogen återställts. Ingen ändring av ansökan, räknare eller befintliga kunddata.
 
 Färska HTTPS-anrop når www.flexexa.com/elbilsabonnemang (200), ladda.flexexa.com (200), sandbox-API:s /health/ready (200), Supabase och Stripe. Den tidigare CONNECT-spärren är löst i den nya miljön. Dessa anrop verifierar åtkomst, inte köpflödet eller kommersiell produktionsberedskap.
