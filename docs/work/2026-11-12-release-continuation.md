@@ -1,5 +1,9 @@
 # Erbjudandesida och privatköp — 2026-11-12
 
+## Senaste inloggningsdiagnos
+
+De två registreringsförsöken loggades som `user_repeated_signup`; inga nya identiteter skapades och neutralt UI-svar var inte bevis för skickade bekräftelsemejl. Portalens sandbox har nu ett mejllänksflöde för befintliga konton, med PKCE-verifiering och fortsatt minneslagring av sessioner. 96 webbtester och 84 webbläsartester samt bygge passerar. En riktig inloggningsbegäran skapade ett nytt mejl, men leverans är ännu inte bekräftad och länken använder Supabases staging-standardadress i stället för sandboxens callback. Ägaren har fått den exakta URL-konfiguration som behöver kontrolleras. Detta blockerar fortfarande autentiserat köp; produktion och marknadsformulär är oförändrade. Full evidens: portalrepots `docs/verification/EMAIL_LOGIN_2026_11_12.md`.
+
 ## Senaste sandboxdrift
 
 Portalens nya slutavräkningskod är implementerad och källrevision 43445cf är driftsatt endast i sandbox, tillsammans med matchande webbversion och migration 024. Slutavräkningen har beständig mottagar-/betalningsbindning, balanserad reserverad journal, återkörningsskydd och verifierad återbetalning före kreditsaldots nollställning. 305 backendtester passerar lokalt. Ångerflödets felaktiga krav på ett livemode-fält i Stripes Refund-objekt är också rättat.
