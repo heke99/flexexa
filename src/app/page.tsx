@@ -1,11 +1,10 @@
-import {ApplicationCounter} from "@/components/application-form";
 import Link from "next/link";
 import { EnergyGraphic, Arrow } from "@/components/site";
 
 export default function HomePage() {
   return <main id="main">
     <section className="hero wrap">
-      <div className="hero-copy"><span className="eyebrow"><i /> ENERGI I RÄTT RIKTNING</span><h1>Mer kraft.<br />Mindre <em>friktion.</em></h1><p className="lead">Smartare laddning för bilförare. Intelligent energistyrning för företag. Två erbjudanden med en gemensam riktning: bättre användning av energin.</p><div className="actions"><Link className="button primary" href="/energi">Flexexa för företag <Arrow /></Link><Link className="text-link" href="/ladda">Jag kör elbil <Arrow /></Link></div><Link href="/elbilsabonnemang" className="home-application"><ApplicationCounter/><span className="text-link">Ansök om elbilsabonnemanget ↗</span></Link><p className="fine hero-note">För bilförare, elbolag och energipartner.</p></div>
+      <div className="hero-copy"><span className="eyebrow"><i /> ENERGI I RÄTT RIKTNING</span><h1>Mer kraft.<br />Mindre <em>friktion.</em></h1><p className="lead">Smartare laddning för bilförare. Intelligent energistyrning för företag. Två erbjudanden med en gemensam riktning: bättre användning av energin.</p><div className="actions"><Link className="button primary" href="/energi">Flexexa för företag <Arrow /></Link><Link className="text-link" href="/ladda">Jag kör elbil <Arrow /></Link></div><Link href="/elbilsabonnemang" className="text-link home-subscription-link">Jämför pris och villkor för laddabonnemanget <Arrow /></Link><p className="fine hero-note">För bilförare, elbolag och energipartner.</p></div>
       <EnergyGraphic />
     </section>
     <section className="statement"><div className="wrap statement-inner"><span>EN PLATTFORM. FLER MÖJLIGHETER.</span><p>Från bilen på uppfarten<br />till företagets energiresurser.</p></div></section>
