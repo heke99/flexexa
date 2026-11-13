@@ -53,8 +53,13 @@ export function verifyRuntimePlan(plan,{reviewTaintedTask=false}={}){
     const ownerName=publicRule?(edge?'aws_vpc_security_group_ingress_rule.https':'aws_vpc_security_group_egress_rule.tls'):(edge?'aws_vpc_security_group_egress_rule.edge_task':'aws_vpc_security_group_ingress_rule.task_edge');
     const owner=rows.find(row=>row.address===prefix+ownerName).values,ownerChange=changes.find(row=>row.address===prefix+ownerName);
     const rule=after[key]?.[0],port=publicRule?443:8080;
+    // CloudFormation flexexa-energy-sandbox/EdgeToEnergy owns the additional peer.
+    // Reviewed AWS read-back: sgr-0e251aad7ed953792, same VPC; no CIDR or port expansion.
+    const peerSets=publicRule?[[]]:[[peer.id]];
+    if(edge&&!incoming&&after.id==='sg-0b3062b2e7a019572'&&peer.id==='sg-00ed64209d55b98ea'&&after.vpc_id==='vpc-0e6b5f83999698112'&&peer.vpc_id===after.vpc_id&&changes.find(row=>row.address===r.address).change.actions.join(',')==='no-op')peerSets.push([peer.id,'sg-08817d86ba10859c6']);
+    const matchesPeers=Array.isArray(rule?.security_groups)&&peerSets.some(ids=>JSON.stringify([...rule.security_groups].sort())===JSON.stringify([...ids].sort()));
     const fields=['cidr_blocks','description','from_port','ipv6_cidr_blocks','prefix_list_ids','protocol','security_groups','self','to_port'];
-    if(after[key]?.length===1&&rule&&Object.keys(rule).every(k=>fields.includes(k))&&rule.from_port===port&&rule.to_port===port&&rule.protocol==='tcp'&&rule.self===false&&(rule.description===''||rule.description==null)&&rule.ipv6_cidr_blocks?.length===0&&rule.prefix_list_ids?.length===0&&JSON.stringify(rule.cidr_blocks)===(publicRule?'["0.0.0.0/0"]':'[]')&&JSON.stringify(rule.security_groups)===JSON.stringify(publicRule?[]:[peer.id])&&owner.security_group_id===after.id&&owner.from_port===port&&owner.to_port===port&&owner.ip_protocol==='tcp'&&(publicRule?owner.cidr_ipv4==='0.0.0.0/0':owner.referenced_security_group_id===peer.id)&&ownerChange.change.actions.join(',')==='no-op')continue;
+    if(after[key]?.length===1&&rule&&Object.keys(rule).every(k=>fields.includes(k))&&rule.from_port===port&&rule.to_port===port&&rule.protocol==='tcp'&&rule.self===false&&(rule.description===''||rule.description==null)&&rule.ipv6_cidr_blocks?.length===0&&rule.prefix_list_ids?.length===0&&JSON.stringify(rule.cidr_blocks)===(publicRule?'["0.0.0.0/0"]':'[]')&&matchesPeers&&owner.security_group_id===after.id&&owner.from_port===port&&owner.to_port===port&&owner.ip_protocol==='tcp'&&(publicRule?owner.cidr_ipv4==='0.0.0.0/0':owner.referenced_security_group_id===peer.id)&&ownerChange.change.actions.join(',')==='no-op')continue;
    }
    if(r.address===prefix+'aws_eip.egress'&&['association_id','network_interface','network_interface_owner_id','private_ip','private_dns'].includes(key)&&(before[key]==null||before[key]==='')){
     const nat=rows.find(row=>row.address===prefix+'aws_nat_gateway.egress').values;

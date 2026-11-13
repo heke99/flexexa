@@ -50,3 +50,17 @@ test('computed security group views require their exact separately managed rule 
 });
 
 test('target group load balancer projection requires the exact unchanged listener owner',()=>{const p=fixture(),rs=runtime(p),prefix='module.charging_api[0].',tags_all={Project:'flexexa',Environment:'dev',ManagedBy:'opentofu'},lb=rs.find(r=>r.type==='aws_lb').values;lb.arn='arn:reviewed-lb';const listener=rs.find(r=>r.type==='aws_lb_listener').values;Object.assign(listener,{load_balancer_arn:lb.arn,default_action:[{type:'forward',target_group_arn:'arn:reviewed-target'}]});const owner=p.resource_changes.find(r=>r.type==='aws_lb_listener');owner.change={actions:['no-op'],before:structuredClone(listener),after:structuredClone(listener)};p.resource_drift=[{address:prefix+'aws_lb_target_group.api',type:'aws_lb_target_group',change:{actions:['update'],before:{id:'target',arn:'arn:reviewed-target',tags_all,load_balancer_arns:[]},after:{id:'target',arn:'arn:reviewed-target',tags_all,load_balancer_arns:[lb.arn]}}}];assert.equal(verifyRuntimePlan(p).runtime_resources,18);p.resource_drift[0].change.after.load_balancer_arns.push('arn:other');assert.throws(()=>verifyRuntimePlan(p));});
+function energyPeerFixture(){
+ const p=fixture(),rs=runtime(p),prefix='module.charging_api[0].',tags_all={Project:'flexexa',Environment:'dev',ManagedBy:'opentofu'},edge='sg-0b3062b2e7a019572',task='sg-00ed64209d55b98ea',vpc_id='vpc-0e6b5f83999698112';
+ for(const [name,id] of [['edge',edge],['task',task]])Object.assign(rs.find(r=>r.address===prefix+'aws_security_group.'+name).values,{id,vpc_id,tags_all});
+ const owner=rs.find(r=>r.address===prefix+'aws_vpc_security_group_egress_rule.edge_task');Object.assign(owner.values,{security_group_id:edge,referenced_security_group_id:task});
+ for(const row of [owner,rs.find(r=>r.address===prefix+'aws_security_group.edge')])p.resource_changes.find(r=>r.address===row.address).change={actions:['no-op'],before:structuredClone(row.values),after:structuredClone(row.values)};
+ const before={id:edge,vpc_id,tags_all,egress:[]},rule={cidr_blocks:[],description:'',from_port:8080,to_port:8080,protocol:'tcp',security_groups:[task,'sg-08817d86ba10859c6'],self:false,ipv6_cidr_blocks:[],prefix_list_ids:[]};
+ p.resource_drift=[{address:prefix+'aws_security_group.edge',type:'aws_security_group',change:{actions:['update'],before,after:{...before,egress:[rule]}}}];return p;
+}
+test('reviewed CloudFormation Energy peer is accepted only alongside the unchanged managed runtime rule',()=>{
+ for(const reversed of [false,true]){const p=energyPeerFixture();if(reversed)p.resource_drift[0].change.after.egress[0].security_groups.reverse();assert.equal(verifyRuntimePlan(p).runtime_resources,18);}
+});
+test('Energy peer projection rejects other peers, CIDRs, ports, VPCs and changed rule ownership',()=>{
+ for(const mutate of [p=>p.resource_drift[0].change.after.egress[0].security_groups.push('sg-other'),p=>p.resource_drift[0].change.after.egress[0].security_groups[1]='sg-other',p=>p.resource_drift[0].change.after.egress[0].cidr_blocks=['0.0.0.0/0'],p=>p.resource_drift[0].change.after.egress[0].from_port=22,p=>p.resource_drift[0].change.after.vpc_id='vpc-other',p=>p.resource_changes.find(r=>r.address.endsWith('aws_vpc_security_group_egress_rule.edge_task')).change.after.referenced_security_group_id='sg-other']){const p=energyPeerFixture();mutate(p);assert.throws(()=>verifyRuntimePlan(p));}
+});
