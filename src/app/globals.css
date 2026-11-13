@@ -23,3 +23,5 @@
 
 .planner-controls{border:0;padding:0;margin:0;min-width:0}
 .developer-page{min-width:0}.developer-page pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}.developer-page p,.developer-page a{overflow-wrap:anywhere}
+
+.planner-power select{width:100%;min-width:0;padding:.75rem;border:1px solid #a5b3ac;border-radius:8px;background:#fff;color:#172c25;font:inherit}

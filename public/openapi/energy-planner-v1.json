@@ -320,6 +320,64 @@
           }
         }
       }
+    },
+    "/api/v1/energy-wizard/prices": {
+      "get": {
+        "operationId": "getReferencePriceWindow",
+        "description": "Elprisetjustnu reference spot prices via fixed read-only AWS service. Excludes VAT, markups, tax and network fees. Missing/stale prices fail; no sample or historical fallback. Not a billing/settlement or Grid Rewards earning source. No identity or resource persistence.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "area",
+            "required": true,
+            "schema": {
+              "enum": [
+                "SE1",
+                "SE2",
+                "SE3",
+                "SE4"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Timezone required, quarter aligned; window maximum 24 hours."
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Timezone required, quarter aligned; window maximum 24 hours."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contiguous quarters with provider, area, excluding_vat basis, retrieved_at and original payload hashes."
+          },
+          "400": {
+            "description": "Invalid area/time/window"
+          },
+          "409": {
+            "description": "Full price window not yet published"
+          },
+          "502": {
+            "description": "Invalid/incomplete source evidence"
+          },
+          "503": {
+            "description": "Source unavailable or stale; calculation held"
+          }
+        }
+      }
     }
   }
 }
