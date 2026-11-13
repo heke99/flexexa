@@ -1,0 +1,116 @@
+name: Reviewed charging dev image publish
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/charging-dev-image.yml']
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: flexexa-charging-image-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: contains(github.event.head_commit.message, 'Publish reviewed charging API dev image 20261105')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Verify protected main and exact green source
+        id: reviewed
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node infra/opentofu/scripts/verify-charging-release-source.mjs
+          cp infra/opentofu/scripts/verify-charging-release-source.mjs "$RUNNER_TEMP/verify-reviewed-charging-source.mjs"
+      - name: Verify release gates
+        run: node --test infra/opentofu/scripts/*.test.mjs
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.reviewed.outputs.source_sha }}
+          persist-credentials: false
+      - name: Verify signed immutable runtime
+        run: |
+          runtime_image=$(sed -n 's/^ARG CHARGING_BASE_IMAGE=//p' apps/charging-api/Dockerfile)
+          docker pull "$runtime_image"
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges \
+            ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 verify "$runtime_image" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main
+          docker run --rm --entrypoint /usr/bin/node "$runtime_image" \
+            -e "if(process.versions.node!=='26.13.0')throw Error('UNREVIEWED_NODE_RUNTIME')"
+      - name: Build charging API and verify isolated HTTP admission
+        run: |
+          docker build --pull -f apps/charging-api/Dockerfile -t flexexa-charging-api:ci .
+          docker run -d --name charging-api-ci --network none --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            -e SUPABASE_URL=https://example.supabase.co -e SUPABASE_PUBLISHABLE_KEY=sb_publishable_fixture flexexa-charging-api:ci
+          docker exec charging-api-ci /usr/bin/node --input-type=module -e '
+            import assert from "node:assert/strict";
+            let ready=false;
+            for(let i=0;i<30;i++){try{const r=await fetch("http://127.0.0.1:8080/health/live");if(r.status===200){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,200));}
+            assert(ready,"API did not become live");
+            const denied=await fetch("http://127.0.0.1:8080/v1/companies/f7000000-0000-4000-8000-000000000001/charging-inventory");
+            assert.equal(denied.status,401);assert.equal(process.getuid(),65532);
+          '
+          docker stop --time 15 charging-api-ci
+          test "$(docker inspect --format '{{.State.ExitCode}}' charging-api-ci)" = 0
+      - name: Scan exact charging API image
+        run: |
+          mkdir -p /tmp/charging-image-input /tmp/charging-image-report
+          docker save flexexa-charging-api:ci -o /tmp/charging-image-input/image.tar
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            -e TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            -v /tmp/charging-image-input:/images:ro -v /tmp/charging-image-report:/reports \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --input /images/image.tar \
+            --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output /reports/trivy.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-charging-api-scan
+          path: /tmp/charging-image-report/trivy.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove isolated container
+        if: always()
+        run: docker rm -f charging-api-ci || true
+      - name: Reject stale main immediately before AWS credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/verify-reviewed-charging-source.mjs"
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-apply-dev
+          aws-region: eu-north-1
+          allowed-account-ids: 938095765653
+          role-session-name: charging-image-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 10
+      - name: Publish exact scanned image to immutable development repository
+        env:
+          REVIEWED_SOURCE: ${{ steps.reviewed.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          registry=938095765653.dkr.ecr.eu-north-1.amazonaws.com
+          image="$registry/flexexa/dev/api:charging-$REVIEWED_SOURCE"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+          trap 'docker logout "$registry"' EXIT
+          docker tag flexexa-charging-api:ci "$image"
+          docker push "$image"
+          digest=$(aws ecr describe-images --repository-name flexexa/dev/api --image-ids "imageTag=charging-$REVIEWED_SOURCE" --query 'imageDetails[0].imageDigest' --output text)
+          echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+          printf '%s@%s\n' "$registry/flexexa/dev/api" "$digest" > /tmp/charging-image-reference.txt
+          docker pull "$registry/flexexa/dev/api@$digest"
+          test "$(docker inspect --format '{{.Id}}' "$registry/flexexa/dev/api@$digest")" = "$(docker inspect --format '{{.Id}}' flexexa-charging-api:ci)"
+          cat /tmp/charging-image-reference.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flexexa-charging-published-image
+          path: /tmp/charging-image-reference.txt
+          if-no-files-found: error
+          retention-days: 30

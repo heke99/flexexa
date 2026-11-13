@@ -1,0 +1,82 @@
+name: Reviewed charging dev certificate bootstrap
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/opentofu/environments/dev/charging-api-certificate.tf'
+      - '.github/workflows/charging-dev-certificate.yml'
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: flexexa-opentofu-dev-apply
+  cancel-in-progress: false
+jobs:
+  certificate:
+    if: contains(github.event.head_commit.message, 'Deploy reviewed charging API dev certificate 20261105')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.20.0'
+      - name: Check current protected main and exact verified source before AWS credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node infra/opentofu/scripts/verify-charging-release-source.mjs
+      - name: Verify strict certificate and foundation gates
+        run: node --test infra/opentofu/scripts/*.test.mjs
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: arn:aws:iam::938095765653:role/flexexa-github-apply-dev
+          aws-region: eu-north-1
+          allowed-account-ids: 938095765653
+          role-session-name: charging-cert-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 10
+      - name: Initialize existing protected development state
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          tofu fmt -check -recursive ../..
+          tofu init -input=false -lockfile=readonly \
+            -backend-config=bucket=flexexa-tofu-state-938095765653 \
+            -backend-config=key=flexexa/dev/foundation.tfstate \
+            -backend-config=region=eu-north-1
+          tofu validate
+      - name: Plan and enforce one DNS certificate with unchanged foundation
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          tofu plan -input=false -no-color -out=charging-cert.tfplan
+          tofu show -json charging-cert.tfplan > /tmp/charging-certificate-plan.json
+          node ../../scripts/verify-charging-certificate-plan.mjs /tmp/charging-certificate-plan.json /tmp/charging-foundation-only.json charging-certificate-safety.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/charging-foundation-only.json charging-foundation-safety.json --require-noop
+      - name: Apply the exact reviewed certificate plan
+        working-directory: infra/opentofu/environments/dev
+        run: |
+          tofu apply -input=false -no-color charging-cert.tfplan
+          tofu output -json charging_api_certificate_dns > charging-api-certificate-dns.json
+          tofu output -raw charging_api_certificate_arn > charging-api-certificate-arn.txt
+          certificate_arn=$(cat charging-api-certificate-arn.txt)
+          aws acm describe-certificate --certificate-arn "$certificate_arn" \
+            --query 'Certificate.{Arn:CertificateArn,Domain:DomainName,Status:Status,Validation:DomainValidationOptions}' \
+            --output json > charging-api-certificate-readback.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flexexa-charging-certificate-dns
+          path: |
+            infra/opentofu/environments/dev/charging-api-certificate-dns.json
+            infra/opentofu/environments/dev/charging-api-certificate-arn.txt
+            infra/opentofu/environments/dev/charging-api-certificate-readback.json
+            infra/opentofu/environments/dev/charging-certificate-safety.json
+            infra/opentofu/environments/dev/charging-foundation-safety.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -83,8 +83,9 @@ jobs:
         run: |
           trap 'rm -f /tmp/flexexa-dev-plan.json' EXIT
           tofu show -json tfplan > /tmp/flexexa-dev-plan.json
-          node ../../scripts/describe-dev-drift.mjs /tmp/flexexa-dev-plan.json
-          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-dev-plan.json dev-plan-safety.json
+          node ../../scripts/verify-charging-runtime-plan.mjs /tmp/flexexa-dev-plan.json charging-certificate-safety.json /tmp/flexexa-foundation-only.json --review-tainted-task
+          node ../../scripts/describe-dev-drift.mjs /tmp/flexexa-foundation-only.json
+          node ../../scripts/verify-dev-plan.mjs /tmp/flexexa-foundation-only.json dev-plan-safety.json --require-noop
 
       - name: Render plan
         working-directory: infra/opentofu/environments/dev
@@ -97,5 +98,6 @@ jobs:
           path: |
             infra/opentofu/environments/dev/tfplan.txt
             infra/opentofu/environments/dev/dev-plan-safety.json
+            infra/opentofu/environments/dev/charging-certificate-safety.json
           if-no-files-found: error
           retention-days: 7
