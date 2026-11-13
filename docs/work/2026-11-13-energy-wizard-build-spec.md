@@ -35,3 +35,9 @@ Skills: existing Next.js and verification overlays; no Supabase schema, control
 or financial-policy mutation. The new owner request for an extra10SEK/kWh on
 withdrawal is held as a separate unapproved proposal in the subscription repo,
 with legal basis/VAT unresolved; accepted customer terms are unchanged.
+
+Published contract repair: source59b192688355e7dc7bac209e81df2e6a05810f23,
+production dpl_DM4PFut4PiJKWuGK9zsXy555JjPp READY on www/apex. Public
+/openapi/partner-offers-v1.json reads as valid OpenAPI3.1/version1.1.0 and matches
+source bytes. Public catalogue fields match the declared offer schema. This
+release changes API documentation, not customer planning/dispatch or billing.
