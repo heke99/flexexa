@@ -1,5 +1,9 @@
 # Beslut
 
+## Beslut 2026-11-13 — uppsägning och nya konsumentvillkor
+
+Ägaren har beslutat två månaders bindningstid per förlängning och en kalendermånads uppsägningstid. Begäran får registreras under bindningstiden; tjänst och betalningsskyldighet fortsätter till första bindningsperiodslut efter uppsägningstiden. Ny v5-version i portalrepot bevarar tidigare accepterade versioner. Registreringsnummer ska identifiera avtalet i ordervy och mottagningsbevis. Lagstadgad ånger kan inte automatiskt tas bort efter en enskild laddning; användning och ersättning prövas enligt distansavtalslagen 2 kap. 10–15 §§. Webbtexten återger dessa regler och länkar till v5-PDF. Kommersiella köp är fortsatt stängda.
+
 ## Beslut 2026-11-12 — produktbilaga för privatköp
 
 Ägaren har fastställt produktbilagans regler. Fullständig version och maskinläsbar policy finns i portalrepot `heke99/charging-subscription`: `docs/web/private-terms-2026-11-12-v4-sv.md` och `docs/web/private-contract-policy-v4.json`.

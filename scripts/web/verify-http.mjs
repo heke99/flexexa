@@ -55,8 +55,8 @@ try {
   mkdirSync('.flexexa/index', { recursive: true });
   writeFileSync('.flexexa/index/web-http-report.json', `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report));
-} catch {
-  console.error('WEB_PRODUCTION_HTTP_FAILED');
+} catch (error) {
+  console.error('WEB_PRODUCTION_HTTP_FAILED', {code:error?.code??'VERIFY_FAILED',detail:String(error?.message??'').split('\n')[0].slice(0,200)});
   process.exitCode = 1;
 } finally {
   if (child.exitCode === null) {
