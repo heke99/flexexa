@@ -32,3 +32,21 @@ Publicering följer ägarens tidigare uttryckliga instruktion om lokalt CI och
 publicering. Hosted GitHub CI är fortsatt blockerat av kontots billing/spend-limit;
 inget hosted-resultat har förfalskats. Release-id och publik läskontroll läggs till
 efter publicering. Befintliga produktionsvariabler och skydd bevaras.
+
+## Publicerat och läskontrollerat
+
+Källkod252ce99df82368c3fb8f398b2edfcfe478f436d2, Vercel production
+`dpl_53HWwMDvd5mUtZHQtfjxSchXg4G5` READY. flexexa.com och www.flexexa.com
+pekar till denna version. Erbjudanden, villkor och partnerlandning svarar200 med
+nya regler; offentligt partner-API svarar200 med
+flexexa-partner-offers-2026-11-13-v2 och tvåmånaders-/v5-metadata för båda
+erbjudandena. Köp är fortfarande false. Länkad v5-PDF på ladda.flexexa.com har
+lästs och matchar portalens källbytes; tidigare PDF-versioner är bevarade.
+
+Portalens motsvarande production dpl_61nRwv4R9W31i8vYyyBeh58pd8eZ är READY
+på källkod d509b19. Sandbox API/worker är uppdaterade och hälsokontrollerade;
+produktionsbackends schema/katalog och kommersiella spärrar ändrades inte.
+Visuell kontroll här är Chromium mot det identiska lokala produktionsbygget;
+publik efterkontroll är TLS-verifierad HTTP/API/asset-kontroll, ingen påstådd
+ny inloggad kundsession. Ingen delningslänk, skyddsförsvagning eller kundskrivning
+behövdes för publiceringen.
