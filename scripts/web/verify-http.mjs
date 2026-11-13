@@ -15,8 +15,8 @@ socket.listen(0, '127.0.0.1');
 await once(socket, 'listening');
 const port = socket.address().port;
 await new Promise((done) => socket.close(done));
-const child = spawn(process.execPath, [resolve('apps/web/node_modules/next/dist/bin/next'), 'start', '--hostname', '127.0.0.1', '--port', String(port)], {
-  cwd: resolve('apps/web'), stdio: 'ignore', env: { ...process.env, NODE_ENV: 'production', FLEXEXA_SERVER_ONLY_TEST: canary },
+const child = spawn(process.execPath, [resolve('node_modules/next/dist/bin/next'), 'start', '--hostname', '127.0.0.1', '--port', String(port)], {
+  cwd: process.cwd(), stdio: 'ignore', env: { ...process.env, NODE_ENV: 'production', FLEXEXA_SERVER_ONLY_TEST: canary },
 });
 let spawnFailed = false;
 child.on('error', () => { spawnFailed = true; });
@@ -45,14 +45,18 @@ try {
     assert.equal(missing.status, 404, 'WEB_NEGATIVE_ROUTE');
     await missing.body?.cancel();
   }
-  await verifyBrowser(base);
+  for (const path of ['/energi','/ladda','/kontakt','/app','/integritet','/cookies','/villkor','/robots.txt','/sitemap.xml']) {
+    const route = await request(path); assert.equal(route.status,200,`WEB_ROUTE_${path}`);
+    assert.ok(!(await route.text()).includes(canary));
+  }
+  if (!process.argv.includes('--http-only')) await verifyBrowser(base);
   const report = { gate: 'web-production-http-v1', status: 'passed', page: true, staticAssets: assets.length,
     negativeRoutes: 2, secretCanaryAbsent: true, scope: 'Public shell HTTP/asset verification only; no Auth, browser interaction or operational platform claim.' };
   mkdirSync('.flexexa/index', { recursive: true });
   writeFileSync('.flexexa/index/web-http-report.json', `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report));
-} catch {
-  console.error('WEB_PRODUCTION_HTTP_FAILED');
+} catch (error) {
+  console.error('WEB_PRODUCTION_HTTP_FAILED', {code:error?.code??'VERIFY_FAILED',detail:String(error?.message??'').split('\n')[0].slice(0,200)});
   process.exitCode = 1;
 } finally {
   if (child.exitCode === null) {

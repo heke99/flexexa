@@ -1,0 +1,4 @@
+import type { Metadata } from "next";
+import { ContactForm } from "@/components/contact-form";
+export const metadata: Metadata = { title: "Kontakt och partnerdialog" };
+export default function ContactPage() { return <main id="main"><section className="wrap section contact-layout"><div><span className="eyebrow">VI BÖRJAR MED ETT SAMTAL</span><h1>Ny energi<br />börjar med<br /><em>ett hej.</em></h1><p className="lead">Har ni kunder, laddplatser eller energiresurser? Eller vill du veta mer om laddabonnemanget? Vi vill gärna höra från er.</p><a className="contact-email" href="mailto:info@flexexa.com">info@flexexa.com ↗</a><div className="notice"><strong>Rätt upplägg för er verksamhet</strong><p>Kontakta oss om energistyrning, laddsamarbeten och distribution. Berätta om era behov så tar vi nästa steg tillsammans.</p></div></div><ContactForm /></section></main>; }

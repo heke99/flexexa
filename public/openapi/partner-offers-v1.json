@@ -1,0 +1,226 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Flexexa Partner Offer API",
+    "version": "1.1.0",
+    "description": "Public advertising catalogue and customer handoff. Current catalogue: flexexa-partner-offers-2026-11-13-v2. No customer data, SSO, purchase, automatic discount or trusted commission attribution. Re-check current availability and price in Flexexa before customer acceptance. New v5 offer metadata includes two-month renewal binding, calendar timezone and the immutable terms URL; existing accepted customer contracts are unchanged."
+  },
+  "servers": [
+    {
+      "url": "https://www.flexexa.com"
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api/v1/partners/{partner}/offers": {
+      "get": {
+        "operationId": "getPartnerOffers",
+        "summary": "Read public Flexexa offers and handoff links",
+        "parameters": [
+          {
+            "name": "partner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "gridex"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public catalogue. Current offers are not open for purchase. Campaign source grants no customer permission.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "public, max-age=60, s-maxage=60"
+              },
+              "Access-Control-Allow-Origin": {
+                "schema": {
+                  "type": "string",
+                  "const": "*"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerCatalogue"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown partner code. No user-controlled redirect is issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "PARTNER_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Offer": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "price_condition",
+          "availability_reason",
+          "terms_version",
+          "amount_minor",
+          "currency",
+          "vat_included",
+          "interval",
+          "purchase_available",
+          "initial_binding_months",
+          "notice_months",
+          "renewal_months",
+          "renewal_binding_months",
+          "calendar_timezone",
+          "terms_url",
+          "url"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_condition": {
+            "type": "string"
+          },
+          "availability_reason": {
+            "type": "string"
+          },
+          "terms_version": {
+            "type": "string"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "currency": {
+            "type": "string",
+            "const": "SEK"
+          },
+          "vat_included": {
+            "type": "boolean",
+            "const": true
+          },
+          "interval": {
+            "type": "string",
+            "const": "month"
+          },
+          "purchase_available": {
+            "type": "boolean"
+          },
+          "initial_binding_months": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 24
+          },
+          "notice_months": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "renewal_months": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "renewal_binding_months": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 24
+          },
+          "calendar_timezone": {
+            "type": "string",
+            "const": "Europe/Stockholm"
+          },
+          "terms_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "PartnerCatalogue": {
+        "type": "object",
+        "required": [
+          "version",
+          "partner_code",
+          "integration_status",
+          "customer_data_shared",
+          "attribution",
+          "landing_url",
+          "energy_wizard_url",
+          "offers"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "partner_code": {
+            "type": "string",
+            "enum": [
+              "gridex"
+            ]
+          },
+          "integration_status": {
+            "type": "string",
+            "enum": [
+              "public_handoff_only"
+            ]
+          },
+          "customer_data_shared": {
+            "type": "boolean",
+            "const": false
+          },
+          "attribution": {
+            "type": "string"
+          },
+          "landing_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "energy_wizard_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "offers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            }
+          }
+        }
+      }
+    }
+  }
+}
