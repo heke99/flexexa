@@ -7,7 +7,7 @@ const links = [
   ["/energi", "För företag"],
   ["/ladda", "För bilförare"],
   ["/elbilsabonnemang", "Elbilsabonnemang"],
-  ["/energy-wizard", "Energy Wizard"],
+  ["/energy-wizard", "Energioptimering"],
 ] as const;
 
 export function SiteNav() {

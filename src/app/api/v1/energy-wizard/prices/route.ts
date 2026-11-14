@@ -1,2 +1,2 @@
-import {readReferencePrices} from "@/domains/energy-wizard/prices";
-export async function GET(request:Request){const headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"};try{return Response.json(await readReferencePrices(new URL(request.url).searchParams),{headers});}catch(error){const status=error&&typeof error==="object"&&"status" in error?Number(error.status):503;return Response.json({error:error instanceof Error?error.message:"Elpriserna kunde inte hämtas."},{status:[400,409,502,503].includes(status)?status:503,headers});}}
+// Public informational pages do not confer API access. Authenticated planning lives in the ECS API.
+export async function GET(){return Response.json({error:"PRODUCT_ACCESS_REQUIRED",message:"Logga in i kundportalen. Produktåtkomst måste godkännas av Flexexas superadmin."},{status:403,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});}
