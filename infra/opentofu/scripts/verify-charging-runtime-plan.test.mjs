@@ -64,3 +64,20 @@ test('reviewed CloudFormation Energy peer is accepted only alongside the unchang
 test('Energy peer projection rejects other peers, CIDRs, ports, VPCs and changed rule ownership',()=>{
  for(const mutate of [p=>p.resource_drift[0].change.after.egress[0].security_groups.push('sg-other'),p=>p.resource_drift[0].change.after.egress[0].security_groups[1]='sg-other',p=>p.resource_drift[0].change.after.egress[0].cidr_blocks=['0.0.0.0/0'],p=>p.resource_drift[0].change.after.egress[0].from_port=22,p=>p.resource_drift[0].change.after.vpc_id='vpc-other',p=>p.resource_changes.find(r=>r.address.endsWith('aws_vpc_security_group_egress_rule.edge_task')).change.after.referenced_security_group_id='sg-other']){const p=energyPeerFixture();mutate(p);assert.throws(()=>verifyRuntimePlan(p));}
 });
+
+
+test('verified production Energy peer accepts only exact reviewed peer sets',()=>{
+ for(const peers of [['sg-00ed64209d55b98ea','sg-08f6b75727082b88a'],['sg-00ed64209d55b98ea','sg-08817d86ba10859c6','sg-08f6b75727082b88a']]){
+  for(const reverse of [false,true]){const p=energyPeerFixture();p.resource_drift[0].change.after.egress[0].security_groups=reverse?[...peers].reverse():peers;assert.equal(verifyRuntimePlan(p).runtime_resources,18);}
+ }
+});
+test('production peer readback rejects unknown peers, duplicates and changed edge ownership',()=>{
+ for(const mutate of [
+  p=>p.resource_drift[0].change.after.egress[0].security_groups.push('sg-other'),
+  p=>p.resource_drift[0].change.after.egress[0].security_groups.push('sg-08f6b75727082b88a'),
+  p=>p.resource_drift[0].change.after.egress[0].cidr_blocks=['0.0.0.0/0'],
+  p=>p.resource_drift[0].change.after.egress[0].to_port=8081,
+  p=>p.resource_drift[0].change.after.id='sg-other',
+  p=>p.resource_changes.find(r=>r.address.endsWith('aws_security_group.edge')).change.actions=['update']
+ ]){const p=energyPeerFixture();p.resource_drift[0].change.after.egress[0].security_groups.push('sg-08f6b75727082b88a');mutate(p);assert.throws(()=>verifyRuntimePlan(p));}
+});
