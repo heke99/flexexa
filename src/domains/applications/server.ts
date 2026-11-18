@@ -11,5 +11,5 @@ export async function sendPendingEmails(max=5){let sent=0;for(let i=0;i<max;i++)
  if(response.ok){const result=await response.json();if(typeof result.id!=="string")throw Error("INVALID_EMAIL_RECEIPT");provider_id=result.id;outcome="sent";error="";sent++;}else{outcome=response.status===429||response.status>=500?"retry":"permanent";error=`EMAIL_HTTP_${response.status}`;}
  }catch{/* A timeout is uncertain; preserve the same idempotency key for a bounded retry. */}
  await rpc("finish_email",{id:job.id,claim_token:job.claim_token,outcome,error,...(provider_id?{provider_id}:{})});
- if(outcome!=="sent")break;
+ if(outcome==="retry")break;
  }return sent;}
