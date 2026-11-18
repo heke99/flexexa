@@ -49,6 +49,13 @@ try {
     const route = await request(path); assert.equal(route.status,200,`WEB_ROUTE_${path}`);
     assert.ok(!(await route.text()).includes(canary));
   }
+  for (const [query, expected] of [['?intresse=energi', 'Smart energistyrning'], ['', 'Partnerskap'], ['?intresse=okant', 'Partnerskap'], ['?intresse=energi&intresse=okant', 'Partnerskap']]) {
+    const contact = await request('/kontakt' + query);
+    assert.equal(contact.status, 200, 'FX-23 contact route');
+    const form = (await contact.text()).match(/<select\b[^>]*\bname="interest"[^>]*>([\s\S]*?)<\/select>/)?.[1];
+    const selected = form?.match(/<option\b[^>]*\bselected(?:="[^"]*")?[^>]*>([^<]*)<\/option>/)?.[1];
+    assert.equal(selected, expected, `FX-23 default subject for ${query || 'empty query'}`);
+  }
   if (!process.argv.includes('--http-only')) await verifyBrowser(base);
   const report = { gate: 'web-production-http-v1', status: 'passed', page: true, staticAssets: assets.length,
     negativeRoutes: 2, secretCanaryAbsent: true, scope: 'Public shell HTTP/asset verification only; no Auth, browser interaction or operational platform claim.' };
