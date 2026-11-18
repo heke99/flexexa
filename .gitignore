@@ -12,6 +12,8 @@ coverage/
 supabase/.temp/
 
 .flexexa/index/*.json
+.flexexa/index/web-desktop.png
+.flexexa/index/web-mobile.png
 *.tsbuildinfo
 **/next-env.d.ts
 __pycache__/

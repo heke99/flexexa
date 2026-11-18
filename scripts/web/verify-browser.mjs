@@ -52,7 +52,7 @@ export async function verifyBrowser(base) {
     }
     assert.ok(ready, 'WEB_BROWSER_DRIVER_NOT_READY');
     const created = await request('/session', { capabilities: { alwaysMatch: {
-      browserName: 'chrome', 'goog:chromeOptions': { args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking'] },
+      browserName: 'chrome', 'goog:chromeOptions': { ...(process.env.CHROME_BINARY ? {binary:process.env.CHROME_BINARY} : {}), args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking'] },
       'goog:loggingPrefs': { browser: 'ALL' }, timeouts: { pageLoad: 15000, script: 5000, implicit: 0 },
     } } });
     session = created.sessionId;
