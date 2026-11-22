@@ -14,10 +14,25 @@ const portal = 'https://ladda.flexexa.com/';
 const overview = '/app/konto/oversikt';
 const publishableKey = 'sb_publishable_local_browser_fixture';
 const password = 'fixture-only-customer-password';
+const personal = { id: '11111111-1111-4111-8111-111111111111', kind: 'personal', name: 'Konto Grön', role: 'owner' };
+const company = { id: '33333333-3333-4333-8333-333333333333', kind: 'business', name: 'Konto Guld', role: 'owner' };
+const otherCompany = { id: '22222222-2222-4222-8222-222222222222', kind: 'business', name: 'Konto Blå', role: 'billing' };
 const accounts = {
-  first: [{ id: '11111111-1111-4111-8111-111111111111', kind: 'personal', name: 'Konto Grön', role: 'owner' }],
-  second: [{ id: '22222222-2222-4222-8222-222222222222', kind: 'business', name: 'Konto Blå', role: 'billing' }],
+  first: [personal, company],
+  second: [otherCompany],
 };
+const productPath = ({ id }) => `/v1/accounts/${id}/product-access`;
+const grant = (product_key, enabled, status = 'active') => ({ product_key, status, version: 4, enabled, expires_at: null });
+const productAccess = new Map([
+  [personal.id, { items: [grant('charging_subscription', true), grant('grid_rewards', true)], requests: [] }],
+  [company.id, { items: [grant('energy_optimization', true), grant('external_api', true)], requests: [
+    { product_key: 'charging_subscription', requested_at: '2026-11-21T10:00:00Z' },
+  ] }],
+  [otherCompany.id, { items: [
+    grant('charging_subscription', false, 'revoked'),
+    grant('energy_optimization', false),
+  ], requests: [] }],
+]);
 const childProcesses = [];
 const verified = [];
 
@@ -66,6 +81,7 @@ const certificatePath = join(scratch, 'cert.pem');
 const privateKeyPath = join(scratch, 'key.pem');
 const calls = [];
 const issued = new Map();
+const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let startURL;
@@ -84,6 +100,7 @@ try {
   fixture = createHttpsServer({ cert, key: await readFile(privateKeyPath) }, async (req, res) => {
     const url = new URL(req.url, upstream);
     const reply = (status, body) => {
+      if (res.destroyed) return;
       res.writeHead(status, {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': startURL,
@@ -120,6 +137,17 @@ try {
         if (actor === 'second' && secondRequiresMfa) return reply(403, { error: 'MFA_REQUIRED' });
         return reply(200, { items: accounts[actor] });
       }
+      const productAccount = /^\/v1\/accounts\/([^/]+)\/product-access$/.exec(url.pathname)?.[1];
+      if (productAccount && req.method === 'GET' && !url.search) {
+        if (!accounts[actor].some(({ id }) => id === productAccount)) return reply(403, { error: 'FORBIDDEN' });
+        const planned = nextProductReply.get(productAccount);
+        nextProductReply.delete(productAccount);
+        if (planned) {
+          const failure = await planned;
+          if (failure) return reply(503, { error: 'PRODUCT_ACCESS_UNAVAILABLE' });
+        }
+        return reply(200, productAccess.get(productAccount));
+      }
       return reply(404, { error: 'UNEXPECTED_FIXTURE_ROUTE' });
     } catch {
       return reply(500, { error: 'FIXTURE_ERROR' });
@@ -151,11 +179,16 @@ try {
   const hostileQuery = '?next=https%3A%2F%2Foutside.invalid&code=ignored-fixture';
   assertPortalRedirect(await request(disabled + '/app/konto' + hostileQuery), portal);
   assertPortalRedirect(await request(disabled + overview + hostileQuery), portal);
+  assertPortalRedirect(await request(disabled + '/app/produkter' + hostileQuery), `${portal}produkter`);
   const enabled = await request(startURL + '/app/konto' + hostileQuery);
   assertPortalRedirect(enabled, overview);
-  const unauthenticated = await request(startURL + '/api/kundkonto');
-  assert.equal(unauthenticated.status, 401);
-  assert.match(unauthenticated.headers.get('cache-control') ?? '', /\bno-store\b/);
+  assertPortalRedirect(await request(startURL + '/app/produkter' + hostileQuery), `${overview}#produkter`);
+  const productApi = `/api/kundkonto/${personal.id}/produkter`;
+  for (const [base, path, status] of [[startURL, '/api/kundkonto', 401], [startURL, productApi, 401], [disabled, productApi, 404]]) {
+    const unavailable = await request(base + path);
+    assert.equal(unavailable.status, status);
+    assert.match(unavailable.headers.get('cache-control') ?? '', /\bno-store\b/);
+  }
   assert.equal(calls.length, 0, 'Unauthenticated HTTP and portal routes must stay local to Next');
 
   const driver = process.env.CHROMEDRIVER || join(process.env.CHROMEWEBDRIVER || '/usr/local/share/chromedriver-linux64', 'chromedriver');
@@ -192,7 +225,7 @@ try {
     await browserCommand(`/element/${element[elementKey]}/value`, { text: value });
   };
   const clickButton = async (label) => {
-    const element = await execute('return [...document.querySelectorAll("button")].find(button => button.innerText.trim() === arguments[0]);', label);
+    const element = await execute('return [...document.querySelectorAll("button")].find(button => (button.getAttribute("aria-label") ?? button.innerText.trim()) === arguments[0]);', label);
     assert.ok(element?.[elementKey], `Missing button ${label}`);
     await browserCommand(`/element/${element[elementKey]}/click`, {});
   };
@@ -201,6 +234,7 @@ try {
     assert.equal(fallback, portal, 'The account overview must expose the fixed portal fallback');
   };
   const login = async (actor) => {
+    await pending(() => execute('return Boolean(document.querySelector("main form button[type=submit]:enabled"));'));
     await enter('E-post', `${actor}@example.test`);
     await enter('Lösenord', password);
     await clickButton('Logga in');
@@ -211,6 +245,25 @@ try {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
     assert.doesNotMatch(persisted, /sb-[^"\s]*-auth-token/);
+  };
+  const productView = () => execute(`const heading = [...document.querySelectorAll('main h2, main h3')]
+    .find(candidate => candidate.textContent.trim() === 'Mina produkter');
+    return heading?.closest('section')?.innerText ?? '';`);
+  const productsFor = (account) => clickButton(`Visa produkter för ${account.name}`);
+  const assertProductView = async (account, charge, energy) => {
+    const chargingStatus = new RegExp(`Laddabonnemang\\s+${charge}(?:\\s|$)`);
+    const energyStatus = new RegExp(`Energioptimering\\s+${energy}(?:\\s|$)`);
+    await pending(async () => {
+      const panel = await productView();
+      return panel.includes(account.name) && chargingStatus.test(panel) && energyStatus.test(panel);
+    });
+    const panel = await productView();
+    assert.deepEqual(panel.match(/Laddabonnemang|Energioptimering/g), ['Laddabonnemang', 'Energioptimering']);
+    assert.doesNotMatch(panel, /Grid Rewards|Extern API|product_key|grid_rewards|external_api/);
+    const activeAccount = await execute('return document.querySelector("main button[aria-pressed=true]")?.innerText.trim();');
+    assert.equal(activeAccount, `Visa produkter för ${account.name}`);
+    const handoff = await execute('return [...document.links].find(link => link.innerText.trim() === "Hantera produkter i kundportalen")?.href;');
+    assert.equal(handoff, `${portal}produkter`);
   };
 
   await viewport(1440, 900, false);
@@ -224,12 +277,30 @@ try {
   assert.match(await text(), /Konto Grön · Privat · Ägare/);
   assert.doesNotMatch(await text(), /Konto Blå/);
   assert.equal(await execute('return document.querySelector("main h2")?.textContent?.trim();'), 'Mina konton');
+  const delayedProduct = Promise.withResolvers();
+  nextProductReply.set(personal.id, delayedProduct.promise);
+  try {
+    await productsFor(personal);
+    await pending(() => calls.some(({ path, actor }) => path === productPath(personal) && actor === 'first'));
+    assert.match(await productView(), /Konto Grön[\s\S]*Hämtar produkter/);
+    await productsFor(company);
+    await assertProductView(company, 'Begärd', 'Aktiv');
+  } finally {
+    delayedProduct.resolve(false);
+  }
+  await browserCommand('/execute/async', {
+    script: 'const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(done));', args: [],
+  });
+  await assertProductView(company, 'Begärd', 'Aktiv');
+  await productsFor(personal);
+  await assertProductView(personal, 'Aktiv', 'Ingen åtkomst');
   await assertNoStorage();
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !/Konto Grön/.test(await text()));
+  assert.doesNotMatch(await productView(), /Konto Grön|Konto Guld|Laddabonnemang|Energioptimering/);
   await assertNoStorage();
   await pending(() => calls.some(({ path, actor, scope }) => path === '/auth/v1/logout' && actor === 'first' && scope === 'local'));
-  verified.push('desktop password sign-in, scoped accounts, session-local logout and storage');
+  verified.push('desktop password sign-in, account switching with a delayed product reply, session-local logout and storage');
 
   await viewport(390, 844, true);
   await login('second');
@@ -243,15 +314,25 @@ try {
   await login('second');
   await pending(async () => /Mina konton[\s\S]*Konto Blå/.test(await text()));
   assert.match(await text(), /Konto Blå · Företag · Ekonomi/);
-  assert.doesNotMatch(await text(), /Konto Grön/);
+  assert.doesNotMatch(await text(), /Konto Grön|Konto Guld/);
+  assert.doesNotMatch(await productView(), /Konto Grön|Konto Guld|Laddabonnemang|Energioptimering/);
+  nextProductReply.set(otherCompany.id, Promise.resolve(true));
+  await productsFor(otherCompany);
+  await pending(async () => (await text()).includes('Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.'));
+  assert.doesNotMatch(await productView(), /Laddabonnemang|Energioptimering/);
+  await clickButton('Försök igen');
+  await assertProductView(otherCompany, 'Indragen', 'Ej tillgänglig');
   assert.equal(await execute('return document.documentElement.scrollWidth <= window.innerWidth;'), true);
   await assertNoStorage();
   await browserCommand('/refresh', {});
   await pending(async () => /Logga in/.test(await text()) && !/Konto Blå/.test(await text()));
+  assert.doesNotMatch(await productView(), /Konto Blå|Laddabonnemang|Energioptimering/);
   assert.deepEqual(calls.filter(({ path }) => path.startsWith('/v1/')).map(({ method, path, actor }) => [method, path, actor]), [
-    ['GET', '/v1/accounts', 'first'], ['GET', '/v1/accounts', 'second'], ['GET', '/v1/accounts', 'second'],
+    ['GET', '/v1/accounts', 'first'], ['GET', productPath(personal), 'first'], ['GET', productPath(company), 'first'],
+    ['GET', productPath(personal), 'first'], ['GET', '/v1/accounts', 'second'], ['GET', '/v1/accounts', 'second'],
+    ['GET', productPath(otherCompany), 'second'], ['GET', productPath(otherCompany), 'second'],
   ]);
-  verified.push('mobile MFA fallback, separate second identity, and reload');
+  verified.push('mobile MFA fallback, separate second identity, unavailable product retry, and reload');
   console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
 } finally {
   if (session) {
