@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { enduranceStorageGuard } from './capacity-endurance.mjs';
+import { measureEndurancePlans } from './capacity-endurance-plans.mjs';
 import { capacityHttpProbe } from './capacity-http-profile.mjs';
 import { capacityIdentity } from './capacity-identity.mjs';
 import { grantMixedPartnerScope, measureMixedReads, seedMixedRoutes } from './capacity-mixed-routes.mjs';
@@ -38,6 +39,7 @@ const { values } = parseArgs({ options: {
   'roaming-cost-routes': { type: 'boolean' },
   'split-pools': { type: 'boolean' },
   'endurance-seconds': { type: 'string' },
+  'endurance-plan-interval-seconds': { type: 'string' },
   'fixture-token-seconds': { type: 'string' },
   'scratch-dir': { type: 'string' },
 } });
@@ -61,9 +63,14 @@ assert.ok(Number.isInteger(peakSeconds) && peakSeconds >= 1 && peakSeconds <= pr
 const hasPhase = name => values.phase === 'all' || values.phase === name;
 const endurance = values.phase === 'endurance';
 const enduranceSeconds = Number(values['endurance-seconds']);
+const endurancePlanInterval = values['endurance-plan-interval-seconds'] === undefined
+  ? null : Number(values['endurance-plan-interval-seconds']);
 const tokenLifetime = Number(values['fixture-token-seconds'] ?? '3600');
 assert.ok(endurance || (values['endurance-seconds'] === undefined && values['fixture-token-seconds'] === undefined),
   '--endurance-seconds and --fixture-token-seconds require --phase endurance');
+assert.ok(endurancePlanInterval === null || (endurance && Number.isInteger(endurancePlanInterval)
+  && endurancePlanInterval >= 3 && endurancePlanInterval <= enduranceSeconds),
+  '--endurance-plan-interval-seconds requires --phase endurance and an integer from 3 to the duration of the phase');
 if (endurance) {
   assert.ok(values.scenario && values['mixed-routes'] && values.telemetry,
     '--phase endurance requires explicit --scenario, --mixed-routes and --telemetry');
@@ -107,6 +114,7 @@ const applicationFiles = ['src/service.mjs', 'src/read-model.mjs', ...migrations
 if (values.telemetry) applicationFiles.push('src/energy-service.mjs', 'src/energy-device-adapter.mjs');
 if (partnerModule) applicationFiles.push('src/partner-energy.mjs', 'src/product-access.mjs', 'src/http.mjs');
 if (roamingModules) applicationFiles.push('src/charging-evidence.mjs', 'src/roaming-cost-close.mjs', 'src/company-roaming-costs.mjs');
+if (endurancePlanInterval !== null) applicationFiles.push('src/fleet-plan-worker.mjs', 'workers/fleet-planner/solver.py');
 const digest = createHash('sha256');
 for (const name of applicationFiles) digest.update(name).update('\0').update(await readFile(join(checkout, name)));
 const implementationSha256 = digest.digest('hex');
@@ -563,17 +571,22 @@ async function scenario(cluster, name) {
         result = await Promise.allSettled([
           read(normalRate, enduranceSeconds, options),
           telemetry.measure('normal', enduranceSeconds, options),
+          ...(endurancePlanInterval === null ? [] : [measureEndurancePlans({
+            request, fixtures, vehicles, db, runFleetPlanJob, solve: problem => solveFleet(problem, { python: values.python }),
+            durationSeconds: enduranceSeconds, intervalSeconds: endurancePlanInterval, signal: guard.signal,
+          })]),
         ]);
       } finally {
         profiles.endurance = probe?.stop();
         enduranceEvidence = { storage: guard.stop() };
       }
       for (const completed of result) if (completed.status === 'rejected') throw completed.reason;
-      const [httpLoad, telemetryLoad] = result.map(completed => completed.value);
+      const [httpLoad, telemetryLoad, planWorkload] = result.map(completed => completed.value);
       readSamples.push(httpLoad);
       telemetrySamples.push(telemetryLoad);
       enduranceEvidence.scheduleCompleted = !guard.signal.aborted
         && httpLoad.requests === httpLoad.plannedRequests && telemetryLoad.scheduled === telemetryLoad.planned;
+      if (planWorkload) enduranceEvidence.planWorkload = planWorkload;
     }
     const reconciliation = await telemetry?.reconcile(request, fixtures, { streaming: endurance });
     if (endurance) {
@@ -604,6 +617,7 @@ async function scenario(cluster, name) {
       route.wrongPayload === 0 && route.unauthorizedSuccess === 0)),
     'A mixed route delivered an unexpected payload or authorized a denied request');
     if (endurance && !enduranceEvidence.scheduleCompleted) process.exitCode = 2;
+    if (enduranceEvidence?.planWorkload && !enduranceEvidence.planWorkload.allIntervalsCompleted) process.exitCode = 2;
   } finally {
     if (listener) await close(listener);
     await Promise.all(pools.map(currentPool => currentPool.end()));

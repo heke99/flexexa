@@ -103,7 +103,7 @@ Samtidigt sparades alla 360 000 observationer per körning vid 600/s, med 1,6 ms
 
 ### Förutsättningar för ett långt lokalt prov
 
-`--phase endurance` kör samma blandning av HTTP-läsningar och simulatorobservationer med normalraterna 100 anrop och 230 observationer per sekund. Ange fördelning och antal sekunder uttryckligen, med högst 86 400 sekunder. Denna fas mäter de lokala läsvägarna och simulatorn. Produktens hela uthållighetskrav omfattar dessutom återkommande planjobb, planerade avbrott, klienttrafik, ekonomiflöden och leverantörer.
+`--phase endurance` kör samma blandning av HTTP-läsningar och simulatorobservationer med normalraterna 100 anrop och 230 observationer per sekund. Ange fördelning och antal sekunder uttryckligen, med högst 86 400 sekunder. Denna fas mäter de lokala läsvägarna och simulatorn. Produktens hela uthållighetskrav omfattar dessutom omplanering av hela flottan, planerade avbrott, klienttrafik, ekonomiflöden och leverantörer.
 
 ```sh
 node scripts/quality/capacity-http.mjs \
@@ -122,6 +122,25 @@ En dag vid 230 observationer/s schemalägger 19 872 000 observationer plus förk
 Åttasekundersprovet på laddrevision `119a50fb7f8fcded7752b5216bf62a4abede57bb` gav 800 av 800 väntade HTTP-utfall och 1 840 av 1 840 beständiga observationer. Alla 1 843 historikrader stämdes av, varav 463 med mätarepok. Provet gjorde 172 tokenförnyelser med 140 skapade syntetiska sessioner, 130 använda och lagrade sessionsposter samt 230 kvarhållna token. Telemetritabellen med index upptog 712 704 byte vid slutet av körningen. Tre enhetstester verifierade förnyelse, latensräkning och avbruten schemaläggning vid otillgänglig testdisk. Hela dygnsprovet återstår.
 
 Tvåminutersprovet på `1bfc939` körde 12 000 fordon fördelade på tolv företag, 44 migrationer i PostgreSQL 18.6 samt `--roaming-cost-routes --metered-observations --fixture-token-seconds 15`. Samtliga 12 000 HTTP-anrop och 27 600 telemetriobservationer gav väntat utfall. Periodlistan och detaljvyn hade vardera 461 godkända ekonomianrop med rätt data från alla tolv företag. Alla 461 föraranrop nekades. Högsta läs-p95 var 9,0 ms, varav periodlistan hade 6,6 ms och detaljvyn 7,1 ms. Telemetri-p95 var 1,7 ms. Identitetsstubben förnyade 1 204 token och behöll 370 token för 210 skapade syntetiska sessioner med 200 använda sessionsposter i databasen. Tabell och index för simulerad telemetri tog 9 306 112 byte efter körningen. Siffrorna avser den lokala modellen med syntetisk identitet och cirka två minuters normal last.
+
+#### Återkommande planjobb under blandad last
+
+`--endurance-plan-interval-seconds` aktiverar planjobb under uthållighetsfasen. Provet turas om mellan företagen och använder en laddplats med upp till 24 av företagets fordon samt en syntetisk pris- och avresetidsprofil över 96 kvartar. Ett nytt jobb får vänta tills det föregående har behandlats. Minst tre sekunder mellan starter håller även företagets återkommande läsningar inom testidentitetens ordinarie anropsgräns. Intervall som helt hinner passera under ett tidigare jobb registreras som missade.
+
+Provet följer autentiserad mottagning, aktiv köstatus i PostgreSQL, den ordinarie arbetaren med Pythonlösaren och resultatläsning via HTTP. När samma företag får en ny version kontrolleras att det äldre jobbets resultat har spärrats. Varje ny plan stäms av mot tillgängliga kvartar, fordonens effekt- och tidsgränser, platsens totala effektgräns och exakta energimål. Jobben är rådgivande. De genererar inga fysiska laddkommandon.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --scenario concentrated --phase endurance --endurance-seconds 7 \
+  --endurance-plan-interval-seconds 3 --telemetry --mixed-routes \
+  --roaming-cost-routes --metered-observations
+```
+
+JSONL redovisar mottagning, arbetstid, missade intervall, ersatta jobb och avstämd energi i `endurance.planWorkload`. De extra anropen för planjobben ligger utanför den fasta läsblandningens anropstal. Ofullständiga planintervall ger separat utfall och exitkod 2.
+
+Sju sekunder på laddrevision `9da6d199220c0bc68d485c165e960284110d455b` gav tre färdiga jobb, två verifierade ersättningar och 412 200 avstämda Wh för 72 fordonsplaner. Samtidigt gav läsblandningen 700 av 700 väntade utfall och simulatorn sparade 1 610 av 1 610 observationer. Detta prov verifierade kö- och resultatflödet för den lilla jobbstorleken. Full flottstorlek per återkommande jobb, provade avbrott, fysisk leverantörstrafik och dygnets blandlast återstår.
 
 #### Frysta roamingkostnader i blandningen
 
