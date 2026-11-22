@@ -19,4 +19,8 @@ Inventeringen gäller den [reviderade byggordningen](../FLEXEXA_REVISED_BUILD_OR
 
 ## Nästa baslinjeprov
 
+Tre lokala PostgreSQL-kedjor provades med kandidatens schema och historiska auditfiler från den kanoniska respektive sandboxens journal. Alla tre kunde spela upp DDL när den byteidentiska migration 033 användes en gång. Båda auditkedjorna behöll dock rätt att skriva första simulatorstatusen direkt från API-rollen. Sandboxkedjan tillät dessutom flera testbindningar till samma faktura och ändring av `posting_context` för arbetaren medan kandidatens motsvarande roller nekades. Schema- och HTTP-beredskapen upptäckte inte alla skillnader. En skarp sekvens måste särskilt stämma av aktiva ekonomiska intents och rättelser, samt säkra arbetarens första simulatorobservation innan den övertagna API-rätten tas bort.
+
+Laddrepots `npm run migrate:audit-boundaries` kontrollerar dessa tre gränser via systemkatalogen och läser anslutningen från `MIGRATION_DATABASE_URL_FILE`. En ren lokal kandidat passerade. Båda auditvarianterna gav avvikelse. Kontrollen använder det kanoniska schemat och behöver kompletteras med migrationsjournalen, sessionskontrollen och avstämning av historiska poster i den namngivna miljön.
+
 Matcha driftsatt commerce- och energirevision, schema och aktiva konfigurationsgrindar mot Git i en namngiven testmiljö. Läs installerade kundversioner och aktuella partnerkvoter från respektive ägare. Kör lokal integrationsgren genom staging först när testidentiteter, signerad klient, testprodukter och spårbar städning finns. [Projektstatus](../PROJECT_STATE.md) · [Acceptansmatris](../work/2026-11-22-revised-build.md)

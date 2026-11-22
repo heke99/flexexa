@@ -8,6 +8,25 @@ import { CustomerProducts, type ProductSelection } from "./customer-products";
 const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const productsUnavailable = "Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const expired = "Sessionen har löpt ut. Logga in igen.";
+const invalidCode = "Koden kunde inte bekräftas. Försök igen.";
+type CustomerLogin = { client: SupabaseClient; session: Session };
+type VerificationFactor = { id: string; name: string };
+
+async function releaseCustomerAuth(client?: SupabaseClient) {
+  if (!client) return null;
+  try {
+    return await client.auth.signOut({ scope: "local" });
+  } catch {
+    return null;
+  } finally {
+    client.auth.dispose();
+  }
+}
+
+function sessionDuration(session: Session) {
+  return Math.max(0, session.expires_at === undefined
+    ? session.expires_in * 1000 : session.expires_at * 1000 - Date.now());
+}
 
 function accountError(code: string) {
   switch (code) {
@@ -28,32 +47,65 @@ function accountError(code: string) {
 }
 
 export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string; publishableKey: string }) {
-  const active = useRef<{ client: SupabaseClient; session: Session } | null>(null);
+  const active = useRef<CustomerLogin | null>(null);
+  const pending = useRef<{ login: CustomerLogin; factors: VerificationFactor[] } | null>(null);
   const operation = useRef<AbortController | null>(null);
   const expiration = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const email = useRef<HTMLInputElement | null>(null);
   const password = useRef<HTMLInputElement | null>(null);
+  const code = useRef<HTMLInputElement | null>(null);
+  const factor = useRef<HTMLSelectElement | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [accounts, setAccounts] = useState<CustomerAccount[] | null>(null);
   const [products, setProducts] = useState<ProductSelection | null>(null);
+  const [factors, setFactors] = useState<VerificationFactor[] | null>(null);
 
   const clear = useCallback((reason = "") => {
+    const client = active.current?.client ?? pending.current?.login.client;
     operation.current?.abort();
     operation.current = null;
     clearTimeout(expiration.current);
     active.current = null;
+    pending.current = null;
+    setFactors(null);
     setAccounts(null);
     setProducts(null);
     setSignedIn(false);
     setWorking(false);
     setMessage(reason);
+    return releaseCustomerAuth(client);
   }, []);
 
+  const beginVerification = useCallback(async (login: CustomerLogin, request: AbortController) => {
+    const auth = login.client.auth;
+    try {
+      const assurance = await auth.mfa.getAuthenticatorAssuranceLevel(login.session.access_token);
+      if (operation.current !== request) return;
+      if (assurance.data?.currentLevel === "aal1" && assurance.data.nextLevel === "aal2") {
+        const result = await auth.mfa.listFactors();
+        if (operation.current !== request) return;
+        const verified = result.data?.totp.filter(item => item.status === "verified").map((item, index) => ({
+          id: item.id, name: item.friendly_name || `Kodapp ${index + 1}`,
+        }));
+        if (verified?.length) {
+          active.current = null;
+          pending.current = { login, factors: verified };
+          setSignedIn(false);
+          setFactors(verified);
+          return;
+        }
+      }
+    } catch {
+      if (operation.current !== request) return;
+    }
+    void clear(accountError("MFA_REQUIRED"));
+  }, [clear]);
+
   const load = useCallback(async () => {
-    const token = active.current?.session.access_token;
-    if (!token) return;
+    const login = active.current;
+    if (!login) return;
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
@@ -63,7 +115,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     setWorking(true);
     try {
       const response = await fetch("/api/kundkonto", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${login.session.access_token}` },
         credentials: "omit",
         cache: "no-store",
         redirect: "error",
@@ -71,37 +123,43 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
       });
       const result = await response.json();
       if (operation.current !== request) return;
-      if (response.status === 401 || response.status === 403) {
-        const login = active.current;
-        clear(accountError(result.error));
-        void login?.client.auth.signOut({ scope: "local" });
-      } else if (response.ok) {
-        setAccounts(result.items);
+      if (response.status === 403 && result.error === "MFA_REQUIRED") {
+        await beginVerification(login, request);
+      } else if (response.status === 401 || response.status === 403) {
+        void clear(accountError(result.error));
       } else {
-        setMessage(accountError(result.error));
+        setSignedIn(true);
+        if (response.ok) setAccounts(result.items);
+        else setMessage(accountError(result.error));
       }
     } catch {
-      if (operation.current === request) setMessage(unavailable);
+      if (operation.current === request) {
+        setSignedIn(true);
+        setMessage(unavailable);
+      }
     } finally {
       if (operation.current === request) {
         operation.current = null;
         setWorking(false);
       }
     }
-  }, [clear]);
+  }, [beginVerification, clear]);
 
   useEffect(() => {
     const revalidate = () => {
       if (document.visibilityState === "visible") void load();
     };
-    const leave = () => clear();
+    const leave = () => { void clear(); };
     window.addEventListener("pagehide", leave);
     document.addEventListener("visibilitychange", revalidate);
     return () => {
+      const client = active.current?.client ?? pending.current?.login.client;
       operation.current?.abort();
       operation.current = null;
       clearTimeout(expiration.current);
       active.current = null;
+      pending.current = null;
+      void releaseCustomerAuth(client);
       window.removeEventListener("pagehide", leave);
       document.removeEventListener("visibilitychange", revalidate);
     };
@@ -127,8 +185,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
       const result = await response.json();
       if (operation.current !== request) return;
       if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
-        clear(accountError(result.error));
-        void login.client.auth.signOut({ scope: "local" });
+        void clear(accountError(result.error));
       } else if (response.status === 403) {
         setProducts(null);
         setAccounts(current => current?.filter(item => item.id !== account.id) ?? null);
@@ -147,7 +204,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (operation.current || active.current) return;
+    if (operation.current || active.current || pending.current) return;
     const form = event.currentTarget;
     const credentials = { email: email.current?.value.trim() ?? "", password: password.current?.value ?? "" };
     form.reset();
@@ -155,28 +212,93 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     operation.current = request;
     setWorking(true);
     setMessage("");
+    let client: SupabaseClient | undefined;
+    let handedOff = false;
     try {
-      const client = createClient(authUrl, publishableKey, {
+      client = createClient(authUrl, publishableKey, {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         global: { fetch: (input, init) => fetch(input, {
           ...init, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
         }) },
       });
       const { data, error } = await client.auth.signInWithPassword(credentials);
-      if (operation.current !== request) {
-        if (data.session) void client.auth.signOut({ scope: "local" });
-        return;
-      }
+      if (operation.current !== request) return;
       if (error || !data.session) {
         setMessage(error?.status === 429 ? accountError("RATE_LIMITED") : "Inloggningen lyckades inte. Kontrollera dina uppgifter eller fortsätt i kundportalen.");
         return;
       }
       active.current = { client, session: data.session };
-      expiration.current = setTimeout(() => clear(expired), data.session.expires_in * 1000);
-      setSignedIn(true);
+      handedOff = true;
+      expiration.current = setTimeout(() => { void clear(expired); }, sessionDuration(data.session));
       void load();
     } catch {
       if (operation.current === request) setMessage("Inloggningen kunde inte slutföras. Försök igen eller öppna kundportalen.");
+    } finally {
+      if (!handedOff) void releaseCustomerAuth(client);
+      if (operation.current === request) {
+        operation.current = null;
+        setWorking(false);
+      }
+    }
+  }
+
+  async function confirmVerification(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const verification = pending.current;
+    if (!verification || operation.current) return;
+    const factorId = factor.current?.value ?? verification.factors[0]?.id ?? "";
+    const digits = code.current?.value ?? "";
+    if (code.current) code.current.value = "";
+    if (!/^[0-9]{6}$/.test(digits) || !verification.factors.some(item => item.id === factorId)) {
+      setMessage(invalidCode);
+      return;
+    }
+
+    const request = new AbortController();
+    operation.current = request;
+    setWorking(true);
+    setMessage("");
+    const { login } = verification;
+    const auth = login.client.auth;
+    let upgraded = false;
+    try {
+      const result = await auth.mfa.challengeAndVerify({ factorId, code: digits });
+      if (operation.current !== request) {
+        if (result.data) void releaseCustomerAuth(login.client);
+        return;
+      }
+      if (result.error || !result.data) {
+        setMessage(invalidCode);
+        return;
+      }
+      upgraded = true;
+      const { data: { session } } = await auth.getSession();
+      if (operation.current !== request) {
+        void releaseCustomerAuth(login.client);
+        return;
+      }
+      const assurance = session && await auth.mfa.getAuthenticatorAssuranceLevel(session.access_token);
+      if (operation.current !== request) {
+        void releaseCustomerAuth(login.client);
+        return;
+      }
+      if (!session || session.user.id !== login.session.user.id || session.access_token !== result.data.access_token ||
+        assurance?.data?.currentLevel !== "aal2") {
+        void clear(accountError("MFA_REQUIRED"));
+        return;
+      }
+      pending.current = null;
+      setFactors(null);
+      clearTimeout(expiration.current);
+      active.current = { client: login.client, session };
+      expiration.current = setTimeout(() => { void clear(expired); }, sessionDuration(session));
+      void load();
+    } catch {
+      if (operation.current === request) {
+        if (upgraded) {
+          void clear(accountError("MFA_REQUIRED"));
+        } else setMessage(invalidCode);
+      }
     } finally {
       if (operation.current === request) {
         operation.current = null;
@@ -186,12 +308,11 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
   }
 
   async function signOut() {
-    const login = active.current;
-    clear("Du är utloggad.");
+    const signingOut = clear("Du är utloggad.");
     const request = new AbortController();
     operation.current = request;
     setWorking(true);
-    const result = await login?.client.auth.signOut({ scope: "local" }).catch(() => null);
+    const result = await signingOut;
     if (operation.current !== request) return;
     operation.current = null;
     setWorking(false);
@@ -217,7 +338,18 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
         <button type="button" className="button" onClick={load} disabled={working}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>
       </div>
-    </> : <form className="wizard-form" method="post" onSubmit={signIn} aria-busy={working}>
+    </> : factors ? <form className="wizard-form" method="post" onSubmit={confirmVerification} aria-busy={working}>
+      <h2>Tvåstegsverifiering</h2>
+      {factors.length > 1 && <label>Kodapp<select ref={factor} disabled={working}>
+        {factors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select></label>}
+      <label>Sexsiffrig kod<input id="account-totp" ref={code} type="text" inputMode="numeric" autoComplete="one-time-code"
+        pattern="[0-9]{6}" maxLength={6} required disabled={working} /></label>
+      <div className="actions">
+        <button type="submit" className="button primary" disabled={working}>{working ? "Bekräftar …" : "Bekräfta kod"}</button>
+        <button type="button" className="button" onClick={() => { void clear(); }}>Avbryt</button>
+      </div>
+    </form> : <form className="wizard-form" method="post" onSubmit={signIn} aria-busy={working}>
       <h2>Logga in</h2>
       {/* Unnamed inputs stay out of native form submissions before hydration. */}
       <label>E-post<input id="account-email" ref={email} type="email" autoComplete="username" maxLength={254} required disabled={working} /></label>
