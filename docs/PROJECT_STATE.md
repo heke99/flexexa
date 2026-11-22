@@ -5,13 +5,15 @@ Den [reviderade byggordningen](FLEXEXA_REVISED_BUILD_ORDER_2026-11-22.md) gälle
 | Krav | Ansvar och leverans | Arbetsläge | Nästa verifiering |
 | --- | --- | --- | --- |
 | Steg 0 | Baslinje, aktuell webb, Actions, 93 fynd och Engineering Startkit | Källrevisioner och Vercel-build verifierade | Hämta Startkit v3.1.0 och matcha aktuell AWS- och databasmiljö |
-| R42–R43 | Ekonomi, mätunderlag och avtalsstyrt tillägg | Lokalt verifierad avräkning och isolerad samtidighetskontroll | Avstämning i betalningsmiljö med aktuella avtal och verkliga mätbevis |
-| R45, R56 | API, webb, mobil och företagsdelegering | Lokal behörighetskontroll och webbresan verifierade | Partner-OAuth och webhook, signerad app på fysisk enhet samt blandad last |
-| R46, R58 | Laddintegration, [laddpilot](progress/charging-pilot.md) | Simulerat start-, paus- och återupptagningsprov godkänt | Kör samma sekvens på avtalad utrustning med lokal reserv och uppmätt kWh |
-| R49 | Gridex och återhämtning av köpförsök | Lokal portal och API verifierade för återupptagen testorder | Verifiera separata avtalsutfall i avsedd partner- och betalningsmiljö |
-| R51–R58 | Kapacitetsprofil och [belastningsprov](progress/capacity-verification.md) | Testdata verifierade | Kör hela profilen med ordinarie flöden och testroller i produktionslik miljö |
-| R52 | Samordnaren, asynkrona beräkningsförslag per gemensam effektgräns | Lokal HTTP-/kö-/solververifiering | Verifiera fasgränser, faktisk platskoppling, kvoter och samlad belastning |
-| R44, R47–R48, R50 | Produkt, laddpartner och ekonomi | Öppet | Validera verifieringsmetod för fordonskoppling, CDR och dess rättelser samt villkor för marknadsprogram och mottagare |
+| R42–R43 | Ekonomi, mätunderlag och avtalsstyrt tillägg | Lokal avräkning och attest bunden till granskat prisunderlag | Avstämning i betalningsmiljö med aktuella avtal och verkliga mätbevis |
+| R44, R48 | Roamingkostnad, CDR och fordonskoppling | Lokal workerimport med granskningsstatus och sena revisioner | Verifiera faktisk operatörsdata, kundvisning och marginalrapport |
+| R45, R56 | API, webb, mobil och företagsdelegering | Lokal behörighetskontroll, webbresan och ett beständigt partnerflöde för slutförd plan | Partner-OAuth och utgående webhook, signerad app på fysisk enhet samt blandad last |
+| R46, R54, R58 | Laddintegration, [laddpilot](progress/charging-pilot.md) | Lokala prov av start, paus, återupptagning och avstämning av tappad kvittens | Kör samma sekvens på avtalad utrustning med lokal reserv och uppmätt kWh. Prova längre avbrott under last. |
+| R47, R50 | Rewards och tidsbundna marknadsrelationer | Simulatorn bevarar historisk mottagare och tillämpar ny relation från sitt giltighetsdatum | Verifiera marknadsavtal, mottagare, verklig mätning och partneravräkning |
+| R49 | Gridex och återhämtning av köp och offert | Lokal portal och API verifierade för testorder och bevarad offerthistorik | Verifiera separata avtalsutfall i avsedd partner- och betalningsmiljö |
+| R51–R58 | Kapacitetsprofil och [belastningsprov](progress/capacity-verification.md) | Testdata samt avgränsade lokala HTTP-prov med PostgreSQL | Kör hela profilen med ordinarie flöden och testroller i produktionslik miljö |
+| R52 | Asynkrona beräkningsförslag per gemensam effektgräns | Lokalt HTTP-/kö-/solverprov inklusive täta resultat med 12 000 bilar | Verifiera fasgränser, faktisk platskoppling, kvoter och samlad belastning |
+| Steg 2 | [Fordonskatalog och telemetri](progress/vehicle-pilot.md) | Två normaliserade katalogposter reproducerade från licensierad EEA-källa | Enode Sandbox och verifiering med BMW 330e 2023 och utsedd BEV |
 
 Releasebedömningen är röd. Fysisk styrning, partneravräkning, betalning och full kapacitetsacceptans har öppna grindar. Arbetspaketen ovan avser den lokala integrationsversionen. [Kravmatris och bevis](work/2026-11-22-revised-build.md)
 
