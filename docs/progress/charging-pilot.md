@@ -30,6 +30,14 @@ Pilotregressionen följer anslutning via kund-API, beständig planering och star
 | `node --test test/energy-native.test.mjs` | `c26766fdfb` med uppdaterad autentiseringsfixture, separat PostgreSQL 18.6-beta.19 på loopback och disponibel `charging_test`. **1 av 1 godkänt**. Samtidiga anrop gav en simulerad effekt. Ordinarie workerstart med begränsad roll behandlade ett jobb, skrev sin heartbeat och avslutade kontrollerat. Testet lämnade noll testposter och simulatorverkningar. |
 | `npm run test:energy:browser` | `c26766fdfb` med uppdaterad lokal autentiseringsfixture och portaltest. Chromium 151 på **390 och 1 440 px**. Båda körningarna visade sparade laddval, simulerad start/paus och åtskilda konton. Noll sidfel, horisontellt spill eller kvarvarande testposter. Kör med `npm ci --ignore-scripts --prefix web`, Python-miljön ovan och lokal Chromium. Rapporten skrivs till `artifacts/energy-simulation/browser-report.json`. |
 
+### Gemensamt adapterkontrakt
+
+Laddbackendens API och köarbetare använder `src/energy-device-adapter.mjs` för att validera telemetri och kommandokvittenser från simulerade adaptrar. Adaptern mappar leverantörens egna enheter till gemensamma fält och får en avbrottssignal vid timeout. API:t verifierar konto och resurs. Köarbetaren verifierar också kommandoidentitet, begärd effekt och aktuella kapabiliteter. Ett osäkert utfall kan avstämmas mot en senare giltig kvittens.
+
+På lokal revision `4cfcfcf` körde `test/energy-device-adapter.test.mjs` samma autentiserade API, plankö och köarbetare med en andra, oberoende testadapter. Den använde watt och promille internt. Tre riktade prov passerade. Fel konto, ogiltig telemetri och felaktig kvittens lämnade sparad status orörd. Giltig kvittens avslutade ett osäkert kommando utan nytt utskick. Kör provet mot en ny isolerad PostgreSQL 18 med `ENERGY_ADAPTER_TEST_DATABASE_URL` eller via den lokala backendtestsviten med standardfixturen.
+
+På samma revision passerade hela backendsviten med 378 tester, det separata nativeprovet med begränsad arbetarinloggning och Chromiumprovet på 390 och 1 440 px.
+
 ## Fysisk körning på vald styrväg
 
 Enode är senarelagt. Pilotens kWh-flöde kan börja med en avtalad laddbox, till exempel via en direkt adapter eller en laddplattform med OCPP där utrustning och avtal medger det. Kontrollera varje kapabilitet mot den aktuella kombinationen av leverantör, plats och utrustning. [Leverantörsbeslut](../DECISIONS.md#beslut-2026-11-22--leverantörsval-för-laddpiloten)
