@@ -23,6 +23,7 @@ const { values } = parseArgs({ options: {
   seconds: { type: 'string', default: '5' },
   'legacy-list': { type: 'boolean' },
   telemetry: { type: 'boolean' },
+  'metered-observations': { type: 'boolean' },
   'skip-reconnect': { type: 'boolean' },
   scenario: { type: 'string' },
   'profile-http': { type: 'boolean' },
@@ -31,6 +32,7 @@ const { values } = parseArgs({ options: {
 } });
 assert.ok(values.charging, 'Supply --charging with the path to the charging-subscription checkout');
 assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
+assert.ok(!values['metered-observations'] || values.telemetry, '--metered-observations requires --telemetry');
 assert.ok(values.scenario === undefined || ['distributed', 'concentrated'].includes(values.scenario),
   '--scenario must be distributed or concentrated');
 assert.ok(['all', 'normal', 'peak', 'reconnect'].includes(values.phase), '--phase must be all, normal, peak, or reconnect');
@@ -450,7 +452,9 @@ async function scenario(cluster, name) {
     const vehicles = [...vehicleRows(name)];
     const { auth, issueToken } = authenticationFixture();
     const fixtures = await seed(pool, vehicles, issueToken);
-    const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service) : null;
+    const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service, {
+      metered: values['metered-observations'],
+    }) : null;
     if (telemetry) await telemetry.seed(pool, vehicles, fixtures);
     listener = server({ service, auth, fleetPlanningEnabled: true, energy: telemetry?.energy });
     const port = await bindLoopback(listener);
