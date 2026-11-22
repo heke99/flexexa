@@ -14,6 +14,16 @@ const portal = 'https://ladda.flexexa.com/';
 const overview = '/app/konto/oversikt';
 const publishableKey = 'sb_publishable_local_browser_fixture';
 const password = 'fixture-only-customer-password';
+const incorrectCode = '135790';
+const validCode = '648275';
+const verifiedFactor = { id: '44444444-4444-4444-8444-444444444444', factor_type: 'totp', status: 'verified' };
+const secondFactors = [
+  { id: '55555555-5555-4555-8555-555555555555', factor_type: 'totp', status: 'unverified' },
+  { id: '66666666-6666-4666-8666-666666666666', factor_type: 'phone', status: 'verified' },
+  verifiedFactor,
+];
+const challengePath = `/auth/v1/factors/${verifiedFactor.id}/challenge`;
+const verifyPath = `/auth/v1/factors/${verifiedFactor.id}/verify`;
 const personal = { id: '11111111-1111-4111-8111-111111111111', kind: 'personal', name: 'Konto Grön', role: 'owner' };
 const company = { id: '33333333-3333-4333-8333-333333333333', kind: 'business', name: 'Konto Guld', role: 'owner' };
 const otherCompany = { id: '22222222-2222-4222-8222-222222222222', kind: 'business', name: 'Konto Blå', role: 'billing' };
@@ -21,6 +31,7 @@ const accounts = {
   first: [personal, company],
   second: [otherCompany],
 };
+const userIds = { first: randomUUID(), second: randomUUID() };
 const productPath = ({ id }) => `/v1/accounts/${id}/product-access`;
 const grant = (product_key, enabled, status = 'active') => ({ product_key, status, version: 4, enabled, expires_at: null });
 const productAccess = new Map([
@@ -81,14 +92,32 @@ const certificatePath = join(scratch, 'cert.pem');
 const privateKeyPath = join(scratch, 'key.pem');
 const calls = [];
 const issued = new Map();
+const challenges = new Map();
 const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let startURL;
 let upstream;
-let secondRequiresMfa = true;
+let secondHasTotp = false;
+let heldTotpReply;
 let webdriver;
 let session;
+
+function issueAuthSession(actor, user, sessionId, assurance) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const claims = { sub: user.id, iss: `${upstream}/auth/v1`, aud: 'authenticated', role: 'authenticated',
+    aal: assurance, session_id: sessionId, iat: timestamp, exp: timestamp + 3600,
+    amr: (assurance === 'aal2' ? ['password', 'totp'] : ['password']).map((method) => ({ method, timestamp })) };
+  const jwt = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(claims)}`;
+  const accessToken = `${jwt}.${createHmac('sha256', signingKey).update(jwt).digest('base64url')}`;
+  issued.set(accessToken, { actor, user, sessionId, assurance, signedOut: false });
+  return { user, access_token: accessToken, refresh_token: `fixture-refresh-${actor}`, expires_in: 3600, token_type: 'bearer' };
+}
+
+async function requestBody(req) {
+  return JSON.parse(await Array.fromAsync(req).then((chunks) => Buffer.concat(chunks)));
+}
 
 try {
   execFileSync('openssl', [
@@ -114,27 +143,46 @@ try {
       if (req.method === 'OPTIONS') return reply(204);
       const bearer = req.headers.authorization?.replace(/^Bearer /, '');
       if (url.pathname === '/auth/v1/token' && req.method === 'POST' && url.searchParams.get('grant_type') === 'password') {
-        const input = JSON.parse(await Array.fromAsync(req).then((chunks) => Buffer.concat(chunks)));
+        const input = await requestBody(req);
         const actor = input.email === 'first@example.test' ? 'first' : input.email === 'second@example.test' ? 'second' : null;
         if (!actor || input.password !== password || req.headers.apikey !== publishableKey) return reply(400, { message: 'Invalid credentials' });
-        const timestamp = Math.floor(Date.now() / 1000);
-        const user = { id: randomUUID(), email: input.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
-        const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-        const jwt = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: user.id, iss: `${upstream}/auth/v1`, aud: 'authenticated', role: 'authenticated', aal: 'aal1', session_id: randomUUID(), iat: timestamp, exp: timestamp + 3600 })}`;
-        const accessToken = `${jwt}.${createHmac('sha256', signingKey).update(jwt).digest('base64url')}`;
-        issued.set(accessToken, actor);
+        const user = { id: userIds[actor], email: input.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {},
+          factors: actor === 'second' && secondHasTotp ? secondFactors : [], email_confirmed_at: new Date().toISOString(), created_at: new Date().toISOString() };
         calls.push({ method: req.method, path: url.pathname, actor });
-        return reply(200, { user, access_token: accessToken, refresh_token: `fixture-refresh-${actor}`, expires_in: 3600, token_type: 'bearer' });
+        return reply(200, issueAuthSession(actor, user, randomUUID(), 'aal1'));
       }
-      const actor = issued.get(bearer);
-      calls.push({ method: req.method, path: url.pathname, actor, scope: url.searchParams.get('scope') });
-      if (!actor) return reply(401, { error: 'UNAUTHENTICATED' });
+      const login = issued.get(bearer);
+      const { actor, user, sessionId, assurance, signedOut } = login ?? {};
+      calls.push({ method: req.method, path: url.pathname, actor, assurance, scope: url.searchParams.get('scope') });
+      if (!actor || signedOut) return reply(401, { error: 'UNAUTHENTICATED' });
       if (url.pathname === '/auth/v1/logout' && req.method === 'POST') {
-        issued.delete(bearer);
+        for (const issuedSession of issued.values()) {
+          if (issuedSession.sessionId === sessionId) issuedSession.signedOut = true;
+        }
         return reply(204);
       }
+      if (url.pathname === '/auth/v1/user' && req.method === 'GET') return reply(200, user);
+      if (url.pathname === challengePath && req.method === 'POST' && user.factors.includes(verifiedFactor) && assurance === 'aal1') {
+        const id = randomUUID();
+        challenges.set(id, bearer);
+        return reply(200, { id, type: 'totp', expires_at: Math.floor(Date.now() / 1000) + 60 });
+      }
+      if (url.pathname === verifyPath && req.method === 'POST' && user.factors.includes(verifiedFactor) && assurance === 'aal1') {
+        const input = await requestBody(req);
+        const challengedBearer = challenges.get(input.challenge_id);
+        challenges.delete(input.challenge_id);
+        if (challengedBearer !== bearer || input.code !== validCode) {
+          return reply(400, { code: 'mfa_verification_failed', message: 'Invalid fixture code' });
+        }
+        const hold = heldTotpReply;
+        heldTotpReply = undefined;
+        if (hold) await hold;
+        return reply(200, issueAuthSession(actor, user, sessionId, 'aal2'));
+      }
+      if (url.pathname.startsWith('/v1/accounts') && actor === 'second' && assurance !== 'aal2') {
+        return reply(403, { error: 'MFA_REQUIRED' });
+      }
       if (url.pathname === '/v1/accounts' && req.method === 'GET' && !url.search) {
-        if (actor === 'second' && secondRequiresMfa) return reply(403, { error: 'MFA_REQUIRED' });
         return reply(200, { items: accounts[actor] });
       }
       const productAccount = /^\/v1\/accounts\/([^/]+)\/product-access$/.exec(url.pathname)?.[1];
@@ -241,7 +289,7 @@ try {
   };
   const assertNoStorage = async () => {
     const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
-    for (const token of [...issued.keys(), 'fixture-refresh-', password, ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
+    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
     assert.doesNotMatch(persisted, /sb-[^"\s]*-auth-token/);
@@ -265,6 +313,12 @@ try {
     const handoff = await execute('return [...document.links].find(link => link.innerText.trim() === "Hantera produkter i kundportalen")?.href;');
     assert.equal(handoff, `${portal}produkter`);
   };
+  const mfaVisible = async () => (await text()).includes('Tvåstegsverifiering');
+  const submitCode = async (code) => {
+    await enter('Sexsiffrig kod', code);
+    await clickButton('Bekräfta kod');
+  };
+  const businessCalls = () => calls.filter(({ path }) => path.startsWith('/v1/'));
 
   await viewport(1440, 900, false);
   await browserCommand('/url', { url: startURL + overview });
@@ -308,11 +362,45 @@ try {
   assert.doesNotMatch(await text(), /Konto Grön|Konto Blå/);
   await assertFallback();
   await assertNoStorage();
-  secondRequiresMfa = false;
+  assert.ok(!calls.some(({ path }) => path.startsWith('/auth/v1/factors/')), 'Unsupported MFA never creates a challenge');
+  secondHasTotp = true;
   await browserCommand('/url', { url: startURL + overview });
   await pending(async () => /Logga in/.test(await text()));
   await login('second');
+  await pending(mfaVisible);
+  assert.doesNotMatch(await text(), /Mina konton|Konto Grön|Konto Guld|Konto Blå/);
+  let pendingBusinessCalls = businessCalls().length;
+  await submitCode(incorrectCode);
+  await pending(async () => (await text()).includes('Koden kunde inte bekräftas. Försök igen.'));
+  assert.equal(businessCalls().length, pendingBusinessCalls, 'Wrong TOTP code must not read accounts or products');
+  await assertNoStorage();
+
+  const delayedTotp = Promise.withResolvers();
+  heldTotpReply = delayedTotp.promise;
+  try {
+    await submitCode(validCode);
+    await pending(() => calls.filter(({ path }) => path === verifyPath).length === 2);
+    assert.doesNotMatch(await text(), /Mina konton|Konto Grön|Konto Guld|Konto Blå/);
+    await clickButton('Avbryt');
+    await pending(async () => /Logga in/.test(await text()) && !(await mfaVisible()));
+  } finally {
+    delayedTotp.resolve();
+  }
+  await pending(() => calls.some(({ path, actor, assurance, scope }) =>
+    path === '/auth/v1/logout' && actor === 'second' && assurance === 'aal2' && scope === 'local'));
+  assert.equal(businessCalls().length, pendingBusinessCalls, 'A delayed TOTP reply after cancellation must not read accounts');
+  assert.doesNotMatch(await text(), /Mina konton|Konto Grön|Konto Guld|Konto Blå/);
+  await assertNoStorage();
+
+  await login('second');
+  await pending(mfaVisible);
+  pendingBusinessCalls = businessCalls().length;
+  await submitCode(validCode);
   await pending(async () => /Mina konton[\s\S]*Konto Blå/.test(await text()));
+  assert.equal(businessCalls().length, pendingBusinessCalls + 1);
+  assert.equal(businessCalls().at(-1).assurance, 'aal2');
+  const latestAccountRead = calls.findLastIndex(({ path }) => path === '/v1/accounts');
+  assert.ok(calls.slice(0, latestAccountRead).some(({ path, assurance, actor }) => path === '/auth/v1/user' && assurance === 'aal2' && actor === 'second'));
   assert.match(await text(), /Konto Blå · Företag · Ekonomi/);
   assert.doesNotMatch(await text(), /Konto Grön|Konto Guld/);
   assert.doesNotMatch(await productView(), /Konto Grön|Konto Guld|Laddabonnemang|Energioptimering/);
@@ -327,12 +415,16 @@ try {
   await browserCommand('/refresh', {});
   await pending(async () => /Logga in/.test(await text()) && !/Konto Blå/.test(await text()));
   assert.doesNotMatch(await productView(), /Konto Blå|Laddabonnemang|Energioptimering/);
-  assert.deepEqual(calls.filter(({ path }) => path.startsWith('/v1/')).map(({ method, path, actor }) => [method, path, actor]), [
-    ['GET', '/v1/accounts', 'first'], ['GET', productPath(personal), 'first'], ['GET', productPath(company), 'first'],
-    ['GET', productPath(personal), 'first'], ['GET', '/v1/accounts', 'second'], ['GET', '/v1/accounts', 'second'],
-    ['GET', productPath(otherCompany), 'second'], ['GET', productPath(otherCompany), 'second'],
+  assert.deepEqual(businessCalls().map(({ method, path, actor, assurance }) => [method, path, actor, assurance]), [
+    ['GET', '/v1/accounts', 'first', 'aal1'], ['GET', productPath(personal), 'first', 'aal1'], ['GET', productPath(company), 'first', 'aal1'],
+    ['GET', productPath(personal), 'first', 'aal1'], ['GET', '/v1/accounts', 'second', 'aal1'], ['GET', '/v1/accounts', 'second', 'aal1'],
+    ['GET', '/v1/accounts', 'second', 'aal1'], ['GET', '/v1/accounts', 'second', 'aal2'],
+    ['GET', productPath(otherCompany), 'second', 'aal2'], ['GET', productPath(otherCompany), 'second', 'aal2'],
   ]);
-  verified.push('mobile MFA fallback, separate second identity, unavailable product retry, and reload');
+  assert.deepEqual(calls.filter(({ path }) => path.startsWith('/auth/v1/factors/')).map(({ method, path }) => [method, path]), [
+    ['POST', challengePath], ['POST', verifyPath], ['POST', challengePath], ['POST', verifyPath], ['POST', challengePath], ['POST', verifyPath],
+  ]);
+  verified.push('mobile MFA fallback, wrong code, late cancellation, AAL2 account and product reads, and reload');
   console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
 } finally {
   if (session) {
