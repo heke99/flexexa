@@ -51,3 +51,9 @@ En separat fullskalig syntetisk körning på samma revision stängde 744 000 lad
 ## Produktionsstatus
 
 De lokala resultaten kompletterar den GitHub-hostade statusen. Konto- eller budgetspärr har stoppat de observerade Actions-körningarna. De två integrationsgrenarna behöver dessutom matchas mot fungerande driftschema och återstående partner-, betalnings- och laddprov. [Krav för full acceptans](../progress/masterplan-remaining-2026-11-22.md)
+
+## Åtkomstbegäran, simulatorväxling och prisrättelse
+
+På laddrevision `7734a72` passerade 401 ordinarie backendprov, 17 PostgreSQL-scenarier med 41 prov, 18 separata nativeprov och 48 Chromium-fullstackprov. Ett tjänstebundet backendprov hoppades över i den ordinarie sviten. Nativeprovet kunde ta bort auditens äldre direkta simulatorbehörighet, läsa bevarad historik och registrera ny status med arbetarens behörighet. Hemmaersättningens prisrättelse gav en sparad attesterad rättelse trots sex samtidiga omförsök. Den sparade två prövade differenser på −3 000 respektive +1 500 öre från låsta mätvärden och avtal. Rättelsen förbereder en avstämning. Betalnings- och bokningsvägen återstår. [Kvar till acceptans](../progress/masterplan-remaining-2026-11-22.md)
+
+Arbetaren i `3eada5e` läser åldern på äldsta köade planjobb och äldsta olösta laddkommando. Den loggar endast de två aggregerade åldrarna. Produktionsmallen deklarerar larm vid 60 respektive 120 sekunder i två av tre enminutsperioder. Begränsad arbetaridentitet och CloudFormation-mallen provades lokalt. Uppmätta larmgränser och aviseringskedjan återstår att verifiera i målmiljön.

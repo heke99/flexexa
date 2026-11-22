@@ -1,6 +1,6 @@
 # Kontovy i Next · 22 november 2026
 
-FX-001–004 har en första autentiserad läsväg i rotprojektet. Kontovyn visar de privat- och företagsmedlemskap som ladd-API:t returnerar för den aktuella Supabase-sessionen. Kunden kan uppdatera listan och logga ut. Köp, kontoskapande, inloggning med e-postkod och kontoåterställning hanteras i den befintliga kundportalen. [Novemberplanen](../FLEXEXA_MASTERPLAN_2026-11-01.md)
+FX-001–004 har en autentiserad konto- och produktvy i rotprojektet. Kontovyn visar de privat- och företagsmedlemskap som ladd-API:t returnerar för den aktuella Supabase-sessionen. Kunden kan uppdatera listan och logga ut. Köp, kontoskapande och kontoåterställning hanteras i den befintliga kundportalen. [Novemberplanen](../FLEXEXA_MASTERPLAN_2026-11-01.md)
 
 Förhandsvisningen är avstängd som standard. Då leder `/app/konto` och `/app/konto/oversikt` till den fasta kundportalen. För lokal körning behöver `FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW` vara `true`. `FLEXEXA_CUSTOMER_AUTH_URL` och `FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY` anger kundernas Auth-projekt och dess publika nyckel. `FLEXEXA_CUSTOMER_API_URL` anger ladd-API:ts HTTPS-ursprung för samma miljö. Next vidarebefordrar enbart den presenterade åtkomsttokenen till API:ts kontolista. Kontosvaren använder `no-store`. Förhandsvisningen håller sessionen i minnet och kräver ny inloggning efter omladdning.
 
@@ -17,3 +17,9 @@ Produktprovet i Chromium kontrollerade fem statusar, två identiteter, ett förd
 ## Tvåstegsverifiering med kodapp
 
 När ladd-API:t kräver tvåstegsverifiering kan en redan registrerad och verifierad TOTP-kodapp bekräfta inloggningen i PWA:n. Konton läses på nytt först när Supabase gett AAL2 för samma användare. Avbrott rensar vyn omedelbart. En lyckad verifiering som anländer efter avbrott utlöser lokal utloggning för den sena sessionen. Övriga faktortyper och återställning går via kundportalen. Chromium med en lokal Supabase-fixture provade fel kod, sen lyckad verifiering efter avbrott, lyckad inloggning och avgränsad produktläsning. Den avsedda kundmiljön återstår att prova med riktig Supabase Auth. [Webbläsarprov](../../scripts/web/verify-customer-account.mjs)
+
+## Åtkomstbegäran och e-postkod
+
+Kontoägaren kan begära åtkomst för de två erbjudandena i produktvyn. Ladd-API:t kontrollerar aktuell ägarroll, kontotillhörighet och företagskravet för energioptimering. En ny läsning visar den sparade begäran. Chromium verifierade knappen och statusen Begärd. Det lokala PostgreSQL-provet nekade främmande konton och ekonomianvändaren, stoppade fel ursprung innan ladd-API:t och bekräftade att omförsök sparar en begäran utan att ändra produktlicensen.
+
+E-postkod för befintliga kunder aktiveras separat genom `FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW=true` tillsammans med kontoförhandsvisningen. Chromium verifierade samma sessionsgränser som för lösenord samt fel kod, omsändningsspärr och avbruten verifiering. Den driftade Supabase-mallen behöver bekräftas med numerisk engångskod innan funktionen kan aktiveras i staging. Lokala prov använde syntetiska inloggningssvar. [Verifierare](../../scripts/web/verify-customer-account.mjs)

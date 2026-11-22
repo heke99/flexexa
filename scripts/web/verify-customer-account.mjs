@@ -216,6 +216,18 @@ try {
         return reply(200, { items: accounts[actor] });
       }
       const productAccount = /^\/v1\/accounts\/([^/]+)\/product-access$/.exec(url.pathname)?.[1];
+      if (productAccount && req.method === 'POST' && !url.search) {
+        if (!accounts[actor].some(({ id, role }) => id === productAccount && role === 'owner')) return reply(403, { error: 'FORBIDDEN' });
+        const input = await requestBody(req);
+        if (productAccount !== company.id || input.productKey !== 'charging_subscription' || req.headers.origin || req.headers.cookie) {
+          return reply(400, { error: 'INVALID_INPUT' });
+        }
+        const { requests } = productAccess.get(productAccount);
+        if (!requests.some(({ product_key }) => product_key === input.productKey)) {
+          requests.push({ product_key: input.productKey, requested_at: '2026-11-22T10:00:00Z' });
+        }
+        return reply(202, { requested: true, productKey: input.productKey });
+      }
       if (productAccount && req.method === 'GET' && !url.search) {
         if (!accounts[actor].some(({ id }) => id === productAccount)) return reply(403, { error: 'FORBIDDEN' });
         const planned = nextProductReply.get(productAccount);
@@ -309,10 +321,11 @@ try {
     assert.ok(element?.[elementKey], `Missing form control ${label}`);
     await browserCommand(`/element/${element[elementKey]}/value`, { text: value });
   };
-  const clickButton = async (label) => {
+  const clickButton = async (label, keyboard = false) => {
     const element = await execute('return [...document.querySelectorAll("button")].find(button => (button.getAttribute("aria-label") ?? button.innerText.trim()) === arguments[0]);', label);
     assert.ok(element?.[elementKey], `Missing button ${label}`);
-    await browserCommand(`/element/${element[elementKey]}/click`, {});
+    if (keyboard) await browserCommand(`/element/${element[elementKey]}/value`, { text: '\uE007' });
+    else await browserCommand(`/element/${element[elementKey]}/click`, {});
   };
   const assertFallback = async () => {
     const fallback = await execute('return [...document.links].find(link => link.innerText.trim() === "Öppna kundportalen")?.href;');
@@ -344,7 +357,8 @@ try {
       return panel.includes(account.name) && chargingStatus.test(panel) && energyStatus.test(panel);
     });
     const panel = await productView();
-    assert.deepEqual(panel.match(/Laddabonnemang|Energioptimering/g), ['Laddabonnemang', 'Energioptimering']);
+    assert.deepEqual(await execute(`return [...document.querySelectorAll('#account-products dt')]
+      .map(label => label.textContent.trim());`), ['Laddabonnemang', 'Energioptimering']);
     assert.doesNotMatch(panel, /Grid Rewards|Extern API|product_key|grid_rewards|external_api/);
     const activeAccount = await execute('return document.querySelector("main button[aria-pressed=true]")?.innerText.trim();');
     assert.equal(activeAccount, `Visa produkter för ${account.name}`);
@@ -531,6 +545,18 @@ try {
   assert.equal(new URL(await browserCommand('/url')).search, '');
   assert.equal(otpRequests, 3);
   await assertNoStorage();
+  const requestStart = businessCalls().length;
+  productAccess.get(company.id).requests.length = 0;
+  await productsFor(company);
+  await assertProductView(company, 'Ingen åtkomst', 'Aktiv');
+  await clickButton('Begär åtkomst till Laddabonnemang', true);
+  await assertProductView(company, 'Begärd', 'Aktiv');
+  assert.equal(await execute('return document.activeElement.id;'), 'account-products-title');
+  assert.ok(!(await productView()).includes('Begär åtkomst till Laddabonnemang'));
+  assert.deepEqual(businessCalls().slice(requestStart).map(({ method, path, actor }) => [method, path, actor]), [
+    ['GET', productPath(company), 'first'], ['POST', productPath(company), 'first'], ['GET', productPath(company), 'first'],
+  ]);
+  verified.push('owner submits a product request and sees the backend-confirmed pending state');
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !/Konto Grön/.test(await text()));
   await pending(() => calls.filter(({ path, actor, signInMethod, scope }) =>
