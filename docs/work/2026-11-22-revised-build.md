@@ -121,3 +121,18 @@ Ett kort omprov på produktrevisionen spelade upp 39 migreringar i varsin ny dat
 Produktrevisionen `46cf790` passerade 383 backendtester, 122 portalenhetstester och portalens produktionsbygge. Riktade nativeprov körde telemetri, laddköövertagande, företagssökning och periodstängning i separata PostgreSQL-databaser. Chromium verifierade procent- och kWh-mål på 390 och 1 440 px. Två tiominutersprov genomförde vardera 180 000 paginerade listanrop och 360 000 telemetriobservationer utan fel eller tapp. Listans p95 var 7,9 ms med ett företag och 8,1 ms med tolv företag. Helplanens integritetskontroll passerade och releasebedömningen är fortsatt röd. [Resultat och provgränser](../progress/capacity-verification.md)
 
 Periodstängningen för 12 000 syntetiska fordon på `46cf790` nådde den gemensamma frågetidsgränsen på tio sekunder. `fadba82` gav stängningsfrågan en egen gräns på 60 sekunder inom arbetarens transaktion och verifierades därefter på samma volym. Samtliga 383 backendtester och två separata nativeprov för periodstängning passerade efter ändringen. På `d43e30e` sparade återanslutningsprovet 25 800 observationer per fordonsfördelning utan tapp.
+
+## Fortsättning med kontrollräkning och processåterhämtning
+
+| Krav | Leverans och lokalt bevis |
+| --- | --- |
+| R46, R58 | Syntetiska svar från Easee, Zaptec och OCPP prövar energi- och effektenheter, tidsstämplar, korrelation, källstatus och skillnaden mellan mottaget kommando och verifierad effekt. Samma simulatorgräns avvisar en otillräcklig leverantörskvittens. |
+| R51 | De sju blandade läsvägarna genomförde normalnivån i båda 12 000-fordonsfördelningarna. Båda tiominutersproven gav vardera 180 000 väntade HTTP-utfall och 360 000 beständiga observationer. Högsta p95 var 12,7 ms för tolv företag på `dd53cb2` och 52,3 ms för ett företag på `132c05e`. [Kapacitetsprotokoll](../progress/capacity-verification.md) |
+| R52 | Node-arbetaren jämför solverresultatet med varje fordons kvartar, energimål, platsgräns och uttrycklig fasgräns i båda kodningarna. Det täta provet på `132c05e` gick genom HTTP, PostgreSQL 18.6, kö och solver med 12 000 fordon, 1 151 405 allokeringar och cirka 8,12 MB resultat. Fasta enfasresurser använder klientens scenariovärden. |
+| R54 | Arbetaren reserverar kommandot i databasen före simulerad effekt. Testet avslutade arbetaren efter effekt och före sparad kvittens. En ny arbetare läste tillbaka ett enda utfall, 1 000 Wh och 0 kW efter tidsgränsen. En separat kontroll spärrade kommandot när reservationen löpte ut under validering. |
+| R55, R57 | En tidigare period förblir förseglad efter migrering även om ett transaktions-ID återanvänds. På ekonomigrenen `8beb337` gav 744 000 CDR efter ändringen samma energi och kostnad som originalprovet, med 13,3 sekunders stängning och 11,2 sekunders export. |
+| R56 | Portalen döljer den gamla kontovyn direkt och hämtar aktuell roll vid byte och återgång till fliken. Chromium prövade väntande nätverkssvar och indragen ägarroll. |
+
+[Rapport över återstående arbete](../progress/masterplan-remaining-2026-11-22.md)
+
+Backendrevisionen `132c05e` passerade 392 tester i den ordinarie sviten och två separata återstartsprov med PostgreSQL. Sex riktade nativeprov för processdöd, migrering och periodstängning passerade på `dd53cb2`. Portalen på samma revision passerade 122 enhetstester, produktionsbygget, tolv riktade Chromium-prov och 46 Chromium-prov genom HTTP och isolerad PostgreSQL. Simulerad energi passerade på 390 och 1 440 px på `132c05e`. Den ändrade CI-definitionen passerade actionlint lokalt.

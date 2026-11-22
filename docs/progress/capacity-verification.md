@@ -85,6 +85,22 @@ Svarstiden varierade mellan körningarna. Delningen 6/4 gav ingen uppmätt förd
 
 Detta är ett avgränsat blandprov av HTTP-kontrakt, behörighet och lokal samtidighet. Driftlik belastning med hela produktmixen och längre uthållighet återstår för R51 och R56.
 
+#### Tiominutersprov av blandade läsvägar
+
+Det fördelade provet kördes på `dd53cb20e8cb721ad7a7f651c6fef994fbff4a27` och det koncentrerade på `132c05e61899f2aacbd07b522577bc2779a11d4d`. Båda använde 43 migrationer i PostgreSQL 18.6, 12 000 flottfordon, 36 privata behörighetskontroller och en gemensam pool på tio anslutningar. Kommandot använde `--phase peak --peak-seconds 600 --mixed-routes --telemetry --metered-observations` med respektive `--scenario distributed` eller `--scenario concentrated`. Alla 180 000 anrop per körning vid 300/s gav väntat utfall, inklusive 46 956 avsiktliga nekanden per körning. Inga anrop föll bort och samtliga svar passerade kontrollerna för roll och kontoinnehåll.
+
+| Läsväg | Anrop per körning | p95 / p99 · tolv företag | p95 / p99 · ett företag |
+| --- | ---: | ---: | ---: |
+| Första fordonssidan | 31 306 | 7,9 / 21,4 ms | 9,1 / 24,4 ms |
+| Senare fordonssida | 31 304 | 11,7 / 27,0 ms | 9,8 / 25,8 ms |
+| Filtrerad fordonssökning | 23 478 | 12,7 / 28,8 ms | 52,3 / 66,9 ms |
+| Produktbehörighet | 15 652 | 9,0 / 25,2 ms | 14,1 / 27,7 ms |
+| Orderläsning | 7 826 | 8,4 / 24,1 ms | 15,2 / 29,7 ms |
+| Delegerad partnerläsning | 15 652 | 10,0 / 26,9 ms | 20,0 / 38,2 ms |
+| Plattformsroll | 7 826 | 5,7 / 17,8 ms | 12,6 / 27,8 ms |
+
+Samtidigt sparades alla 360 000 observationer per körning vid 600/s, med 1,6 ms p95 till beständig status för tolv företag och 3,0 ms för ett företag. Båda körningarna matchade 12 000 aktuella värden och 360 003 historikrader, varav 90 003 med mätarepok. Mätningen gäller den lokala mixen av HTTP-läsningar och simulatortelemetri. Samtidig faktura-, klient- och verklig leverantörstrafik samt hela uthållighetsprovet återstår.
+
 ## Lokalt telemetriprov R53
 
 Lägg till `--telemetry` för att prova den befintliga simulatoradaptern, arbetarrollen och uppdateringen av aktuell status i båda fordonsfördelningarna. Samma loopback-server används för autentiserad uppdatering och HTTP-läsning. Använd `--telemetry --skip-reconnect` för ett kort utvecklingsprov.
