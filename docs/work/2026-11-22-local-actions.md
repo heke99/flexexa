@@ -69,3 +69,11 @@ Portalens omkörning på laddcommit `9e1ea4c` gav 48 av 48 godkända fullstackpr
 ## Kontroll mot Flexexas Supabase-databas
 
 I `flexexa-dev` (PostgreSQL 17.6) skapades ett syntetiskt företagskonto och ett obekräftat fordon i samma transaktion. En läsning i transaktionen bekräftade fordonskopplingen. Efter rollback bekräftade en separat SQL-sats att båda de exakta prov-ID:na saknades. Tabellen för simulerad telemetri och tabellen för förseglade roamingperioder saknades fortfarande i laddschemat. Provet verifierar skrivning, återläsning och städning på plats. Kund-Auth, RLS med riktiga kundsessioner och Stripe Sandbox återstår. [Acceptansmatris](../progress/masterplan-remaining-2026-11-22.md)
+
+## Lokal produktionsförberedelse och migreringshistorik
+
+Laddrepots baslinje på `main` innehåller migration 001–031. Ett lokalt PostgreSQL-prov installerade baslinjen, identifierade exakt de 19 väntande kandidatfilerna, uppgraderade databasen och bekräftade att den äldre journalen bevarades och att API:t rapporterade beredskap. Migreringsverktyget stoppar nu före ändringar om det hittar okänd eller ändrad journalhistorik eller ett befintligt laddschema utan verktygets egen journal. Samtliga spärrar provades mot isolerad PostgreSQL.
+
+En skrivskyddad läsning av `flexexa-dev` bekräftade att laddschemat finns och att Supabase har en separat journal med 58 poster. Samtliga 13 versions- och namnpar i laddrepots värdmanifest matchade. Verktygets `charging_migrations.history` saknas. Den lokala uppgraderingen gäller därför baslinjen med verktygets journal. För värdmiljön återstår en separat uppgraderingssekvens mot Supabase-journalen, med verifiering av de tidigare auditändringarna. Ingen värdmigrering genomfördes.
+
+Den lokala omkörningen gav 120 godkända webbtester, godkänt produktionsbygge, typkontroll och lint. Laddrepot gav 401 godkända backendprov med ett tjänstebundet prov överhoppat, 43 PostgreSQL-prov i 18 scenarier och 48 av 48 fullstackprov i Chromium. Den utökade migreringskontrollen kördes separat med slutrevisionen `9c68202`.
