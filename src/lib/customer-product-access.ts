@@ -1,3 +1,5 @@
+import { isCustomerResourceId } from "./customer-accounts";
+
 export const customerProductKeys = [
   "charging_subscription", "electricity_contract", "energy_optimization", "grid_rewards", "external_api",
 ] as const;
@@ -12,8 +14,7 @@ export function isRequestedProduct(value: string): value is RequestedProductKey 
 }
 
 export function productAccessPath(accountId: string) {
-  const uuid = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
-  return uuid.test(accountId) ? `/v1/accounts/${accountId}/product-access` as const : null;
+  return isCustomerResourceId(accountId) ? `/v1/accounts/${accountId}/product-access` as const : null;
 }
 
 export type CustomerProductAccess = {

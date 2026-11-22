@@ -114,17 +114,20 @@ try {
 
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
-  let upstreamReads = 0, productReads = 0, productWrites = 0, unexpectedRequests = 0, redirectUpstream = false;
+  const orderPaths = new Set([scenario.company, scenario.customer].map(id => `/v1/accounts/${id}/orders?limit=10`));
+  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
     const accountList = request.url === '/v1/accounts';
     const productAccess = request.url === productPath;
+    const orderList = orderPaths.has(request.url);
     const write = productAccess && request.method === 'POST';
-    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess))) || request.headers.cookie || request.headers.origin) {
+    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList))) || request.headers.cookie || request.headers.origin) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
     }
     if (accountList) upstreamReads += 1;
+    else if (orderList) orderReads += 1;
     else if (write) productWrites += 1;
     else productReads += 1;
     if (redirectUpstream) {
@@ -227,8 +230,41 @@ try {
   assert.equal(productReads, 4);
   assert.equal(productWrites, 4);
   assert.equal(upstreamReads, 5);
+
+  const fixture = async path => {
+    const response = await fetchLocal(`${stackControl}/scenario/${scenario.id}/${path}`, {
+      method: 'POST', headers: { 'x-stack-control': runtime.controlKey },
+    });
+    assert.equal(response.status, 201);
+    return response.json();
+  };
+  const orders = (accountId, token, status, query = '') => requestAccount(
+    `/${accountId}/bestallningar${query}`, token ? `Bearer ${token}` : null, status,
+  );
+  assert.deepEqual(await orders(scenario.company, null, 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await orders('not-an-account-id', billing, 400), { error: 'INVALID_INPUT' });
+  assert.equal(orderReads, 0);
+  assert.deepEqual(await orders(scenario.company, outsider, 403), { error: 'ACCESS_DENIED' });
+  const prepaid = await orders(scenario.company, billing, 200);
+  assert.match(prepaid.items?.[0]?.createdAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(prepaid, { items: [{ id: scenario.paidOrder, state: 'paid', createdAt: prepaid.items[0].createdAt,
+    amountMinor: null, currency: null }] });
+  const consumer = await fixture('consumer');
+  const recurring = await orders(scenario.customer, recipient, 200);
+  assert.match(recurring.items?.[0]?.createdAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(recurring, { items: [{ id: consumer.order, state: 'paid', createdAt: recurring.items[0].createdAt,
+    amountMinor: 166000, currency: 'SEK' }] });
+  await fixture('history');
+  await fixture('roaming-finance');
+  assert.deepEqual(await orders(scenario.company, recipient, 403), { error: 'ACCESS_DENIED' });
+  const page = await orders(scenario.company, billing, 200, '?limit=30&after=untrusted');
+  assert.deepEqual(Object.keys(page), ['items']);
+  assert.equal(page.items.length, 10);
+  assert.equal(new Set(page.items.map(item => item.id)).size, 10);
+  assert.ok(page.items.every(item => item.state === 'pending' && item.amountMinor === null && item.currency === null));
+  assert.equal(orderReads, 5);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next accounts, product status and one idempotent owner request in PostgreSQL with tenant and billing isolation.');
+  console.log('Verified Next accounts, products, idempotent owner request and limited order status in PostgreSQL with tenant and role isolation.');
 } finally {
   await stop(next);
   if (tls?.listening) {

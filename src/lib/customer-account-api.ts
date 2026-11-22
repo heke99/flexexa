@@ -4,7 +4,7 @@ import { customerAccountConfig } from "@/lib/customer-account-config";
 import type { RequestedProductKey } from "@/lib/customer-product-access";
 
 const authErrors = ["MFA_REQUIRED", "RECOVERY_REQUIRED", "VERIFIED_EMAIL_REQUIRED"];
-type AccountApiPath = "/v1/accounts" | `/v1/accounts/${string}/product-access`;
+type AccountApiPath = "/v1/accounts" | `/v1/accounts/${string}/product-access` | `/v1/accounts/${string}/orders?limit=10`;
 
 function respond(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
