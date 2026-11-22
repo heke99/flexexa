@@ -34,6 +34,9 @@ const accounts = {
 };
 const userIds = { first: randomUUID(), second: randomUUID() };
 const productPath = ({ id }) => `/v1/accounts/${id}/product-access`;
+const privateOrder = '77777777-7777-4777-8777-777777777777';
+const companyOrder = '88888888-8888-4888-8888-888888888888';
+const vehicleCursor = 'eyJ4IjoxfQ';
 const grant = (product_key, enabled, status = 'active') => ({ product_key, status, version: 4, enabled, expires_at: null });
 const productAccess = new Map([
   [personal.id, { items: [grant('charging_subscription', true), grant('grid_rewards', true)], requests: [] }],
@@ -97,6 +100,7 @@ const challenges = new Map();
 const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
+let heldOrderReply;
 let startURL;
 let upstream;
 let secondHasTotp = false;
@@ -215,6 +219,25 @@ try {
       if (url.pathname === '/v1/accounts' && req.method === 'GET' && !url.search) {
         return reply(200, { items: accounts[actor] });
       }
+      const orderAccount = /^\/v1\/accounts\/([^/]+)\/orders$/.exec(url.pathname)?.[1];
+      if (orderAccount && req.method === 'GET' && url.search === '?limit=10') {
+        if (!accounts[actor].some(({ id, role }) => id === orderAccount && role !== 'driver')) return reply(403, { error: 'FORBIDDEN' });
+        if (orderAccount === personal.id && heldOrderReply) await heldOrderReply;
+        const order = orderAccount === personal.id
+          ? { id: privateOrder, state: 'pending', checkout_url: 'https://checkout.invalid/private-only' }
+          : { id: companyOrder, state: 'paid', quantity: 1, agreement: { amount_minor: 12345, currency: 'sek', email: 'fixture-only@example.test' } };
+        return reply(200, { items: [{ ...order, created_at: '2026-11-21T10:00:00Z' }], nextCursor: null });
+      }
+      const vehicleAccount = /^\/v1\/accounts\/([^/]+)\/vehicles$/.exec(url.pathname)?.[1];
+      if (vehicleAccount && req.method === 'GET' && url.searchParams.get('limit') === '25') {
+        if (!accounts[actor].some(({ id }) => id === vehicleAccount)) return reply(403, { error: 'FORBIDDEN' });
+        const next = url.searchParams.get('after');
+        if (next !== null && next !== vehicleCursor) return reply(400, { error: 'INVALID_CURSOR' });
+        const items = next ? [{ id: '99999999-9999-4999-8999-999999999999', country: 'SE', plate: 'FLE 246', verified_at: null }]
+          : Array.from({ length: 25 }, (_, index) => ({ id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, '0')}`,
+            country: 'SE', plate: index ? `EXA ${100 + index}` : 'FLE 123', verified_at: '2026-11-20T10:00:00.000Z' }));
+        return reply(200, { items, nextCursor: next ? null : vehicleCursor });
+      }
       const productAccount = /^\/v1\/accounts\/([^/]+)\/product-access$/.exec(url.pathname)?.[1];
       if (productAccount && req.method === 'POST' && !url.search) {
         if (!accounts[actor].some(({ id, role }) => id === productAccount && role === 'owner')) return reply(403, { error: 'FORBIDDEN' });
@@ -322,7 +345,10 @@ try {
     await browserCommand(`/element/${element[elementKey]}/value`, { text: value });
   };
   const clickButton = async (label, keyboard = false) => {
-    const element = await execute('return [...document.querySelectorAll("button")].find(button => (button.getAttribute("aria-label") ?? button.innerText.trim()) === arguments[0]);', label);
+    const element = await execute(`const button = [...document.querySelectorAll('button')]
+      .find(button => (button.getAttribute('aria-label') ?? button.innerText.trim()) === arguments[0]);
+      button?.scrollIntoView({block:'center', behavior:'instant'});
+      return button;`, label);
     assert.ok(element?.[elementKey], `Missing button ${label}`);
     if (keyboard) await browserCommand(`/element/${element[elementKey]}/value`, { text: '\uE007' });
     else await browserCommand(`/element/${element[elementKey]}/click`, {});
@@ -477,6 +503,36 @@ try {
     ['POST', challengePath], ['POST', verifyPath], ['POST', challengePath], ['POST', verifyPath], ['POST', challengePath], ['POST', verifyPath],
   ]);
   verified.push('mobile MFA fallback, wrong code, late cancellation, AAL2 account and product reads, and reload');
+
+  await login('first');
+  await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
+  const delayedOrders = Promise.withResolvers();
+  heldOrderReply = delayedOrders.promise;
+  try {
+    await clickButton(`Visa beställningar för ${personal.name}`);
+    await pending(async () => (await text()).includes('Hämtar beställningar'));
+    await clickButton(`Visa fordon för ${company.name}`);
+    await pending(async () => (await text()).includes('FLE 123'));
+  } finally {
+    delayedOrders.resolve();
+    heldOrderReply = null;
+  }
+  await clickButton('Visa fler fordon');
+  await pending(async () => (await text()).includes('FLE 246'));
+  assert.match(await text(), /FLE 123/);
+  assert.doesNotMatch(await text(), new RegExp(privateOrder));
+  await clickButton(`Visa beställningar för ${company.name}`);
+  await pending(async () => (await text()).includes(companyOrder));
+  assert.match(await text(), /Betald.*123,45/);
+  assert.doesNotMatch(await text(), /FLE 123|checkout\.invalid|fixture-only@example\.test/);
+  await clickButton(`Visa beställningar för ${personal.name}`);
+  await pending(async () => (await text()).includes(privateOrder));
+  assert.match(await text(), /Väntar på betalning/);
+  assert.doesNotMatch(await text(), new RegExp(`${companyOrder}|checkout\\.invalid`));
+  await clickButton('Logga ut');
+  await pending(async () => /Logga in/.test(await text()) && !(await text()).includes(personal.name));
+  await assertNoStorage();
+  verified.push('scoped order status, stale response fencing and paginated vehicles');
 
   const emailNotice = 'Om adressen har ett konto och en kod kan skickas får du ett mejl.';
   const startEmailLogin = async () => {

@@ -2,6 +2,8 @@ const portalOrigin = "https://ladda.flexexa.com";
 const destinations = {
   konto: "/",
   produkter: "/produkter",
+  bestallningar: "/bestallningar",
+  foretagsbestallningar: "/foretag/order",
 } as const;
 
 type PortalEntry = keyof typeof destinations;

@@ -4,7 +4,10 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { accountRoleLabels, type CustomerAccount } from "@/lib/customer-accounts";
 import type { RequestedProductKey } from "@/lib/customer-product-access";
+import type { CustomerVehiclePage } from "@/lib/customer-vehicles";
 import { CustomerProducts, type ProductSelection } from "./customer-products";
+import { CustomerOrdersPanel, type OrderSelection } from "./customer-orders";
+import { CustomerVehiclesPanel, type VehicleSelection } from "./customer-vehicles";
 
 const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const productsUnavailable = "Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.";
@@ -13,6 +16,10 @@ const invalidCode = "Koden kunde inte bekräftas. Försök igen.";
 const emailCodeNotice = "Om adressen har ett konto och en kod kan skickas får du ett mejl.";
 const emailCodeCooldownMs = 60_000;
 type CustomerLogin = { client: SupabaseClient; session: Session };
+function accountRequest(login: CustomerLogin, signal: AbortSignal) {
+  return { headers: { Authorization: `Bearer ${login.session.access_token}` },
+    credentials: "omit", cache: "no-store", redirect: "error", signal } as const;
+}
 type VerificationFactor = { id: string; name: string };
 type EmailCodeStep = "address" | { address: string };
 
@@ -75,6 +82,8 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   const [message, setMessage] = useState("");
   const [accounts, setAccounts] = useState<CustomerAccount[] | null>(null);
   const [products, setProducts] = useState<ProductSelection | null>(null);
+  const [orders, setOrders] = useState<OrderSelection | null>(null);
+  const [vehicles, setVehicles] = useState<VehicleSelection | null>(null);
   const [factors, setFactors] = useState<VerificationFactor[] | null>(null);
   const [emailStep, setEmailStep] = useState<EmailCodeStep | null>(null);
   const [emailRetryAt, setEmailRetryAt] = useState(0);
@@ -90,6 +99,8 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setFactors(null);
     setAccounts(null);
     setProducts(null);
+    setOrders(null);
+    setVehicles(null);
     setSignedIn(false);
     setWorking(false);
     setMessage(reason);
@@ -129,6 +140,8 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     operation.current = request;
     setAccounts(null);
     setProducts(null);
+    setOrders(null);
+    setVehicles(null);
     setMessage("");
     setWorking(true);
     try {
@@ -197,16 +210,12 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     operation.current = request;
     const selection = { accountId: account.id, accountName: account.name };
     setMessage("");
+    setOrders(null);
+    setVehicles(null);
     setProducts({ ...selection, status: "loading", sending: !!productKey });
     try {
       const path = `/api/kundkonto/${encodeURIComponent(account.id)}/produkter`;
-      const options = {
-        headers: { Authorization: `Bearer ${login.session.access_token}` },
-        credentials: "omit",
-        cache: "no-store",
-        redirect: "error",
-        signal: request.signal,
-      } as const;
+      const options = accountRequest(login, request.signal);
       const submission = productKey ? await fetch(`${path}/${productKey}`, { ...options, method: "POST" }) : null;
       if (operation.current !== request) return;
       const response = submission && !submission.ok ? submission : await fetch(path, options);
@@ -229,6 +238,74 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     } catch {
       if (operation.current === request) setProducts({ ...selection, status: "error", message: productKey
         ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable });
+    } finally {
+      if (operation.current === request) operation.current = null;
+    }
+  }
+
+  async function showOrders(account: CustomerAccount) {
+    const login = active.current;
+    if (!login || working || account.role === "driver") return;
+    operation.current?.abort();
+    const request = new AbortController();
+    operation.current = request;
+    const selection = { accountId: account.id, accountName: account.name };
+    const unavailableOrders = "Beställningarna kunde inte hämtas. Försök igen eller öppna kundportalen.";
+    setMessage("");
+    setProducts(null);
+    setVehicles(null);
+    setOrders({ ...selection, status: "loading" });
+    try {
+      const response = await fetch(`/api/kundkonto/${encodeURIComponent(account.id)}/bestallningar`, accountRequest(login, request.signal));
+      const result = await response.json();
+      if (operation.current !== request) return;
+      if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
+        void clear(accountError(result.error));
+      } else if (response.ok) {
+        setOrders({ ...selection, status: "ready", orders: result });
+      } else {
+        const message = response.status === 403 ? "Du saknar behörighet att se beställningar för kontot."
+          : response.status === 429 ? accountError(result.error) : unavailableOrders;
+        setOrders({ ...selection, status: "error", message });
+      }
+    } catch {
+      if (operation.current === request) setOrders({ ...selection, status: "error", message: unavailableOrders });
+    } finally {
+      if (operation.current === request) operation.current = null;
+    }
+  }
+
+  async function showVehicles(account: CustomerAccount, previous?: CustomerVehiclePage) {
+    const login = active.current;
+    if (!login || working) return;
+    operation.current?.abort();
+    const request = new AbortController();
+    operation.current = request;
+    const selection = { accountId: account.id, accountName: account.name };
+    const unavailableVehicles = "Fordonen kunde inte hämtas. Försök igen eller öppna kundportalen.";
+    setMessage("");
+    setProducts(null);
+    setOrders(null);
+    setVehicles({ ...selection, status: "loading" });
+    try {
+      const query = previous?.nextCursor ? `?after=${encodeURIComponent(previous.nextCursor)}` : "";
+      const response = await fetch(`/api/kundkonto/${encodeURIComponent(account.id)}/fordon${query}`, accountRequest(login, request.signal));
+      const result = await response.json();
+      if (operation.current !== request) return;
+      if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
+        void clear(accountError(result.error));
+      } else if (response.ok) {
+        const page: CustomerVehiclePage = result;
+        setVehicles({ ...selection, status: "ready", vehicles: {
+          items: [...(previous?.items ?? []), ...page.items], nextCursor: page.nextCursor,
+        } });
+      } else {
+        const message = response.status === 403 ? "Du saknar behörighet att se fordon för kontot."
+          : response.status === 429 ? accountError(result.error) : unavailableVehicles;
+        setVehicles({ ...selection, status: "error", message });
+      }
+    } catch {
+      if (operation.current === request) setVehicles({ ...selection, status: "error", message: unavailableVehicles });
     } finally {
       if (operation.current === request) operation.current = null;
     }
@@ -415,6 +492,8 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   }
 
   const selected = accounts?.find(account => account.id === products?.accountId);
+  const orderAccount = accounts?.find(account => account.id === orders?.accountId && account.role !== "driver");
+  const vehicleAccount = accounts?.find(account => account.id === vehicles?.accountId);
 
   return <section id="produkter" className="wizard-panel" style={{ maxWidth: 680, overflowWrap: "anywhere" }}>
     {signedIn ? <>
@@ -423,11 +502,19 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       {accounts?.length === 0 && <p>Du har inga konton att visa ännu.</p>}
       {!!accounts?.length && <ul>{accounts.map(account => <li key={account.id}>
         <strong>{account.name}</strong> <span>· {account.kind === "business" ? "Företag" : "Privat"} · {accountRoleLabels[account.role]}</span>
-        <div><button type="button" className="button" aria-pressed={account.id === products?.accountId}
-          onClick={() => showProducts(account)}>Visa produkter för {account.name}</button></div>
+        <div className="actions"><button type="button" className="button" aria-pressed={account.id === products?.accountId}
+          onClick={() => showProducts(account)}>Visa produkter för {account.name}</button>
+          {account.role !== "driver" && <button type="button" className="button" aria-pressed={account.id === orders?.accountId}
+            onClick={() => showOrders(account)}>Visa beställningar för {account.name}</button>}
+          <button type="button" className="button" aria-pressed={account.id === vehicles?.accountId}
+            onClick={() => showVehicles(account)}>Visa fordon för {account.name}</button></div>
       </li>)}</ul>}
       {products && selected && <CustomerProducts account={selected} products={products}
         retry={() => void showProducts(selected)} requestAccess={key => void showProducts(selected, key)} />}
+      {orders && orderAccount && <CustomerOrdersPanel selection={orders} business={orderAccount.kind === "business"}
+        retry={() => void showOrders(orderAccount)} />}
+      {vehicles && vehicleAccount && <CustomerVehiclesPanel selection={vehicles}
+        retry={() => void showVehicles(vehicleAccount)} loadMore={page => void showVehicles(vehicleAccount, page)} />}
       <div className="actions">
         <button type="button" className="button" onClick={load} disabled={working}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>
