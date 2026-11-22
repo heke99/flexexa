@@ -19,7 +19,8 @@ function reading(asset, version, reportedAt = Date.parse('2026-11-22T00:00:00Z')
   };
 }
 
-export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEnergyAdapter }, db, service, { metered = false } = {}) {
+export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEnergyAdapter }, db, service,
+  { metered = false, telemetryDb = db } = {}) {
   const snapshots = new Map();
   const latest = new Map();
   const historyExpected = new Map();
@@ -172,7 +173,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
       const previous = perVehicle.get(target.vehicleId) ?? Promise.resolve();
       const operation = previous.then(async () => {
         const sample = await adapter.read({ accountId: target.accountId, vehicleId: target.vehicleId });
-        await db.transaction('worker', client => storeEnergyShadow(client, sample));
+        await telemetryDb.transaction('worker', client => storeEnergyShadow(client, sample));
         latencies.push(performance.now() - when);
         latest.set(target.vehicleId, next);
         recordExpectedHistory(next);

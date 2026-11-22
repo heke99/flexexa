@@ -31,11 +31,13 @@ const { values } = parseArgs({ options: {
   phase: { type: 'string', default: 'all' },
   'peak-seconds': { type: 'string' },
   'mixed-routes': { type: 'boolean' },
+  'split-pools': { type: 'boolean' },
 } });
 assert.ok(values.charging, 'Supply --charging with the path to the charging-subscription checkout');
 assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
 assert.ok(!values['metered-observations'] || values.telemetry, '--metered-observations requires --telemetry');
 assert.ok(!values['mixed-routes'] || !values['legacy-list'], '--mixed-routes requires paginated routes');
+assert.ok(!values['split-pools'] || values.telemetry, '--split-pools requires --telemetry');
 assert.ok(values.scenario === undefined || ['distributed', 'concentrated'].includes(values.scenario),
   '--scenario must be distributed or concentrated');
 assert.ok(['all', 'normal', 'peak', 'reconnect'].includes(values.phase), '--phase must be all, normal, peak, or reconnect');
@@ -119,7 +121,15 @@ async function freshCluster() {
     return {
       async database(name) {
         await cluster.createDatabase(name);
-        return postgresPool(`postgres://postgres:${password}@127.0.0.1:${port}/${name}`);
+        const connection = `postgres://postgres:${password}@127.0.0.1:${port}/${name}`;
+        const pool = postgresPool(connection);
+        let telemetryPool;
+        if (values['split-pools']) {
+          pool.options.max = 6;
+          telemetryPool = postgresPool(connection);
+          telemetryPool.options.max = 4;
+        }
+        return { pool, telemetryPool };
       },
       async close() {
         try { await cluster.stop(); } finally { await rm(directory, { recursive: true, force: true }); }
@@ -451,31 +461,35 @@ async function verifyPlanning(request, fixtures, db, vehicles) {
 }
 
 async function scenario(cluster, name) {
-  const pool = await cluster.database(`capacity_${name}`);
+  const { pool, telemetryPool } = await cluster.database(`capacity_${name}`);
+  const pools = telemetryPool ? [pool, telemetryPool] : [pool];
   const liveConnections = new Set();
   const poolErrors = [];
-  pool.on('connect', client => {
-    const closed = new Promise(resolve => client.once('end', resolve));
-    liveConnections.add(closed);
-    void closed.then(() => liveConnections.delete(closed));
-  });
-  pool.on('error', error => poolErrors.push(error.code ?? 'POOL_ERROR'));
+  for (const currentPool of pools) {
+    currentPool.on('connect', client => {
+      const closed = new Promise(resolve => client.once('end', resolve));
+      liveConnections.add(closed);
+      void closed.then(() => liveConnections.delete(closed));
+    });
+    currentPool.on('error', error => poolErrors.push(error.code ?? 'POOL_ERROR'));
+  }
   let listener;
   const startedAtUtc = new Date().toISOString();
   try {
     const databaseVersion = (await pool.query('SHOW server_version')).rows[0].server_version;
     for (const migration of migrations) await pool.query(await readFile(join(checkout, 'database', migration), 'utf8'));
-    const probe = values['profile-http'] ? capacityHttpProbe(pool) : null;
+    const probe = values['profile-http'] ? capacityHttpProbe(pool, telemetryPool) : null;
     const db = new Database(probe?.pool ?? pool);
+    const telemetryDb = telemetryPool ? new Database(probe?.telemetryPool ?? telemetryPool) : db;
     const service = new Service(db);
     const vehicles = [...vehicleRows(name)];
     const { auth, issueToken } = authenticationFixture();
     const fixtures = await seed(pool, vehicles, issueToken);
     const mixed = partnerModule ? await seedMixedRoutes(pool, db, fixtures, { issuer, issueToken }) : null;
     const partnerEnergy = partnerModule ? new partnerModule.PartnerEnergyService(service, null) : null;
-    probe?.wrap(service, db, partnerEnergy);
+    probe?.wrap(service, db, partnerEnergy, telemetryDb);
     const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service, {
-      metered: values['metered-observations'],
+      metered: values['metered-observations'], telemetryDb,
     }) : null;
     if (telemetry) await telemetry.seed(pool, vehicles, fixtures);
     listener = server({ service, auth, fleetPlanningEnabled: true, energy: telemetry?.energy, partnerEnergy });
@@ -527,6 +541,8 @@ async function scenario(cluster, name) {
       scope: 'local_loopback_native_postgres', scenario: name, phase: values.phase,
       revision, implementationSha256, numpyVersion, ortoolsVersion,
       databaseVersion, nodeVersion: process.version, migrationsReplayed: migrations.length, startedAtUtc,
+      connectionPools: telemetryPool ? { api: pool.options.max, telemetry: telemetryPool.options.max }
+        : { shared: pool.options.max },
       finishedAtUtc: new Date().toISOString(), fixtureVehicles: vehicles.length, controlVehicles: 2,
       vehicleAccess: { ...access, ...driverRevocation }, readSamples, planner,
       ...(mixed ? { mixedRoutes: { privateAccounts: mixed.privateCustomers.length,
@@ -539,7 +555,7 @@ async function scenario(cluster, name) {
     'A mixed route delivered an unexpected payload or authorized a denied request');
   } finally {
     if (listener) await close(listener);
-    await pool.end();
+    await Promise.all(pools.map(currentPool => currentPool.end()));
     await Promise.all(liveConnections);
   }
 }

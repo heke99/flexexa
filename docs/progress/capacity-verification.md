@@ -70,6 +70,19 @@ På laddbackenden `e8a63803060019348eae2644cbb8f094dfcd70a0` kördes fem sekunde
 
 Ett separat profilerat tresekundersprov med 12 företag på `dd53cb20e8cb721ad7a7f651c6fef994fbff4a27` gav 900 väntade HTTP-utfall av 900 och 1 800 beständiga observationer av 1 800. Sökningens HTTP-p95 var 405,5 ms. Sökfrågan hade 8,17 ms p95 inklusive SQL-rundtur och söktjänstens poolväntan var 183,3 ms p95. Partnerlistan hade 556,1 ms HTTP-p95, 187,5 ms för poolväntan och 2,56 ms för transaktionslåset. I detta prov var anslutningsväntan större än själva sökfrågan och partnerns låsväntan.
 
+För en lokal jämförelse med samma totala anslutningsbudget, kör `--scenario distributed --phase peak --peak-seconds 5 --telemetry --mixed-routes --profile-http` först med gemensam pool och därefter med `--split-pools`. Delningen reserverar sex anslutningar för API:t och fyra för de schemalagda simulatorobservationerna. HTTP-vägarna och den direkta uppdateringen i API:t fortsätter att använda API-poolen. JSONL visar konfigurationen i `connectionPools` och profileringen redovisar väntan per pool och per kodväg.
+
+Fyra femsekundersprov på samma laddrevision `dd53cb2` gav vardera 1 500 av 1 500 väntade HTTP-utfall och 3 000 av 3 000 beständiga simulatorobservationer. Samtliga läsvägar nådde p95-målet i dessa körningar.
+
+| Körordning | P95 sökning | P95 partnerlista | P95 poolväntan | P95 beständigt skuggvärde |
+| --- | --- | --- | --- | --- |
+| 1. Gemensam pool | 43,1 ms | 53,2 ms | 8,02 ms gemensam | 12,9 ms |
+| 2. Delad 6/4 | 124,2 ms | 148,2 ms | 40,08 ms API, 15,49 ms telemetri | 21,7 ms |
+| 3. Delad 6/4 | 39,1 ms | 48,3 ms | 5,53 ms API, 0,03 ms telemetri | 5,6 ms |
+| 4. Gemensam pool | 25,3 ms | 23,9 ms | 0,05 ms gemensam | 5,2 ms |
+
+Svarstiden varierade mellan körningarna. Delningen 6/4 gav ingen uppmätt fördel för dessa vägar med den lokala lasten och den fasta budgeten.
+
 Detta är ett avgränsat blandprov av HTTP-kontrakt, behörighet och lokal samtidighet. Driftlik belastning med hela produktmixen och längre uthållighet återstår för R51 och R56.
 
 ## Lokalt telemetriprov R53

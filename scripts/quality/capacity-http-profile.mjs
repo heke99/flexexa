@@ -31,7 +31,7 @@ function summarize({ calls, totalMs, values }) {
   };
 }
 
-export function capacityHttpProbe(pool) {
+export function capacityHttpProbe(pool, telemetryPool) {
   const scope = new AsyncLocalStorage();
   const eventLoop = monitorEventLoopDelay({ resolution: 10 });
   let measurements;
@@ -54,13 +54,28 @@ export function capacityHttpProbe(pool) {
     }
   }
 
-  async function timed(group, name, run) {
+  async function timed(group, name, run, aggregate) {
     const started = performance.now();
     try {
       return await run();
     } finally {
-      capture(group, name, performance.now() - started);
+      const elapsed = performance.now() - started;
+      capture(group, name, elapsed);
+      if (aggregate) capture(aggregate, name, elapsed);
     }
+  }
+
+  function wrapPool(target, name) {
+    return {
+      async connect() {
+        const group = scope.getStore() ?? 'unscoped';
+        const client = await timed(group, 'pool-wait', () => target.connect(), name);
+        return {
+          query(sql, args) { return timed(group, queryType(sql), () => client.query(sql, args)); },
+          release() { return client.release(); },
+        };
+      },
+    };
   }
 
   return {
@@ -75,10 +90,9 @@ export function capacityHttpProbe(pool) {
         return result.rows[0]['QUERY PLAN'][0];
       });
     },
-    wrap(service, db, partnerEnergy) {
+    wrap(service, db, partnerEnergy, telemetryDb = db) {
       const rate = service.rate.bind(service);
       const page = service.page.bind(service);
-      const transaction = db.transaction.bind(db);
       service.rate = (...args) => scope.run('rate', () => timed('rate', 'service', () => rate(...args)));
       service.page = (...args) => {
         const resource = args[2];
@@ -93,18 +107,13 @@ export function capacityHttpProbe(pool) {
         partnerEnergy.vehicles = (...args) =>
           scope.run('partner-vehicles', () => timed('partner-vehicles', 'service', () => vehicles(...args)));
       }
-      db.transaction = (role, work) => scope.run(scope.getStore() ?? role, () => transaction(role, work));
+      for (const database of new Set([db, telemetryDb])) {
+        const transaction = database.transaction.bind(database);
+        database.transaction = (role, work) => scope.run(scope.getStore() ?? role, () => transaction(role, work));
+      }
     },
-    pool: {
-      async connect() {
-        const group = scope.getStore() ?? 'unscoped';
-        const client = await timed(group, 'pool-wait', () => pool.connect());
-        return {
-          query(sql, args) { return timed(group, queryType(sql), () => client.query(sql, args)); },
-          release() { return client.release(); },
-        };
-      },
-    },
+    pool: wrapPool(pool, telemetryPool ? 'api-pool' : 'shared-pool'),
+    telemetryPool: telemetryPool ? wrapPool(telemetryPool, 'telemetry-pool') : undefined,
     start() {
       measurements = new Map();
       eventLoop.enable();
