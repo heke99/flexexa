@@ -3,6 +3,7 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { accountRoleLabels, type CustomerAccount } from "@/lib/customer-accounts";
+import type { RequestedProductKey } from "@/lib/customer-product-access";
 import { CustomerProducts, type ProductSelection } from "./customer-products";
 
 const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kundportalen.";
@@ -165,7 +166,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     };
   }, [clear, load]);
 
-  async function showProducts(account: CustomerAccount) {
+  async function showProducts(account: CustomerAccount, productKey?: RequestedProductKey) {
     const login = active.current;
     if (!login || working) return;
     operation.current?.abort();
@@ -173,19 +174,25 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     operation.current = request;
     const selection = { accountId: account.id, accountName: account.name };
     setMessage("");
-    setProducts({ ...selection, status: "loading" });
+    setProducts({ ...selection, status: "loading", sending: !!productKey });
     try {
-      const response = await fetch(`/api/kundkonto/${encodeURIComponent(account.id)}/produkter`, {
+      const path = `/api/kundkonto/${encodeURIComponent(account.id)}/produkter`;
+      const options = {
         headers: { Authorization: `Bearer ${login.session.access_token}` },
         credentials: "omit",
         cache: "no-store",
         redirect: "error",
         signal: request.signal,
-      });
+      } as const;
+      const submission = productKey ? await fetch(`${path}/${productKey}`, { ...options, method: "POST" }) : null;
+      if (operation.current !== request) return;
+      const response = submission && !submission.ok ? submission : await fetch(path, options);
       const result = await response.json();
       if (operation.current !== request) return;
       if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
         void clear(accountError(result.error));
+      } else if (response.status === 403 && response === submission) {
+        setProducts({ ...selection, status: "error", message: "Din inloggning har inte rätt att begära åtkomst till produkten. Uppdatera kontona om din roll har ändrats." });
       } else if (response.status === 403) {
         setProducts(null);
         setAccounts(current => current?.filter(item => item.id !== account.id) ?? null);
@@ -193,10 +200,12 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
       } else if (response.ok) {
         setProducts({ ...selection, status: "ready", access: result });
       } else {
-        setProducts({ ...selection, status: "error", message: response.status === 429 ? accountError(result.error) : productsUnavailable });
+        setProducts({ ...selection, status: "error", message: response.status === 429 ? accountError(result.error) :
+          productKey ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable });
       }
     } catch {
-      if (operation.current === request) setProducts({ ...selection, status: "error", message: productsUnavailable });
+      if (operation.current === request) setProducts({ ...selection, status: "error", message: productKey
+        ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable });
     } finally {
       if (operation.current === request) operation.current = null;
     }
@@ -333,7 +342,8 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
         <div><button type="button" className="button" aria-pressed={account.id === products?.accountId}
           onClick={() => showProducts(account)}>Visa produkter för {account.name}</button></div>
       </li>)}</ul>}
-      {products && selected && <CustomerProducts products={products} retry={() => void showProducts(selected)} />}
+      {products && selected && <CustomerProducts account={selected} products={products}
+        retry={() => void showProducts(selected)} requestAccess={key => void showProducts(selected, key)} />}
       <div className="actions">
         <button type="button" className="button" onClick={load} disabled={working}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>

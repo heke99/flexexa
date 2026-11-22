@@ -4,6 +4,8 @@ Status 22 november 2026. Underlaget omfattar den lokala integrationsgrenen för 
 
 ## Hur mycket återstår?
 
+Målet är minst 80 procent fullt verifierade krav. Uppföljningen visar novemberplanen och den reviderade byggordningen var för sig, eftersom samma leverans kan ge evidens på båda ställena. För FX-001–016 motsvarar gränsen minst 13 av 16 fullt verifierade produktkrav. För R42–R58 motsvarar den minst 14 av 17 fulla acceptansfall. Senaste bedömningen är 0 fullt verifierade i båda matriserna. Lokala delbevis redovisas per krav. V1-registrets 3 701 poster omfattar även rubriker och kodexempel och mäter källradstäckning.
+
 | Kravkälla | Verifierat läge | Kvar |
 | --- | --- | --- |
 | Reviderad byggordning R42–R58 | 17 av 17 acceptansfall har avgränsad lokal evidens | 17 av 17 har minst en öppen acceptansgrind. Inget fall har full acceptans i den miljö och omfattning som planen anger. |

@@ -114,24 +114,32 @@ try {
 
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
-  let upstreamReads = 0, productReads = 0, unexpectedRequests = 0, redirectUpstream = false;
+  let upstreamReads = 0, productReads = 0, productWrites = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
     const accountList = request.url === '/v1/accounts';
     const productAccess = request.url === productPath;
-    if (request.method !== 'GET' || (!accountList && !productAccess) || request.headers.cookie) {
+    const write = productAccess && request.method === 'POST';
+    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess))) || request.headers.cookie || request.headers.origin) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
     }
     if (accountList) upstreamReads += 1;
+    else if (write) productWrites += 1;
     else productReads += 1;
     if (redirectUpstream) {
       response.writeHead(307, { Location: '/unexpected' }).end();
       return;
     }
     try {
+      const chunks = [];
+      if (write) for await (const chunk of request) chunks.push(chunk);
+      const body = write ? Buffer.concat(chunks).toString() : undefined;
+      if (write) assert.equal(body, '{"productKey":"energy_optimization"}');
       const result = await fetchLocal(`${stackApi}${request.url}`, {
-        headers: { Authorization: request.headers.authorization ?? '' },
+        method: request.method,
+        headers: { Authorization: request.headers.authorization ?? '', ...(write ? { 'Content-Type': 'application/json' } : {}) },
+        body,
       });
       response.writeHead(result.status, { 'Content-Type': result.headers.get('content-type') });
       response.end(Buffer.from(await result.arrayBuffer()));
@@ -150,9 +158,11 @@ try {
   });
   const nextOrigin = `http://${loopback}:${nextPort}`;
   await awaitHealthy(next, `${nextOrigin}/`, 'Next production build');
-  const requestAccount = async (path, authorization, status) => {
+  const requestAccount = async (path, authorization, status, options = {}) => {
     const response = await fetchLocal(`${nextOrigin}/api/kundkonto${path}`, {
-      headers: { Cookie: 'flexexa_admin=fixture-must-stay-local', ...(authorization ? { Authorization: authorization } : {}) },
+      method: options.method,
+      headers: { Cookie: 'flexexa_admin=fixture-must-stay-local', ...(authorization ? { Authorization: authorization } : {}),
+        ...(options.origin ? { Origin: options.origin } : {}) },
     });
     assert.equal(response.status, status);
     assert.match(response.headers.get('cache-control') ?? '', /\bno-store\b/);
@@ -197,9 +207,28 @@ try {
     requests: [{ product_key: 'grid_rewards', requested_at: access.requests[0].requested_at }],
   });
   assert.equal(productReads, 2);
+  const applyAccess = (key, token, status, origin = nextOrigin) => requestAccount(
+    `/${scenario.company}/produkter/${key}`, token && `Bearer ${token}`, status, { method: 'POST', origin },
+  );
+  assert.deepEqual(await applyAccess('grid_rewards', owner, 400), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await applyAccess('energy_optimization', null, 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await applyAccess('energy_optimization', owner, 403, 'https://outside.invalid'), { error: 'ACCESS_DENIED' });
+  assert.equal(productWrites, 0);
+  assert.deepEqual(await applyAccess('energy_optimization', billing, 403), { error: 'ACCESS_DENIED' });
+  assert.deepEqual(await applyAccess('energy_optimization', outsider, 403), { error: 'ACCESS_DENIED' });
+  const expectedRequest = { requested: true, productKey: 'energy_optimization' };
+  assert.deepEqual(await applyAccess('energy_optimization', owner, 202), expectedRequest);
+  const firstWrite = await products(scenario.company, `Bearer ${billing}`, 200);
+  assert.deepEqual(firstWrite.items, access.items);
+  assert.deepEqual(firstWrite.requests.map(item => item.product_key).sort(), ['energy_optimization', 'grid_rewards']);
+  assert.deepEqual(await applyAccess('energy_optimization', owner, 202), expectedRequest);
+  const replayed = await products(scenario.company, `Bearer ${billing}`, 200);
+  assert.deepEqual(replayed, firstWrite, 'Replayed request must keep one immutable request and must not grant access');
+  assert.equal(productReads, 4);
+  assert.equal(productWrites, 4);
   assert.equal(upstreamReads, 5);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next customer accounts and product access through native PostgreSQL with two isolated customers and a billing member.');
+  console.log('Verified Next accounts, product status and one idempotent owner request in PostgreSQL with tenant and billing isolation.');
 } finally {
   await stop(next);
   if (tls?.listening) {

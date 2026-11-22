@@ -1,4 +1,5 @@
-import type { CustomerProductAccess, CustomerProductKey } from "@/lib/customer-product-access";
+import type { CustomerProductAccess, CustomerProductKey, RequestedProductKey } from "@/lib/customer-product-access";
+import type { CustomerAccount } from "@/lib/customer-accounts";
 import { customerPortalUrl } from "@/lib/customer-portal-entry";
 
 const offers = [
@@ -15,25 +16,37 @@ function accessLabel(access: CustomerProductAccess, key: CustomerProductKey) {
 }
 
 export type ProductSelection = { accountId: string; accountName: string } & (
-  | { status: "loading" }
+  | { status: "loading"; sending: boolean }
   | { status: "error"; message: string }
   | { status: "ready"; access: CustomerProductAccess }
 );
 
-export function CustomerProducts({ products, retry }: { products: ProductSelection; retry: () => void }) {
+export function CustomerProducts({ account, products, retry, requestAccess }: {
+  account: CustomerAccount;
+  products: ProductSelection;
+  retry: () => void;
+  requestAccess: (key: RequestedProductKey) => void;
+}) {
   return <section id="account-products" aria-labelledby="account-products-title">
     <h2 id="account-products-title">Mina produkter</h2>
     <p>{products.accountName}</p>
-    {products.status === "loading" && <p role="status">Hämtar produkter …</p>}
+    {products.status === "loading" && <p role="status">{products.sending ? "Skickar begäran …" : "Hämtar produkter …"}</p>}
     {products.status === "error" && <>
       <p role="status">{products.message}</p>
       <button type="button" className="button" onClick={retry}>Försök igen</button>
     </>}
     {products.status === "ready" && <dl>
-      {offers.map(offer => <div key={offer.key}>
-        <dt><strong>{offer.name}</strong></dt>
-        <dd>{accessLabel(products.access, offer.key)}</dd>
-      </div>)}
+      {offers.map(offer => {
+        const label = accessLabel(products.access, offer.key);
+        const canRequest = label === "Ingen åtkomst" && account.role === "owner" &&
+          (offer.key !== "energy_optimization" || account.kind === "business");
+        return <div key={offer.key}>
+          <dt><strong>{offer.name}</strong></dt>
+          <dd>{label}{canRequest && <div><button type="button" className="button" onClick={() => requestAccess(offer.key)}>
+            Begär åtkomst till {offer.name}
+          </button></div>}</dd>
+        </div>;
+      })}
     </dl>}
     <p><a className="text-link" href={customerPortalUrl("produkter")}>Hantera produkter i kundportalen</a></p>
   </section>;

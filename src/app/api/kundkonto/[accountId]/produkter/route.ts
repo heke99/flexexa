@@ -1,9 +1,8 @@
 import { readCustomerAccountApi } from "@/lib/customer-account-api";
-import { customerProductKeys, type CustomerProductAccess, type CustomerProductKey } from "@/lib/customer-product-access";
+import { customerProductKeys, productAccessPath, type CustomerProductAccess, type CustomerProductKey } from "@/lib/customer-product-access";
 
 export const dynamic = "force-dynamic";
 
-const accountIdPattern = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
 const products = new Set<unknown>(customerProductKeys);
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
@@ -43,6 +42,5 @@ function normalizeProductAccess(payload: unknown): CustomerProductAccess | null 
 
 export async function GET(request: Request, context: { params: Promise<{ accountId: string }> }) {
   const { accountId } = await context.params;
-  const path = accountIdPattern.test(accountId) ? `/v1/accounts/${accountId}/product-access` as const : null;
-  return readCustomerAccountApi(request, path, normalizeProductAccess);
+  return readCustomerAccountApi(request, productAccessPath(accountId), normalizeProductAccess);
 }
