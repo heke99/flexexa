@@ -136,3 +136,19 @@ Periodstängningen för 12 000 syntetiska fordon på `46cf790` nådde den gemens
 [Rapport över återstående arbete](../progress/masterplan-remaining-2026-11-22.md)
 
 Backendrevisionen `132c05e` passerade 392 tester i den ordinarie sviten och två separata återstartsprov med PostgreSQL. Sex riktade nativeprov för processdöd, migrering och periodstängning passerade på `dd53cb2`. Portalen på samma revision passerade 122 enhetstester, produktionsbygget, tolv riktade Chromium-prov och 46 Chromium-prov genom HTTP och isolerad PostgreSQL. Simulerad energi passerade på 390 och 1 440 px på `132c05e`. Den ändrade CI-definitionen passerade actionlint lokalt.
+
+## Företagsekonomi, kontovägar och migrationsparitet
+
+| Krav | Verifierad leverans |
+| --- | --- |
+| R48, R55, R56 | Ekonomivyn läser förseglade roamingperioder och sidindelade CDR med aktiv ägar- eller ekonomibehörighet. Browserprovet genom PostgreSQL läste 26 poster, 130 kWh och 65 kronor exklusive moms efter en sen rättelse. Tom förseglad period, andra företag och förarens nekade åtkomst ingick. Underlaget avser förseglade roamingkostnader. Kundfaktura och verifierad bilkoppling återstår. |
+| R46, R53, R54 | Adaptergränsen räknar färskhet från äldsta delen när anslutning, effekt, energi och batteriprocent levereras separat. Isolerat PostgreSQL-prov visade att gammal effekt spärrade simulerad dispatch och att färsk effekt åter öppnade flödet. |
+| FX-78 | Partnerns Rewards-historik använder avgränsad sidindelning och bevarar PostgreSQL:s mikrosekunder. Samma millisekund, fel markör och återkallat mandat verifierades genom HTTP. |
+| FX-001, FX-002 | Publika Next-adresser `/app/konto` och `/app/produkter` öppnar de motsvarande fasta portalvyerna. Lokal produktionsbuild, omdirigeringarnas HTTP-beteende och Chromium i två bredder passerade. Portalens egen autentisering ligger kvar på portalens domän. |
+| R57 | `npm run migrate:check` rapporterar saknade migrationsfiler, okända journalposter och ändrade kontrollsummor i en skrivskyddad transaktion. Nativeprovet gick från tom databas till matchande schema och återskapade sedan tre avvikelsetyper. Commerce-API:s beredskap kontrollerar även rättigheter till ekonomivyn. |
+
+GitHub visade laddabonnemangets main på `c26766f` och releasegrenen på `c03c2a7`. Trevägskontrollen för releasegrenen hittade 27 konfliktfiler; bland annat finns auditmigrationerna 032–037 på releasegrenen. Relevanta auditfixar har förts över separat. De lästa Actions-körningarna stoppades av konto- eller budgetspärr. Den här verifieringen kördes lokalt. [Driftläge och kvarstående acceptans](../progress/masterplan-remaining-2026-11-22.md)
+
+På `554b955` passerade 394 backendtester, portalens 122 enhetstester, Vite-bygget samt sex riktade Chromium-prov. Fullstackprovet på `899a025` körde 48 Chromium-scenarier genom API och isolerad PostgreSQL. Det först upptäckta felet gällde beredskapsprovets äldre migrationsuppsättning. När provet spelade upp ekonomimigrationerna passerade hela sviten. Nativeproven för migrationsparitet, företagsekonomi, telemetrifärskhet och partnermandat passerade separat. På `1bfc939` passerade båda proven av processdöd och tidsgräns samt omprovet av återläsning med 44 migrationsjournalposter. På Flexexa-grenen passerade 118 tester, den publika Next-produktionsbuilden och lokal HTTP- och Chromium-verifiering av fasta portalvägar och kontaktval. [Återställningsprov](../progress/r57-postgres-restore.md)
+
+Det lokala tvåminutersprovet på `1bfc939` verifierade 12 000 HTTP-anrop och 27 600 beständiga telemetriobservationer, inklusive periodlista och CDR-detalj för tolv företag med varsin ekonomiroll. Samtliga 461 föraranrop till ekonomidetaljen nekades. I ett separat prov stängdes 744 000 syntetiska CDR på 17,5 sekunder och exporterades över 3 720 sidor på 12,5 sekunder. Båda proven kördes i varsin isolerad PostgreSQL 18.6. [Kapacitetsprotokoll](../progress/capacity-verification.md)
