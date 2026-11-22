@@ -18,6 +18,34 @@ Alla tre datamängderna kan genereras för `distributed`, `concentrated` och `qu
 
 Fixture-ID:n och roller är logiska testvärden. Läs in dem via en testadapter som skapar vanliga auth-roller, relationer och mandat i tilltänkt lastmiljö. Varje scenario återanvänder syntetiska fordons-ID:n och ska laddas i en egen eller återställd datamängd. Sätt verkliga effekt- och fasgränser per testplats, registrera pågående sessioner och kör den faktiska webb-, mobil-, API- och kötrafiken. Ett sessionsbelopp i fixture är syntetiskt ingångsunderlag. Det oberoende ekonomifacit som används i R55 beräknas från indata, avtal och händelser i det faktiska provet.
 
+## Lokalt HTTP-prov med PostgreSQL
+
+Verifikationsskriptet startar en ny loopback-bunden PostgreSQL-instans per scenario och kör samtliga SQL-migreringar från vald checkout av `charging-subscription`. Det använder checkoutens låsta Node-beroenden och Python från arbetarmiljön med paketen i `workers/fleet-planner/requirements.txt`. Kör som en vanlig lokal användare.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --seconds 5
+```
+
+Skriptet anropar det ordinarie autentiserade HTTP-API:t med `SupabaseAuth`. En lokal svarsstub för `/auth/v1/user` accepterar enbart de syntetiska testtoken som skriptet skapar. API:t använder riktiga approller och PostgreSQL:s radbehörighet. Körningen skapar 12 000 fordon och två kontrollfordon, traverserar samtliga 120 sidor och jämför med den befintliga listan i vardera fördelningen. Under fordonsläsning köas planering för hela flottan, och en förares ena tilldelning återkallas via HTTP medan den andra förblir läsbar. Kontrollerna omfattar dessutom korsade konton och pekare, obehörig planering, idempotent omförsök och ersättning av ett äldre jobb. Den verkliga arbetaren kör den pinnade lösaren och resultatet läses via samma konto-API.
+
+Varje mätintervall testar första sidan med 100 fordon för ägar- och ekonomiroller. Standardläget schemalägger fem sekunder vardera vid 100 och 300 anrop/s. Normalintervallet delar resurser med planeringen och återkallelsen. Mätningen räknar från schemalagd begäran till läst svar, inklusive klientens lokala väntan och JSON-avkodning. Utdata inkluderar statuskoder, tappade testanrop, observerad tid, p95/p99, avstämda resursantal och om det korta mätintervallet nådde föreslagna gränser. Kör `--legacy-list` för att mäta den befintliga opaginerade listvägen. Den har fortsatt stöd för klientanrop utan queryparametrar.
+
+Den 22 november 2026 kördes provet mot `charging-subscription` vid `5fd99f4922d1c3b4361420c755d034549719ee96` med PostgreSQL 18.6, Node 24.19.0, NumPy 2.5.4 och OR-Tools 9.15.6755. Samtliga 37 migrationsfiler spelades upp i båda klustren. Det blev totalt 4 000 lyckade listanrop utan oväntade fel, tappade anrop eller främmande fordonsrader. Traversering av 120 sidor i varje fördelning gav samma fordon i samma ordning som den befintliga listan.
+
+| Fördelning | 100 anrop/s p95 / p99 | 300 anrop/s p95 / p99 | Beständig mottagning p95 för planjobb | Arbetarens tid för hela flottan |
+| --- | --- | --- | --- | --- |
+| 12 företag | 68,9 / 174,2 ms | 6,1 / 14,4 ms | 292,5 ms över 12 första jobb | 2,323 s över 12 jobb efter ersättning av det första |
+| Ett företag | 37,2 / 79,7 ms | 8,5 / 45,2 ms | 139,8 ms för ett första jobb | 1,353 s för ett jobb efter ersättning av det första |
+
+En tidigare integrerad körning på `986d990` pågick samtidigt som andra verifieringar i samma miljö. Det fördelade scenariot hade p95 över 4,9 sekunder i båda mätintervallen och testklienten nådde taket på 400 samtidiga anrop. Det koncentrerade scenariot hade p95 på 1 430,1 respektive 601,3 ms. Båda avstämningarna av fordonsåtkomst och planjobb passerade. Skillnaden mellan körningarna gör att driftens mätgränser behöver bedömas i en separat, reproducerbar lastmiljö.
+
+En separat sekund per belastningsnivå med `--legacy-list` visade att opaginerad listning överskred 500 ms p95 i båda fördelningarna redan vid 100 schemalagda anrop/s. Vid 300 anrop/s i det koncentrerade scenariot svarade 199 av 300 anrop med HTTP 500. Företagsvyer som ska användas för stora flottor behöver den avgränsade listvägen.
+
+Det lokala provet täcker delar av R51, R52 och R56. Återstående miljöprov omfattar full historik, fysisk laddning, klientbyggen och deras cache, betalnings- och webhooktrafik, beroendekvoter, fasgränser, driftens resursprofil och hela tidsprofilen för lasttest.
+
 ## Provmatris
 
 Den publika webbcheckouten på `37aec07` beskriver det separata flottjobbet i [Energy Wizard-underlaget](../work/2026-11-12-energy-wizard-partner-api.md). Samma underlag anger att det syntetiska 5 000-fordonsprovet av solver har en snävare omfattning än lastprovet. Produktionskontraktet för [de tidigare publika planeringsrutterna](../../public/openapi/energy-planner-v1.json) anger att planering och pris kräver produktåtkomst. Bind följande prov till den aktuella privata API-ingången, stödda klientbyggen och de faktiska bakgrundsjobben innan körning.
@@ -41,6 +69,6 @@ För R51 jämförs normal- och topplast separat per rutt. Räkna oväntade fel o
 
 ## Status
 
-Den lokala kontrollen verifierar syntetisk testdatagenerering och profilens mål. Sex regressionstester passerade med Node 24.19.0. Strömmande generering verifierade 8 760 000 sessionsrader för vardera full fördelning och 730 000 för snabbscenariot. Körbevis för produktlast, driftlik återhämtning, avtalade kvoter och fysisk styrning är öppna. Ansvar för uppföljningen och den integrerade revisionen följer [projektstatus](../PROJECT_STATE.md).
+Den lokala kontrollen verifierar syntetisk testdatagenerering, profilens mål och HTTP-provet ovan. Sex regressionstester passerade med Node 24.19.0. Strömmande generering verifierade 8 760 000 sessionsrader för vardera full fördelning och 730 000 för snabbscenariot. Körbevis för komplett driftlik last, återhämtning, avtalade kvoter och fysisk styrning är öppna. Ansvar för uppföljningen och den integrerade revisionen följer [projektstatus](../PROJECT_STATE.md).
 
-Skill-routing i denna leverans. Repots `verification` och `observability` styr bevis och mätpunkter. Supabase-, Postgres- och webbläsarverifiering blir aktuella när dataladdaren och ordinarie produktvägar kopplas in i lastmiljön. Infrastruktur- och driftsättningsfärdigheter tillämpas vid motsvarande miljöändring.
+Skill-routing i denna leverans. Repots `verification` och `observability` styr bevis och mätpunkter. Supabase- och PostgreSQL-färdigheterna tillämpas på autentiseringsadaptern, migreringsreplay och radbehörigheter i det lokala HTTP-provet. Webbläsar-, infrastruktur- och driftsättningsfärdigheterna tillämpas i motsvarande klient- och miljöprov.
