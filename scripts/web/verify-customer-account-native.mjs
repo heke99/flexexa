@@ -17,6 +17,7 @@ if (!backendArg) throw Error('Usage: node scripts/web/verify-customer-account-na
 const backend = resolve(backendArg);
 const requireBackend = createRequire(join(backend, 'package.json'));
 const { default: EmbeddedPostgres } = await import(requireBackend.resolve('embedded-postgres'));
+const { Client } = requireBackend('pg');
 const appRoot = resolve(import.meta.dirname, '../..');
 const loopback = '127.0.0.1';
 const stackApi = `http://${loopback}:4181`;
@@ -79,10 +80,11 @@ try {
   await cluster.start();
   clusterStarted = true;
   await cluster.createDatabase('charging_test');
+  const databaseUrl = `postgresql://postgres:${password}@${loopback}:${pgPort}/charging_test`;
   const authPort = await port();
   stack = launch(['web/scripts/full-stack-server.mjs'], backend, {
     ...process.env, FULL_STACK_DATABASE: 'native', FULL_STACK_AUTH_PORT: String(authPort),
-    TEST_DATABASE_URL: `postgresql://postgres:${password}@${loopback}:${pgPort}/charging_test`,
+    TEST_DATABASE_URL: databaseUrl,
   });
   await awaitHealthy(stack, `${stackControl}/health`, 'Charging stack');
   const runtime = JSON.parse(await readFile(runtimeFile, 'utf8'));
@@ -115,19 +117,22 @@ try {
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
   const orderPaths = new Set([scenario.company, scenario.customer].map(id => `/v1/accounts/${id}/orders?limit=10`));
-  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, unexpectedRequests = 0, redirectUpstream = false;
+  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
     const accountList = request.url === '/v1/accounts';
     const productAccess = request.url === productPath;
     const orderList = orderPaths.has(request.url);
+    const vehicleList = /^\/v1\/accounts\/([0-9a-f-]{36})\/vehicles\?limit=25(?:&after=[A-Za-z0-9_-]{1,512})?$/.exec(request.url);
+    const knownVehicleAccount = vehicleList && [scenario.customer, scenario.other, scenario.company].includes(vehicleList[1]);
     const write = productAccess && request.method === 'POST';
-    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList))) || request.headers.cookie || request.headers.origin) {
+    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList && !knownVehicleAccount))) || request.headers.cookie || request.headers.origin) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
     }
     if (accountList) upstreamReads += 1;
     else if (orderList) orderReads += 1;
+    else if (knownVehicleAccount) vehicleReads += 1;
     else if (write) productWrites += 1;
     else productReads += 1;
     if (redirectUpstream) {
@@ -263,8 +268,46 @@ try {
   assert.equal(new Set(page.items.map(item => item.id)).size, 10);
   assert.ok(page.items.every(item => item.state === 'pending' && item.amountMinor === null && item.currency === null));
   assert.equal(orderReads, 5);
+
+  const vehicleFixture = new Client({ connectionString: databaseUrl });
+  await vehicleFixture.connect();
+  try {
+    await vehicleFixture.query(`INSERT INTO charging_subscription.vehicles(id,account_id,country,plate)
+      SELECT gen_random_uuid(),$1,'SE','ZZX'||lpad(i::text,5,'0') FROM generate_series(1,24) AS g(i)`, [scenario.customer]);
+    const subscription = randomUUID();
+    await vehicleFixture.query(`INSERT INTO charging_subscription.subscriptions(id,account_id,vehicle_id,contract,billing,starts_at,ends_at)
+      VALUES($1,$2,$3,'active','paid',now()-interval '1 hour',now()+interval '1 day')`, [subscription, scenario.customer, scenario.car]);
+    const { rows: [{ principal_id: principal }] } = await vehicleFixture.query(
+      'SELECT principal_id FROM charging_subscription.identities WHERE issuer=$1 AND subject=$2', [runtime.authOrigin + '/auth/v1', scenario.outsider.id],
+    );
+    await vehicleFixture.query(`INSERT INTO charging_subscription.memberships(account_id,principal_id,role) VALUES($1,$2,'driver')`, [scenario.customer, principal]);
+    await vehicleFixture.query(`INSERT INTO charging_subscription.driver_grants(account_id,principal_id,subscription_id) VALUES($1,$2,$3)`, [scenario.customer, principal, subscription]);
+  } finally {
+    await vehicleFixture.end();
+  }
+
+  const vehicles = (accountId, token, status, query = '') => requestAccount(`/${accountId}/fordon${query}`, token && `Bearer ${token}`, status);
+  assert.deepEqual(await vehicles(scenario.customer, null, 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await vehicles('not-an-id', recipient, 400), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await vehicles(scenario.customer, recipient, 400, '?after=a&after=b'), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await vehicles(scenario.customer, recipient, 400, '?limit=100'), { error: 'INVALID_INPUT' });
+  assert.equal(vehicleReads, 0);
+  const firstPage = await vehicles(scenario.customer, recipient, 200);
+  assert.equal(firstPage.items.length, 25);
+  assert.deepEqual(firstPage.items.slice(0, 2).map(({ id }) => id), [scenario.wrongCar, scenario.car]);
+  assert.deepEqual(Object.keys(firstPage.items[1]).sort(), ['country', 'id', 'plate', 'verified_at']);
+  assert.match(firstPage.nextCursor, /^[A-Za-z0-9_-]+$/);
+  const cursorQuery = `?after=${encodeURIComponent(firstPage.nextCursor)}`;
+  const tail = await vehicles(scenario.customer, recipient, 200, cursorQuery);
+  assert.equal(tail.items.length, 1);
+  assert.equal(tail.items[0].plate, 'ZZX00024');
+  assert.equal(tail.nextCursor, null);
+  assert.deepEqual(await vehicles(scenario.other, outsider, 400, cursorQuery), { error: 'INVALID_CURSOR' });
+  assert.deepEqual(await vehicles(scenario.company, outsider, 403), { error: 'ACCESS_DENIED' });
+  assert.deepEqual(await vehicles(scenario.customer, outsider, 200), { items: [firstPage.items[1]], nextCursor: null });
+  assert.equal(vehicleReads, 5);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next accounts, products, idempotent owner request and limited order status in PostgreSQL with tenant and role isolation.');
+  console.log('Verified Next account, product, order and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
 } finally {
   await stop(next);
   if (tls?.listening) {

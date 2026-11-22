@@ -2,9 +2,11 @@ import "server-only";
 
 import { customerAccountConfig } from "@/lib/customer-account-config";
 import type { RequestedProductKey } from "@/lib/customer-product-access";
+import type { CustomerVehicleListPath } from "@/lib/customer-vehicles";
 
 const authErrors = ["MFA_REQUIRED", "RECOVERY_REQUIRED", "VERIFIED_EMAIL_REQUIRED"];
-type AccountApiPath = "/v1/accounts" | `/v1/accounts/${string}/product-access` | `/v1/accounts/${string}/orders?limit=10`;
+type AccountApiPath = "/v1/accounts" | `/v1/accounts/${string}/product-access` |
+  `/v1/accounts/${string}/orders?limit=10` | CustomerVehicleListPath;
 
 function respond(body: object, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -62,6 +64,9 @@ async function customerAccountApi(
     });
     if (upstream.status === 401) return respond({ error: "UNAUTHENTICATED" }, 401);
     if (upstream.status === 429) return respond({ error: "RATE_LIMITED" }, 429);
+    if (upstream.status === 400 && (await upstream.json().catch(() => null))?.error === "INVALID_CURSOR") {
+      return respond({ error: "INVALID_CURSOR" }, 400);
+    }
     if (upstream.status === 403) {
       const payload = await upstream.json().catch(() => null);
       const error = authErrors.includes(payload?.error) ? payload.error : "ACCESS_DENIED";
