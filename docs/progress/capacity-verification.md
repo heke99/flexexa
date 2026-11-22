@@ -46,6 +46,32 @@ En separat sekund per belastningsnivå med `--legacy-list` visade att opaginerad
 
 Det lokala provet täcker delar av R51, R52 och R56. Återstående miljöprov omfattar full historik, fysisk laddning, klientbyggen och deras cache, betalnings- och webhooktrafik, beroendekvoter, fasgränser, driftens resursprofil och hela tidsprofilen för lasttest.
 
+## Lokalt telemetriprov R53
+
+Lägg till `--telemetry` för att prova den befintliga simulatoradaptern, arbetarrollen och uppdateringen av aktuell status i båda fordonsfördelningarna. Samma loopback-server används för autentiserad uppdatering och HTTP-läsning. Använd `--telemetry --skip-reconnect` för ett kort utvecklingsprov.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --seconds 5 --telemetry
+```
+
+Provet matar syntetiska avläsningar genom den befintliga adaptervalideringen och den riktiga statusuppdateringen i PostgreSQL. Det kör 230 schemalagda avläsningar/s tillsammans med listning, planjobb och återkallelse, följt av 600/s tillsammans med sidvis fordonsläsning. Återanslutningsvågen omfattar ytterligare 12 000 avläsningar under en minut ovanpå 230/s. Den avgränsade toppens längd styrs av `--seconds`. Återanslutningsvågen har en fast minut enligt [lastprofilen](capacity-profile.v1.json).
+
+HTTP-provet verifierar att en identisk version kan upprepas, att en sen version och en motsägande upprepning avvisas och att en felaktig leverantörsidentitet aldrig skrivs. Förare och främmande konton saknar åtkomst. Därefter stämmer provet av sista version, mättidpunkt och lagrade kumulativa Wh mot skickade avläsningar per fordon, samt läser tillbaka den senast lagrade statusen via konto-API:t. Telemetritiden mäts från schemalagd avläsning till beständigt skuggvärde. En fullständigt genomförd körning återger slutresultat för båda fördelningarna i JSONL.
+
+Den 22 november 2026 kördes båda fördelningarna mot `charging-subscription` vid `4cfcfcf8bf49428f4ab33ee31e28f1634b7c09bf` på PostgreSQL 18.6 och Node 24.19.0. Alla 29 950 schemalagda avläsningar per fördelning skrevs utan fel eller tapp, inklusive 13 800 normala avläsningar och 12 000 återanslutningar i minutprovet. Samtliga 12 000 skuggvärden per fördelning och den kumulativa mätarsumman 2 384 225 619 Wh matchade syntetiskt facit. Tabellen visar p95 från planerad avläsning till beständigt skuggvärde.
+
+| Fördelning | 230 avläsningar/s + blandad last | 600 avläsningar/s + 300 listanrop/s | 12 000 återanslutningar + 230 avläsningar/s |
+| --- | --- | --- | --- |
+| 12 företag | 13,3 ms | 6,5 ms | 1,5 ms |
+| Ett företag | 185,5 ms | 470,2 ms | 16,5 ms |
+
+Alla 4 000 anrop till den paginerade fordonslistan lyckades med rätt konto under det korta blandade provet. När samtliga fordon tillhörde ett företag gav 300 listanrop/s samtidigt med 600 avläsningar/s en p95 på 778 ms för fordonslistan. Det överskred den föreslagna R51-gränsen på 500 ms.
+
+Den tillgängliga kodvägen sparar aktuell simulatorstatus. Äldre eller motsägande versioner avvisas utan en egen historikrad. Provresultatet omfattar därför versionsskydd och deduplicerad aktuell energimätare. Råhändelser, separat leverantörsingång, avräkning av sessionsenergi, fysisk mätning och tio minuters topplast återstår för R53.
+
 ## Provmatris
 
 Den publika webbcheckouten på `37aec07` beskriver det separata flottjobbet i [Energy Wizard-underlaget](../work/2026-11-12-energy-wizard-partner-api.md). Samma underlag anger att det syntetiska 5 000-fordonsprovet av solver har en snävare omfattning än lastprovet. Produktionskontraktet för [de tidigare publika planeringsrutterna](../../public/openapi/energy-planner-v1.json) anger att planering och pris kräver produktåtkomst. Bind följande prov till den aktuella privata API-ingången, stödda klientbyggen och de faktiska bakgrundsjobben innan körning.

@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { profile, vehicleRows } from './capacity-profile.mjs';
+import { telemetryFixture } from './capacity-telemetry.mjs';
 
 const issuer = 'https://capacity-auth.invalid/auth/v1';
 const normalRate = profile.load.normal.apiRequestsPerSecond;
@@ -20,8 +21,11 @@ const { values } = parseArgs({ options: {
   python: { type: 'string', default: 'python3' },
   seconds: { type: 'string', default: '5' },
   'legacy-list': { type: 'boolean' },
+  telemetry: { type: 'boolean' },
+  'skip-reconnect': { type: 'boolean' },
 } });
 assert.ok(values.charging, 'Supply --charging with the path to the charging-subscription checkout');
+assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
 const seconds = Number(values.seconds);
 assert.ok(Number.isInteger(seconds) && seconds >= 1 && seconds <= 30, '--seconds must be an integer from 1 to 30');
 const checkout = resolve(values.charging);
@@ -40,11 +44,16 @@ const { Service } = serviceModule;
 const { server } = httpModule;
 const { SupabaseAuth } = authModule;
 const { runFleetPlanJob, solveFleet } = fleetWorker;
+const telemetryModules = values.telemetry ? {
+  ...await importFile(join(checkout, 'src/energy-service.mjs')),
+  ...await importFile(join(checkout, 'src/energy-device-adapter.mjs')),
+} : null;
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
 const [numpyVersion, ortoolsVersion] = execFileSync(values.python,
   ['-c', 'import numpy, ortools; print(numpy.__version__, ortools.__version__)'], { encoding: 'utf8' }).trim().split(' ');
 const migrations = (await readdir(join(checkout, 'database'))).filter(name => /^\d+.*\.sql$/u.test(name)).sort();
 const applicationFiles = ['src/service.mjs', 'src/read-model.mjs', ...migrations.map(name => `database/${name}`)];
+if (values.telemetry) applicationFiles.push('src/energy-service.mjs', 'src/energy-device-adapter.mjs');
 const digest = createHash('sha256');
 for (const name of applicationFiles) digest.update(name).update('\0').update(await readFile(join(checkout, name)));
 const implementationSha256 = digest.digest('hex');
@@ -417,22 +426,35 @@ async function scenario(cluster, name) {
     const vehicles = [...vehicleRows(name)];
     const { auth, issueToken } = authenticationFixture();
     const fixtures = await seed(pool, vehicles, issueToken);
-    listener = server({ service, auth, fleetPlanningEnabled: true });
+    const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service) : null;
+    if (telemetry) await telemetry.seed(pool, vehicles, fixtures);
+    listener = server({ service, auth, fleetPlanningEnabled: true, energy: telemetry?.energy });
     const port = await bindLoopback(listener);
     const request = createRequest(`http://127.0.0.1:${port}`);
     const access = await verifyVehicleAccess(request, fixtures, db);
-    const readSamples = [];
-    const concurrent = await Promise.allSettled([measureReads(request, fixtures, normalRate),
-      verifyPlanning(request, fixtures, db, vehicles), verifyDriverRevocation(request, fixtures)]);
+    const refresh = await telemetry?.verifyRefresh(request, fixtures);
+    const concurrent = await Promise.allSettled([
+      measureReads(request, fixtures, normalRate),
+      verifyPlanning(request, fixtures, db, vehicles),
+      verifyDriverRevocation(request, fixtures),
+      telemetry?.measure('normal', seconds),
+    ]);
     for (const result of concurrent) if (result.status === 'rejected') throw result.reason;
-    readSamples.push(concurrent[0].value);
-    readSamples.push(await measureReads(request, fixtures, peakRate));
+    const peak = await Promise.allSettled([measureReads(request, fixtures, peakRate), telemetry?.measure('peak', seconds)]);
+    for (const result of peak) if (result.status === 'rejected') throw result.reason;
+    const telemetrySamples = telemetry ? [concurrent[3].value, peak[1].value] : null;
+    if (telemetry && !values['skip-reconnect']) {
+      telemetrySamples.push(await telemetry.measure('reconnect', profile.load.reconnect.durationSeconds));
+    }
+    const reconciliation = await telemetry?.reconcile(request, fixtures);
     assert.deepEqual(poolErrors, []);
     console.log(JSON.stringify({
       scope: 'local_loopback_native_postgres', scenario: name, revision, implementationSha256, numpyVersion, ortoolsVersion,
       databaseVersion, nodeVersion: process.version, migrationsReplayed: migrations.length, startedAtUtc,
       finishedAtUtc: new Date().toISOString(), fixtureVehicles: vehicles.length, controlVehicles: 2,
-      vehicleAccess: { ...access, ...concurrent[2].value }, readSamples, planner: concurrent[1].value,
+      vehicleAccess: { ...access, ...concurrent[2].value }, readSamples: [concurrent[0].value, peak[0].value],
+      planner: concurrent[1].value,
+      ...(telemetry ? { telemetry: { refresh, samples: telemetrySamples, reconciliation } } : {}),
     }));
   } finally {
     if (listener) await close(listener);
