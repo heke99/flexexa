@@ -3,8 +3,10 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { accountRoleLabels, type CustomerAccount } from "@/lib/customer-accounts";
+import { CustomerProducts, type ProductSelection } from "./customer-products";
 
 const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kundportalen.";
+const productsUnavailable = "Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const expired = "Sessionen har löpt ut. Logga in igen.";
 
 function accountError(code: string) {
@@ -35,6 +37,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [accounts, setAccounts] = useState<CustomerAccount[] | null>(null);
+  const [products, setProducts] = useState<ProductSelection | null>(null);
 
   const clear = useCallback((reason = "") => {
     operation.current?.abort();
@@ -42,6 +45,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     clearTimeout(expiration.current);
     active.current = null;
     setAccounts(null);
+    setProducts(null);
     setSignedIn(false);
     setWorking(false);
     setMessage(reason);
@@ -54,6 +58,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     const request = new AbortController();
     operation.current = request;
     setAccounts(null);
+    setProducts(null);
     setMessage("");
     setWorking(true);
     try {
@@ -87,7 +92,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
 
   useEffect(() => {
     const revalidate = () => {
-      if (document.visibilityState === "visible" && !operation.current) void load();
+      if (document.visibilityState === "visible") void load();
     };
     const leave = () => clear();
     window.addEventListener("pagehide", leave);
@@ -101,6 +106,44 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
       document.removeEventListener("visibilitychange", revalidate);
     };
   }, [clear, load]);
+
+  async function showProducts(account: CustomerAccount) {
+    const login = active.current;
+    if (!login || working) return;
+    operation.current?.abort();
+    const request = new AbortController();
+    operation.current = request;
+    const selection = { accountId: account.id, accountName: account.name };
+    setMessage("");
+    setProducts({ ...selection, status: "loading" });
+    try {
+      const response = await fetch(`/api/kundkonto/${encodeURIComponent(account.id)}/produkter`, {
+        headers: { Authorization: `Bearer ${login.session.access_token}` },
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "error",
+        signal: request.signal,
+      });
+      const result = await response.json();
+      if (operation.current !== request) return;
+      if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
+        clear(accountError(result.error));
+        void login.client.auth.signOut({ scope: "local" });
+      } else if (response.status === 403) {
+        setProducts(null);
+        setAccounts(current => current?.filter(item => item.id !== account.id) ?? null);
+        setMessage("Du saknar åtkomst till kontot. Uppdatera för att hämta aktuella konton.");
+      } else if (response.ok) {
+        setProducts({ ...selection, status: "ready", access: result });
+      } else {
+        setProducts({ ...selection, status: "error", message: response.status === 429 ? accountError(result.error) : productsUnavailable });
+      }
+    } catch {
+      if (operation.current === request) setProducts({ ...selection, status: "error", message: productsUnavailable });
+    } finally {
+      if (operation.current === request) operation.current = null;
+    }
+  }
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -157,14 +200,19 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     }
   }
 
-  return <section className="wizard-panel" style={{ maxWidth: 680, overflowWrap: "anywhere" }}>
+  const selected = accounts?.find(account => account.id === products?.accountId);
+
+  return <section id="produkter" className="wizard-panel" style={{ maxWidth: 680, overflowWrap: "anywhere" }}>
     {signedIn ? <>
       <h2>Mina konton</h2>
       {working && <p role="status">Hämtar dina konton …</p>}
       {accounts?.length === 0 && <p>Du har inga konton att visa ännu.</p>}
       {!!accounts?.length && <ul>{accounts.map(account => <li key={account.id}>
         <strong>{account.name}</strong> <span>· {account.kind === "business" ? "Företag" : "Privat"} · {accountRoleLabels[account.role]}</span>
+        <div><button type="button" className="button" aria-pressed={account.id === products?.accountId}
+          onClick={() => showProducts(account)}>Visa produkter för {account.name}</button></div>
       </li>)}</ul>}
+      {products && selected && <CustomerProducts products={products} retry={() => void showProducts(selected)} />}
       <div className="actions">
         <button type="button" className="button" onClick={load} disabled={working}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>
