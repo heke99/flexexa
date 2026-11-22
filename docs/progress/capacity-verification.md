@@ -105,6 +105,8 @@ Vardera datamängden matchade 13 500 042 000 syntetiska kumulativa Wh. Samtliga 
 
 Detta verifierar ett avgränsat lokalt topprov för sidvis listning och simulatorobservationer. Den lokala poolgränsen på tio används även av `src/main.mjs`. `deploy/lambda.mjs` och `src/energy-api-runtime.mjs` begränsar respektive instans till en anslutning. Instansskalning, TLS över nät och full Supabase-sessionsverifiering ligger utanför den lokala mätningen med en gemensam pool och syntetisk identitetsrespons. Lastmatrisen för samtidiga klienter, driftprofil och fysiska leverantörer återstår.
 
+Det separata omprovet med `--phase reconnect --telemetry --metered-observations` på `d43e30e` verifierade 12 000 återanslutningar och 13 800 ordinarie observationer under en minut per fordonsfördelning. Alla sparades. P95 till beständig status var 1,2 ms med ett företag och 1,5 ms med tolv. Båda körningarna stämde av 12 000 aktuella värden och 25 803 historikrader, inklusive 6 453 mätvärden med mätarepok. Fordonslistan provades före återanslutningen. Själva minutprovet mätte telemetri.
+
 ## Provmatris
 
 Den publika webbcheckouten på `37aec07` beskriver det separata flottjobbet i [Energy Wizard-underlaget](../work/2026-11-12-energy-wizard-partner-api.md). Samma underlag anger att det syntetiska 5 000-fordonsprovet av solver har en snävare omfattning än lastprovet. Produktionskontraktet för [de tidigare publika planeringsrutterna](../../public/openapi/energy-planner-v1.json) anger att planering och pris kräver produktåtkomst. Bind följande prov till den aktuella privata API-ingången, stödda klientbyggen och de faktiska bakgrundsjobben innan körning.

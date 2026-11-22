@@ -38,6 +38,10 @@ På lokal revision `4cfcfcf` körde `test/energy-device-adapter.test.mjs` samma 
 
 På samma revision passerade hela backendsviten med 378 tester, det separata nativeprovet med begränsad arbetarinloggning och Chromiumprovet på 390 och 1 440 px.
 
+R54-provet på `6147b61` körde två företag genom konto-API, ordinarie flottkö, solver och laddarbetare i isolerad PostgreSQL 18. Ett laddkommando med förlorad kvittens lämnade kön redo för direkt avstämning. När avstämningen misslyckades sparades nästa avstämningstid 10 sekunder framåt. Det andra företaget fick sitt jobb utfört under väntan. Tre samtidiga arbetaranrop efter återhämtning sparade en kvittens genom avläsning av den första effekten. Totalt anropades `executeCommand` två gånger, en gång per företag. Ett separat riktat prov verifierade att ett obekräftat stopp får ett omförsök först efter bekräftat utebliven effekt, följt av avstämning och möjlighet till ett nytt manuellt stopp.
+
+Officiell dokumentation för Easee Cloud, Zaptec Cloud och direkt OCPP 2.0.1 har jämförts mot samma krav för mätning, lokal reserv, kvittenskontroll och kapacitet. [Leverantörskandidater](charging-provider-candidates.md)
+
 ### Laddboxmål i kWh
 
 Simulatorns kund-API tar emot `targetKwh` med precision ned till Wh. Målet binds till en färsk mätarställning och en identifierad mätarperiod. Vanlig ändring av mål, paus och återupptagning bevarar baslinjen. En ny baslinje kräver en uttrycklig begäran. Vid mätarbyte krävs en ny baslinje före omplanering. Köarbetaren kontrollerar återstående Wh och simulatorn tillämpar energigräns och tidsgräns för kommandot.
