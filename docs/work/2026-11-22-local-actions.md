@@ -107,3 +107,7 @@ Den lokala PostgreSQL-matrisen på laddkandidaten passerade 44 prov i 18 scenari
 ## Attmos AB sandbox som testleverantör
 
 Stripe-anslutningen gav skrivskyddad åtkomst till Attmos AB sandbox med `livemode=false`. Stripe listade inga priser, Checkout-sessioner eller webhook-endpoints. Flexexas betalningssandbox hade två aktiva Stripe-priskopplingar, en för förskottsköp och en för abonnemang. Båda gav `No such price` mot Attmos. Ett köp genom Flexexa kräver därför att testpriser, begränsad testnyckel och webhook-signering pekar på samma sandbox. Kontrollera den kopplingen innan en ny order skapas. Ingen live- eller sandboxkonfiguration ändrades vid kontrollen.
+
+## Publik webb i produktion
+
+Flexexa PR #77 sammanslogs till `536ac9c51c6cfd9569df96ee5cd33e118c5b8e54`. Vercel rapporterade produktionsbygget READY. På `www.flexexa.com` gav startsidan, laddsidan, manifestet och service workern HTTP 200. Den publicerade service workerns SHA-256 matchade PR-källan. `/app/konto` svarade HTTP 307 till den befintliga kundportalen. En skrivskyddad kontroll av laddschemat bekräftade att telemetrihistorik och roamingförsegling saknas och att auditens gamla API-skrivbehörighet kvarstår. [Produktionsbygge](https://vercel.com/div3rsa/flexexa/3zVonSNHKG4anTioXQfUxVu37TT9)
