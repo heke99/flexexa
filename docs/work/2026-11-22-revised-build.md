@@ -93,3 +93,16 @@ Den samlade produktrevisionen `7dd2480` passerade 375 backendtester, fyra Node-f
 Kapacitetsomkörningen på backend `5fd99f4` gav 4 000 lyckade paginerade anrop utan tapp eller kontoläckage. Körningar under konkurrerande lokal belastning överskred tidsmålen. Den opaginerade toppvägen gav 199 HTTP 500 vid ett koncentrerat 12 000-fordonsprov. [Körprotokoll](../progress/capacity-verification.md)
 
 Stripe-anslutningarnas kontolista visade Trafexa Nordic AB i live-läge. Betalningsacceptansen behöver en tillgänglig isolerad sandbox. Programrapporten är fortsatt röd. Lokal återläsning av partnerhändelser och simulerad avräkning har inga externa mottagare.
+
+## Fortsättning med laddboxmål och periodstängning
+
+| Krav | Leverans och lokal verifiering | Kvarstående acceptans |
+| --- | --- | --- |
+| R45, R56 | En körbar serverreferens för partner-API:t provar stabil idempotensnyckel, läsning inom aktuell licens, köad laddplan och stängd åtkomst efter återkallelse i tvåföretagsprovet. | Live-OAuth och avtalad utgående webhook där den krävs. |
+| R46, R54 | Simulerad ladderesa med uttryckligt kWh-mål. Målet binds till en verifierad mätarställning och mätarperiod. Gemensam plan, kö och visning använder faktiskt rapporterade Wh för resursen. | Fysisk laddbox, tariff, oberoende mätning, effekt och fasgränser, reserv och validerad adapter. Enode är senarelagt. |
+| R48, R55 | Roamingkostnader kan stängas med exakt de CDR-revisioner som var synliga i transaktionen. En sidindelad export förblir reproducerbar efter sena poster. En separat avstämning visar skillnaden mellan stängda och aktuella Wh och öre. | Full periodvolym, kundfaktura, signerad betalningswebhook och avstämning mot operatör. |
+| R53 | Native PostgreSQL 18 behandlade sammanlagt 59 900 syntetiska avläsningar utan tapp i båda 12 000-fördelningarna. Återanslutning och exakt replay höll, liksom kontogränsen vid vanlig HTTP-läsning. Fordonslistans p95 var 778 ms i det koncentrerade topprovet. [Kapacitetsprotokoll](../progress/capacity-verification.md) | Råhistorik, normal leverantörsingång, sessionsavräkning, svarstid under full topplast och tio minuters toppfas. |
+
+Produktrevisionen `0172485` verifierades med 380 backendtester, det befintliga portalbygget, Chromium på 390 och 1 440 px samt isolerade PostgreSQL 18-prov för mätt laddmål, uppgradering 043→044, partnermandat och periodstängning. Webbläsarprovet körde både procentmålet och kWh-målet. Lint av det ändrade CI-arbetsflödet passerade. Den befintliga Stripe- och fysiska pilotgrinden kvarstår.
+
+Ett kort omprov på produktrevisionen spelade upp 39 migreringar i varsin ny databas för båda fordonsfördelningarna. Samtliga 1 660 schemalagda telemetriavläsningar och 800 listanrop i ensekundsintervallen behandlades utan tapp eller fel. Det längre tidigare koncentrationsprovet ligger kvar som kapacitetsbevis för överskriden latensgräns.

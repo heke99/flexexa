@@ -38,11 +38,17 @@ På lokal revision `4cfcfcf` körde `test/energy-device-adapter.test.mjs` samma 
 
 På samma revision passerade hela backendsviten med 378 tester, det separata nativeprovet med begränsad arbetarinloggning och Chromiumprovet på 390 och 1 440 px.
 
+### Laddboxmål i kWh
+
+Simulatorns kund-API tar emot `targetKwh` med precision ned till Wh. Målet binds till en färsk mätarställning och en identifierad mätarperiod. Vanlig ändring av mål, paus och återupptagning bevarar baslinjen. En ny baslinje kräver en uttrycklig begäran. Vid mätarbyte krävs en ny baslinje före omplanering. Köarbetaren kontrollerar återstående Wh och simulatorn tillämpar energigräns och tidsgräns för kommandot.
+
+På revision `0172485` visade portalen 0,5 levererade kWh av ett mål på 1,25 kWh, efter planering och körning genom ordinarie API, kö och simulator. Chromium körde hela flödet på 390 och 1 440 px. I separata PostgreSQL 18-prov slutförde laddningen målet även efter paus, återupptagning och tappad kvittens. En befintlig procentprofil kunde planeras och köras efter migrering 043→044. Kör `test/energy-kwh-goal.test.mjs` med `TEST_ENERGY_KWH_DATABASE_URL` för meterfallet eller `TEST_ENERGY_KWH_UPGRADE_DATABASE_URL` för uppgraderingsfallet, i varsin isolerad loopback-databas. Ordinarie backendtest använder PGlite.
+
 ## Fysisk körning på vald styrväg
 
 Enode är senarelagt. Pilotens kWh-flöde kan börja med en avtalad laddbox, till exempel via en direkt adapter eller en laddplattform med OCPP där utrustning och avtal medger det. Kontrollera varje kapabilitet mot den aktuella kombinationen av leverantör, plats och utrustning. [Leverantörsbeslut](../DECISIONS.md#beslut-2026-11-22--leverantörsval-för-laddpiloten)
 
-Laddboxspårets planering ska utgå från ett explicit kWh-mål och faktiskt uppmätta Wh för sessionen. Dagens procentbaserade simulator använder bilens batteriprocent. Verifiera styrning, effektmätning, energimätning och eventuell biltelemetri var för sig för den valda adaptern.
+Utgå från explicit kWh-mål och faktiskt uppmätta Wh för sessionen i laddboxspåret. Procentbaserad planering använder bilens batteriprocent. Verifiera styrning, effektmätning, energimätning och eventuell biltelemetri var för sig för den valda adaptern.
 
 Använd en dedikerad pilotplats med exakt boxmodell och firmware, en avtalad kundrelation, en bil och en verifierad mätpunkt. Dokumentera laddarens styr- och avläsningsfunktioner, platsens effekt- och fasgränser, övrig last, gällande lokala reservplan, tidsgränser, möjlig manuell överstyrning och vem som följer mätningen. Välj en avtalad mättolerans med leverantören och fastställ antal godkända upprepningar före körningen. Koppla samma korrelations-ID genom kundbegäran, plan, kommando, leverantörens tillstånd och mätserie. Mät serverns och leverantörens tider var för sig.
 
