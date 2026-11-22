@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { profile } from './capacity-profile.mjs';
+import { capacityTimings } from './capacity-timings.mjs';
 
 const partnerKey = 'capacity-partner';
 const privateFixtureCount = 36;
 
-export async function seedMixedRoutes(pool, db, fixtures, { issuer, issueToken }) {
+export async function seedMixedRoutes(pool, db, fixtures, { issuer, issueCredential }) {
   const company = fixtures.owners.values().next().value;
   const client = randomUUID();
   await db.transaction('worker', connection => connection.query(`
@@ -49,14 +50,16 @@ export async function seedMixedRoutes(pool, db, fixtures, { issuer, issueToken }
       VALUES ($1,$3,'SE','SHARED'),($2,$3,'SE','PRIVATE')
     `, [shared, unshared, account]);
     const tenant = { id: account };
-    privateCustomers.push({ tenant, shared, owner: { token: issueToken(subject), tenant, role: 'owner' },
-      delegation: { token: issueToken(subject, { oauthClientId: client }), tenant, role: 'delegated_customer' } });
+    const ownerToken = issueCredential(subject);
+    const delegateToken = issueCredential(subject, { oauthClientId: client });
+    privateCustomers.push({ tenant, shared, owner: { get token() { return ownerToken(); }, tenant, role: 'owner' },
+      delegation: { get token() { return delegateToken(); }, tenant, role: 'delegated_customer' } });
   }
   return { company, privateCustomers };
 }
 
-export async function grantMixedPartnerScope(request, fixtures) {
-  const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+export async function grantMixedPartnerScope(request, fixtures, expiresInSeconds = 86_400) {
+  const expiresAt = new Date(Date.now() + expiresInSeconds * 1_000).toISOString();
   for (const { owner, shared } of fixtures.privateCustomers) {
     const result = await request(owner, 'partner-consents', { method: 'POST', key: 'mixed-probe-consent',
       body: JSON.stringify({ partnerKey, vehicleIds: [shared], scopes: ['vehicles:read'], expiresAt }) });
@@ -141,23 +144,28 @@ const routes = {
 
 const routeCycle = Object.keys(routes).flatMap(key => Array(routes[key].weight).fill(key));
 
-export async function measureMixedReads(request, fixtures, rate, duration, percentile) {
+export async function measureMixedReads(request, fixtures, rate, duration, { bounded = false, signal } = {}) {
   const measurements = new Map();
   const pending = new Set();
   let maxInFlight = 0;
   let partnerReads = 0;
+  let scheduledRequests = 0;
   const nextPartner = () => fixtures.privateCustomers[partnerReads++ % fixtures.privateCustomers.length];
   const started = performance.now();
   for (let index = 0; index < rate * duration; index += 1) {
-    const key = routeCycle[index % routeCycle.length];
-    const spec = routes[key];
-    if (!measurements.has(key)) measurements.set(key, { attempts: 0, dropped: 0, statuses: {}, errorCodes: {}, actorRoles: {},
-      expectedOutcomes: 0, wrongPayload: 0, unauthorizedSuccess: 0, durations: [], bytes: 0 });
-    const sample = measurements.get(key);
-    sample.attempts += 1;
+    if (signal?.aborted) break;
     const scheduled = started + index * 1_000 / rate;
     const wait = scheduled - performance.now();
     if (wait > 0) await delay(wait);
+    if (signal?.aborted) break;
+    const key = routeCycle[index % routeCycle.length];
+    const spec = routes[key];
+    if (!measurements.has(key)) measurements.set(key, { attempts: 0, dropped: 0, statuses: {}, errorCodes: {}, actorRoles: {},
+      expectedOutcomes: 0, wrongPayload: 0, unauthorizedSuccess: 0,
+      timings: spec.denied ? null : capacityTimings(bounded), bytes: 0 });
+    const sample = measurements.get(key);
+    sample.attempts += 1;
+    scheduledRequests += 1;
     const actor = fixtures.loadActors[index % fixtures.loadActors.length];
     const testCase = spec.build({ actor, fixtures, index, iteration: sample.attempts - 1, nextPartner });
     const caller = testCase.actor ?? actor;
@@ -178,7 +186,7 @@ export async function measureMixedReads(request, fixtures, rate, duration, perce
         if (result.status === spec.denied[0] && result.body?.error === spec.denied[1]) sample.expectedOutcomes += 1;
         if (result.status >= 200 && result.status < 300) sample.unauthorizedSuccess += 1;
       } else if (result.status === 200) {
-        sample.durations.push(performance.now() - scheduled);
+        sample.timings.add(performance.now() - scheduled);
         sample.bytes += result.bytes;
         if (testCase.valid(result.body)) sample.expectedOutcomes += 1;
         else sample.wrongPayload += 1;
@@ -191,17 +199,19 @@ export async function measureMixedReads(request, fixtures, rate, duration, perce
   await Promise.all(pending);
   const routeSamples = [...measurements].map(([key, sample]) => {
     const { route, denied } = routes[key];
-    const { durations, ...counts } = sample;
-    const p95Ms = percentile(durations, 0.95);
+    const { timings, ...counts } = sample;
+    const p95Ms = timings?.percentile(0.95);
     const unexpectedErrorRatio = (sample.attempts - sample.expectedOutcomes) / sample.attempts;
     return { key, route: `GET ${route}`, expectedStatus: denied?.[0] ?? 200, ...counts,
       unexpectedOutcomes: sample.attempts - sample.expectedOutcomes,
       ...(denied ? { expectedError: denied[1], accessChecksPassed: unexpectedErrorRatio === 0 } : {
-        p95Ms, p99Ms: percentile(durations, 0.99), unexpectedErrorRatio,
+        p95Ms, p99Ms: timings.percentile(0.99), unexpectedErrorRatio,
+        ...(bounded ? { latencySamples: timings.count, clippedLatencies: timings.clipped } : {}),
         withinProposedThresholds: p95Ms !== null && p95Ms <= profile.thresholds.criticalReadP95Ms
           && unexpectedErrorRatio <= profile.thresholds.criticalReadUnexpectedErrorRatioMax,
       }) };
   });
-  return { offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests: rate * duration, maxInFlight,
+  return { offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests: scheduledRequests, maxInFlight,
+    ...(bounded ? { plannedRequests: rate * duration, latencyMethod: 'bounded_hdr_3_significant_figures' } : {}),
     observedSeconds: Number(((performance.now() - started) / 1_000).toFixed(3)), routeSamples };
 }

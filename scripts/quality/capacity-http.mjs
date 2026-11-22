@@ -10,9 +10,12 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { enduranceStorageGuard } from './capacity-endurance.mjs';
 import { capacityHttpProbe } from './capacity-http-profile.mjs';
+import { capacityIdentity } from './capacity-identity.mjs';
 import { grantMixedPartnerScope, measureMixedReads, seedMixedRoutes } from './capacity-mixed-routes.mjs';
 import { profile, vehicleRows } from './capacity-profile.mjs';
+import { percentile } from './capacity-timings.mjs';
 import { telemetryFixture } from './capacity-telemetry.mjs';
 
 const issuer = 'https://capacity-auth.invalid/auth/v1';
@@ -32,6 +35,9 @@ const { values } = parseArgs({ options: {
   'peak-seconds': { type: 'string' },
   'mixed-routes': { type: 'boolean' },
   'split-pools': { type: 'boolean' },
+  'endurance-seconds': { type: 'string' },
+  'fixture-token-seconds': { type: 'string' },
+  'scratch-dir': { type: 'string' },
 } });
 assert.ok(values.charging, 'Supply --charging with the path to the charging-subscription checkout');
 assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
@@ -40,7 +46,8 @@ assert.ok(!values['mixed-routes'] || !values['legacy-list'], '--mixed-routes req
 assert.ok(!values['split-pools'] || values.telemetry, '--split-pools requires --telemetry');
 assert.ok(values.scenario === undefined || ['distributed', 'concentrated'].includes(values.scenario),
   '--scenario must be distributed or concentrated');
-assert.ok(['all', 'normal', 'peak', 'reconnect'].includes(values.phase), '--phase must be all, normal, peak, or reconnect');
+assert.ok(['all', 'normal', 'peak', 'reconnect', 'endurance'].includes(values.phase),
+  '--phase must be all, normal, peak, reconnect, or endurance');
 assert.ok(values.phase !== 'reconnect' || (values.telemetry && !values['skip-reconnect']),
   '--phase reconnect requires --telemetry');
 const seconds = Number(values.seconds);
@@ -49,6 +56,19 @@ const peakSeconds = Number(values['peak-seconds'] ?? seconds);
 assert.ok(Number.isInteger(peakSeconds) && peakSeconds >= 1 && peakSeconds <= profile.load.peak.durationSeconds,
   `--peak-seconds must be an integer from 1 to ${profile.load.peak.durationSeconds}`);
 const hasPhase = name => values.phase === 'all' || values.phase === name;
+const endurance = values.phase === 'endurance';
+const enduranceSeconds = Number(values['endurance-seconds']);
+const tokenLifetime = Number(values['fixture-token-seconds'] ?? '3600');
+assert.ok(endurance || (values['endurance-seconds'] === undefined && values['fixture-token-seconds'] === undefined),
+  '--endurance-seconds and --fixture-token-seconds require --phase endurance');
+if (endurance) {
+  assert.ok(values.scenario && values['mixed-routes'] && values.telemetry,
+    '--phase endurance requires explicit --scenario, --mixed-routes and --telemetry');
+  assert.ok(Number.isInteger(enduranceSeconds) && enduranceSeconds >= 1
+    && enduranceSeconds <= profile.load.enduranceSeconds, 'Invalid explicit endurance duration');
+  assert.ok(Number.isInteger(tokenLifetime) && tokenLifetime >= 5 && tokenLifetime <= 3_600, 'Invalid fixture token lifetime');
+}
+const scratchDir = resolve(values['scratch-dir'] ?? tmpdir());
 const checkout = resolve(values.charging);
 const localRequire = createRequire(join(checkout, 'package.json'));
 const importFile = path => import(pathToFileURL(path).href);
@@ -81,12 +101,6 @@ const digest = createHash('sha256');
 for (const name of applicationFiles) digest.update(name).update('\0').update(await readFile(join(checkout, name)));
 const implementationSha256 = digest.digest('hex');
 
-function percentile(numbers, fraction) {
-  const ordered = [...numbers].sort((a, b) => a - b);
-  const value = ordered[Math.ceil(fraction * ordered.length) - 1];
-  return value === undefined ? null : Math.round(value * 10) / 10;
-}
-
 async function bindLoopback(listener) {
   listener.listen(0, '127.0.0.1');
   await once(listener, 'listening');
@@ -101,7 +115,7 @@ async function freshCluster() {
   const socket = createServer();
   const port = await bindLoopback(socket);
   await close(socket);
-  const directory = await mkdtemp(join(tmpdir(), 'flexexa-capacity-pg-'));
+  const directory = await mkdtemp(join(scratchDir, 'flexexa-capacity-pg-'));
   const password = randomUUID();
   const cluster = new embedded.default({
     databaseDir: join(directory, 'data'),
@@ -142,7 +156,7 @@ async function freshCluster() {
   }
 }
 
-async function seed(pool, fixture, issueToken) {
+async function seed(pool, fixture, issueCredential) {
   const tenantIds = [...new Set(fixture.map(vehicle => vehicle.tenantId))];
   const tenants = new Map();
   for (const name of [...tenantIds, 'control-1', 'control-2']) {
@@ -182,7 +196,8 @@ async function seed(pool, fixture, issueToken) {
     await pool.query('INSERT INTO charging_subscription.identities(issuer,subject,principal_id) VALUES($1,$2,$3)',
       [issuer, subject, principal]);
     await pool.query('INSERT INTO charging_subscription.memberships VALUES($1,$2,$3)', [tenant.id, principal, role]);
-    return { token: issueToken(subject), tenant, principal, role };
+    const token = issueCredential(subject);
+    return { get token() { return token(); }, tenant, principal, role };
   }
 
   const fleet = tenantIds.map(name => tenants.get(name));
@@ -202,7 +217,8 @@ async function seed(pool, fixture, issueToken) {
     await pool.query('INSERT INTO charging_subscription.driver_grants VALUES($1,$2,$3)', [tenant.id, driver.principal, id]);
   }
   const loadActors = [];
-  const requestedPerMinute = normalRate * Math.min(60, seconds) + peakRate * Math.min(60, peakSeconds);
+  const requestedPerMinute = endurance ? normalRate * Math.min(60, enduranceSeconds)
+    : normalRate * Math.min(60, seconds) + peakRate * Math.min(60, peakSeconds);
   const totalActors = Math.ceil(requestedPerMinute / 90) + 12;
   for (let index = 0; index < totalActors; index += 1) {
     loadActors.push(await actor(fleet[index % fleet.length], index % 2 === 0 ? 'owner' : 'billing'));
@@ -218,31 +234,18 @@ async function seed(pool, fixture, issueToken) {
 }
 
 function authenticationFixture() {
-  const users = new Map();
+  const identity = capacityIdentity({ issuer, lifetimeSeconds: tokenLifetime, renew: endurance });
   const auth = new SupabaseAuth({
     url: 'https://capacity-auth.invalid',
     publishableKey: 'capacity-fixture',
     fetcher: async (url, options) => {
       assert.equal(url, issuer + '/user');
       const token = options.headers.Authorization.slice('Bearer '.length);
-      const user = users.get(token);
+      const user = identity.user(token);
       return user ? Response.json(user) : new Response(null, { status: 401 });
     },
   });
-  return {
-    auth,
-    issueToken(subject, { oauthClientId } = {}) {
-      const now = Math.floor(Date.now() / 1000);
-      const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
-      const token = `${encode({ alg: 'HS256' })}.${encode({
-        iss: issuer, sub: subject, session_id: randomUUID(), aud: 'authenticated', role: 'authenticated',
-        aal: 'aal1', iat: now, exp: now + 3600, amr: [{ method: 'password', timestamp: now }],
-        ...(oauthClientId ? { client_id: oauthClientId } : {}),
-      })}.${randomUUID()}`;
-      users.set(token, { id: subject, email: `${subject}@capacity.invalid`, email_confirmed_at: new Date().toISOString() });
-      return token;
-    },
-  };
+  return { auth, ...identity };
 }
 
 function createRequest(origin) {
@@ -483,9 +486,9 @@ async function scenario(cluster, name) {
     const telemetryDb = telemetryPool ? new Database(probe?.telemetryPool ?? telemetryPool) : db;
     const service = new Service(db);
     const vehicles = [...vehicleRows(name)];
-    const { auth, issueToken } = authenticationFixture();
-    const fixtures = await seed(pool, vehicles, issueToken);
-    const mixed = partnerModule ? await seedMixedRoutes(pool, db, fixtures, { issuer, issueToken }) : null;
+    const { auth, credential, stats } = authenticationFixture();
+    const fixtures = await seed(pool, vehicles, credential);
+    const mixed = partnerModule ? await seedMixedRoutes(pool, db, fixtures, { issuer, issueCredential: credential }) : null;
     const partnerEnergy = partnerModule ? new partnerModule.PartnerEnergyService(service, null) : null;
     probe?.wrap(service, db, partnerEnergy, telemetryDb);
     const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service, {
@@ -495,16 +498,17 @@ async function scenario(cluster, name) {
     listener = server({ service, auth, fleetPlanningEnabled: true, energy: telemetry?.energy, partnerEnergy });
     const port = await bindLoopback(listener);
     const request = createRequest(`http://127.0.0.1:${port}`);
-    if (mixed) await grantMixedPartnerScope(request, mixed);
+    if (mixed) await grantMixedPartnerScope(request, mixed,
+      endurance ? Math.max(86_400, enduranceSeconds + 3_600) : undefined);
     const access = await verifyVehicleAccess(request, fixtures, db);
     const explain = await probe?.explain(db, auth, fixtures.owners.values().next().value);
     const refresh = await telemetry?.verifyRefresh(request, fixtures);
     const readSamples = [];
     const telemetrySamples = [];
     const profiles = {};
-    let driverRevocation, planner;
+    let driverRevocation, planner, enduranceEvidence;
     const read = mixed
-      ? (rate, duration) => measureMixedReads(request, { ...fixtures, ...mixed }, rate, duration, percentile)
+      ? (rate, duration, options) => measureMixedReads(request, { ...fixtures, ...mixed }, rate, duration, options)
       : (rate, duration) => measureReads(request, fixtures, rate, duration);
     if (hasPhase('normal')) {
       probe?.start();
@@ -535,7 +539,36 @@ async function scenario(cluster, name) {
     if (telemetry && !values['skip-reconnect'] && hasPhase('reconnect')) {
       telemetrySamples.push(await telemetry.measure('reconnect', profile.load.reconnect.durationSeconds));
     }
-    const reconciliation = await telemetry?.reconcile(request, fixtures);
+    if (endurance) {
+      const guard = await enduranceStorageGuard(scratchDir);
+      const options = { bounded: true, signal: guard.signal };
+      let result;
+      probe?.start();
+      try {
+        result = await Promise.allSettled([
+          read(normalRate, enduranceSeconds, options),
+          telemetry.measure('normal', enduranceSeconds, options),
+        ]);
+      } finally {
+        profiles.endurance = probe?.stop();
+        enduranceEvidence = { storage: guard.stop() };
+      }
+      for (const completed of result) if (completed.status === 'rejected') throw completed.reason;
+      const [httpLoad, telemetryLoad] = result.map(completed => completed.value);
+      readSamples.push(httpLoad);
+      telemetrySamples.push(telemetryLoad);
+      enduranceEvidence.scheduleCompleted = !guard.signal.aborted
+        && httpLoad.requests === httpLoad.plannedRequests && telemetryLoad.scheduled === telemetryLoad.planned;
+    }
+    const reconciliation = await telemetry?.reconcile(request, fixtures, { streaming: endurance });
+    if (endurance) {
+      const { rows: [footprint] } = await pool.query(`
+        SELECT (SELECT count(*)::int FROM charging_subscription.app_sessions) AS sessions,
+          pg_total_relation_size(to_regclass('charging_subscription.simulated_energy_telemetry')) AS telemetry_bytes
+      `);
+      enduranceEvidence.identity = { ...stats(), storedSessions: footprint.sessions, syntheticTokenLifetimeSeconds: tokenLifetime };
+      enduranceEvidence.telemetryRelationBytes = footprint.telemetry_bytes === null ? null : Number(footprint.telemetry_bytes);
+    }
     assert.deepEqual(poolErrors, []);
     console.log(JSON.stringify({
       scope: 'local_loopback_native_postgres', scenario: name, phase: values.phase,
@@ -547,12 +580,14 @@ async function scenario(cluster, name) {
       vehicleAccess: { ...access, ...driverRevocation }, readSamples, planner,
       ...(mixed ? { mixedRoutes: { privateAccounts: mixed.privateCustomers.length,
         privateFixtureVehicles: mixed.privateCustomers.length * 2 } } : {}),
+      ...(endurance ? { endurance: enduranceEvidence } : {}),
       ...(telemetry ? { telemetry: { refresh, samples: telemetrySamples, reconciliation } } : {}),
       ...(probe ? { profiling: { explain, ...profiles } } : {}),
     }));
     assert.ok(!mixed || readSamples.every(sample => sample.routeSamples.every(route =>
       route.wrongPayload === 0 && route.unauthorizedSuccess === 0)),
     'A mixed route delivered an unexpected payload or authorized a denied request');
+    if (endurance && !enduranceEvidence.scheduleCompleted) process.exitCode = 2;
   } finally {
     if (listener) await close(listener);
     await Promise.all(pools.map(currentPool => currentPool.end()));

@@ -101,6 +101,26 @@ Det fördelade provet kördes på `dd53cb20e8cb721ad7a7f651c6fef994fbff4a27` och
 
 Samtidigt sparades alla 360 000 observationer per körning vid 600/s, med 1,6 ms p95 till beständig status för tolv företag och 3,0 ms för ett företag. Båda körningarna matchade 12 000 aktuella värden och 360 003 historikrader, varav 90 003 med mätarepok. Mätningen gäller den lokala mixen av HTTP-läsningar och simulatortelemetri. Samtidig faktura-, klient- och verklig leverantörstrafik samt hela uthållighetsprovet återstår.
 
+### Förutsättningar för ett långt lokalt prov
+
+`--phase endurance` kör samma blandning av HTTP-läsningar och simulatorobservationer med normalraterna 100 anrop och 230 observationer per sekund. Ange fördelning och antal sekunder uttryckligen, med högst 86 400 sekunder. Denna fas mäter de lokala läsvägarna och simulatorn. Produktens hela uthållighetskrav omfattar dessutom återkommande planjobb, planerade avbrott, klienttrafik, ekonomiflöden och leverantörer.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --scenario distributed --phase endurance --endurance-seconds 8 \
+  --fixture-token-seconds 5 --telemetry --mixed-routes --metered-observations
+```
+
+Långfasen använder histogram med fast minnesåtgång för ungefärliga p95/p99 och räknar alla observerade utfall separat. Kortfaserna behåller sina exakta percentiler. Skuggvärdena stäms av per fordon och den växande råhistoriken kontrolleras med antal och summor per konto. JSONL anger planerade och faktiskt schemalagda anrop, räknar eventuella klippta mätvärden och anger om hela schemat avslutades. Ruttgränser och avstämningar bedöms från sina respektive fält.
+
+När testtoken förnyas behålls sessions-ID, OAuth-klient och ursprunglig inloggningstid. Identitetsstubben behåller högst två testtoken per session så att ett pågående anrop kan slutföras under förnyelsen. Medgivandet gäller hela den valda fasen med marginal. Använd `--fixture-token-seconds 5` för att prova flera förnyelser under ett kort prov. Standardvärdet är en timme. Autentiseringsflödet använder den ordinarie API-verifieraren med en lokal syntetisk identitetsrespons.
+
+En dag vid 230 observationer/s schemalägger 19 872 000 observationer plus förkontroller. Ange `--scratch-dir` till en lokal testdisk som rymmer telemetritabell och index, WAL och tillfälligt utrymme för avstämningen. Provet kontrollerar ledigt utrymme före schemaläggning och sedan var femtonde sekund. Under 512 MiB ledigt stoppar schemaläggningen och pågående anrop får gå klart. Provet rapporterar minsta observerade lediga utrymme och telemetrirelationens storlek inklusive index. Ett avbrutet schema ger exitkod 2 efter avstämning.
+
+Åttasekundersprovet på laddrevision `119a50fb7f8fcded7752b5216bf62a4abede57bb` gav 800 av 800 väntade HTTP-utfall och 1 840 av 1 840 beständiga observationer. Alla 1 843 historikrader stämdes av, varav 463 med mätarepok. Provet gjorde 172 tokenförnyelser med 140 skapade syntetiska sessioner, 130 använda och lagrade sessionsposter samt 230 kvarhållna token. Telemetritabellen med index upptog 712 704 byte vid slutet av körningen. Tre enhetstester verifierade förnyelse, latensräkning och avbruten schemaläggning vid otillgänglig testdisk. Hela dygnsprovet återstår.
+
 ## Lokalt telemetriprov R53
 
 Lägg till `--telemetry` för att prova den befintliga simulatoradaptern, arbetarrollen och uppdateringen av aktuell status i båda fordonsfördelningarna. Samma loopback-server används för autentiserad uppdatering och HTTP-läsning. Använd `--telemetry --skip-reconnect` för ett kort utvecklingsprov.

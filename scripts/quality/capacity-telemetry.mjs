@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { profile } from './capacity-profile.mjs';
+import { capacityTimings } from './capacity-timings.mjs';
 
 const capabilities = ['read_soc', 'start_charge', 'stop_charge', 'set_power_limit'];
 const meteredCapabilities = [...capabilities, 'read_energy'];
@@ -146,9 +147,9 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     }
   }
 
-  async function measure(kind, duration) {
+  async function measure(kind, duration, { bounded = false, signal } = {}) {
     const events = scheduledEvents(kind, duration);
-    const latencies = [];
+    const timings = capacityTimings(bounded);
     const active = new Set();
     const perVehicle = new Map();
     const committedBySource = {};
@@ -159,10 +160,12 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     const started = performance.now();
     const startedAt = Date.now();
     for (const event of events) {
-      scheduled += 1;
+      if (signal?.aborted) break;
       const when = started + event.offsetMs;
       const waiting = when - performance.now();
       if (waiting > 0) await delay(waiting);
+      if (signal?.aborted) break;
+      scheduled += 1;
       if (active.size >= 400) {
         dropped += 1;
         continue;
@@ -174,7 +177,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
       const operation = previous.then(async () => {
         const sample = await adapter.read({ accountId: target.accountId, vehicleId: target.vehicleId });
         await telemetryDb.transaction('worker', client => storeEnergyShadow(client, sample));
-        latencies.push(performance.now() - when);
+        timings.add(performance.now() - when);
         latest.set(target.vehicleId, next);
         recordExpectedHistory(next);
         committedBySource[event.source] = (committedBySource[event.source] ?? 0) + 1;
@@ -191,17 +194,17 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     }
     await Promise.all(active);
     const observedSeconds = (performance.now() - started) / 1_000;
-    latencies.sort((left, right) => left - right);
-    const p95 = latencies[Math.ceil(latencies.length * 0.95) - 1];
     return {
-      phase: kind, scheduledSeconds: duration, scheduled, committed: latencies.length,
+      phase: kind, scheduledSeconds: duration, scheduled, committed: timings.count,
       committedBySource, dropped, failures, maxInFlight, observedSeconds: Number(observedSeconds.toFixed(3)),
-      p95MsScheduledToShadowCommit: p95 === undefined ? null : Number(p95.toFixed(1)),
-      allObservationsCommitted: latencies.length === scheduled,
+      p95MsScheduledToShadowCommit: timings.percentile(0.95),
+      allObservationsCommitted: !signal?.aborted && timings.count === scheduled,
+      ...(bounded ? { planned: duration * profile.load.normal.telemetryEventsPerSecond,
+        latencyMethod: 'bounded_hdr_3_significant_figures', clippedLatencies: timings.clipped } : {}),
     };
   }
 
-  async function reconcile(request, fixtures) {
+  async function reconcile(request, fixtures, { streaming = false } = {}) {
     const stored = await db.transaction('worker', client => client.query(`
       SELECT account_id, vehicle_id, energy_wh, state_version, reported_at, quality${historyAvailable ? ',meter_epoch' : ''}
       FROM charging_subscription.energy_vehicle_shadows
@@ -232,28 +235,32 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
         expected ? [expected.stateVersion, expected.energyWh] : [null, null]);
       if (historyAvailable) assert.equal(row.reported_meter_epoch, expected?.meterEpoch ?? null);
     }
-    const history = historyAvailable ? await reconcileHistory() : { available: false };
+    const history = historyAvailable ? await reconcileHistory(streaming) : { available: false };
     return { shadowRows: stored.rows.length, meteredShadowRows,
       meteredFixtureVehicles: metered ? assets.filter(asset => asset.meterEpoch).length : 0,
       ownerVisibleVehicles: visible.body.items.length,
       storedEnergyWh, expectedEnergyWh, incorrectRows: 0, history };
   }
 
-  async function reconcileHistory() {
-    const { rows } = await db.transaction('worker', client => client.query(`
-      SELECT account_id, count(*)::int AS observations, count(DISTINCT state_version)::int AS distinct_versions,
+  async function reconcileHistory(streaming) {
+    const { rows } = await db.transaction('worker', async client => {
+      if (streaming) await client.query("SET LOCAL statement_timeout='180s'");
+      return client.query(`
+      SELECT account_id, count(*)::int AS observations,
+             ${streaming ? '' : 'count(DISTINCT state_version)::int AS distinct_versions,'}
              count(*) FILTER (WHERE meter_epoch IS NOT NULL)::int AS metered_observations,
              sum(energy_wh) AS cumulative_energy_wh, sum(state_version) AS version_sum
       FROM charging_subscription.simulated_energy_telemetry
       WHERE provider_key='simulator'
       GROUP BY account_id
-    `));
+      `);
+    });
     assert.equal(rows.length, historyExpected.size);
     let observations = 0;
     let meteredObservations = 0;
     for (const row of rows) {
       assert.ok(historyExpected.has(row.account_id));
-      assert.equal(row.observations, row.distinct_versions);
+      if (!streaming) assert.equal(row.observations, row.distinct_versions);
       assert.deepEqual({
         observations: row.observations, meteredObservations: row.metered_observations,
         cumulativeEnergyWh: Number(row.cumulative_energy_wh),
@@ -263,7 +270,8 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
       meteredObservations += row.metered_observations;
     }
     return { available: true, accounts: rows.length, observations, meteredObservations, exactReplayDeduplicated: true,
-      lateObservationRetained: true, conflictingReplayExcluded: true };
+      lateObservationRetained: true, conflictingReplayExcluded: true,
+      ...(streaming ? { aggregateCheck: 'count_and_sums_per_account' } : {}) };
   }
 
   return { energy, seed, verifyRefresh, measure, reconcile };
