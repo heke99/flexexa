@@ -108,12 +108,13 @@ const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, enc
 const [numpyVersion, ortoolsVersion] = execFileSync(values.python,
   ['-c', 'import numpy, ortools; print(numpy.__version__, ortools.__version__)'], { encoding: 'utf8' }).trim().split(' ');
 const migrations = (await readdir(join(checkout, 'database'))).filter(name => /^\d+.*\.sql$/u.test(name)).sort();
-assert.ok(!roamingModules || migrations.includes('050-company-roaming-cost-read.sql'),
-  'Roaming cost load requires migration 050');
+assert.ok(!roamingModules || migrations.includes('054-roaming-cost-vehicle-groups.sql'),
+  'Roaming cost load requires migration 054');
 const applicationFiles = ['src/service.mjs', 'src/read-model.mjs', ...migrations.map(name => `database/${name}`)];
 if (values.telemetry) applicationFiles.push('src/energy-service.mjs', 'src/energy-device-adapter.mjs');
 if (partnerModule) applicationFiles.push('src/partner-energy.mjs', 'src/product-access.mjs', 'src/http.mjs');
-if (roamingModules) applicationFiles.push('src/charging-evidence.mjs', 'src/roaming-cost-close.mjs', 'src/company-roaming-costs.mjs');
+if (roamingModules) applicationFiles.push('src/charging-evidence.mjs', 'src/roaming-cost-close.mjs',
+  'src/company-roaming-costs.mjs', 'src/roaming-cost-vehicle-groups.mjs');
 if (endurancePlanInterval !== null) applicationFiles.push('src/fleet-plan-worker.mjs', 'workers/fleet-planner/solver.py');
 const digest = createHash('sha256');
 for (const name of applicationFiles) digest.update(name).update('\0').update(await readFile(join(checkout, name)));

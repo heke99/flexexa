@@ -148,9 +148,9 @@ Sju sekunder på laddrevision `9da6d199220c0bc68d485c165e960284110d455b` gav tre
 
 #### Frysta roamingkostnader i blandningen
 
-`--roaming-cost-routes` kräver `--mixed-routes` och migrationsfil 050 från laddbackenden. Flaggan lägger till ett anrop för periodlistan, ett för första detaljsidan och ett för nekad detaljläsning som förare per trafikcykel. Cykeln har därmed 26 platser. Tidigare körningar och vanlig `--mixed-routes` använder cykeln med 23 platser. Den totala anropsfrekvensen för fasen är densamma.
+`--roaming-cost-routes` kräver `--mixed-routes` och migrationsfil 054 från laddbackenden. Flaggan lägger till sex anrop per trafikcykel med oförändrad total anropsfrekvens. Ekonomirollen läser periodlistan, första detaljsidan och fordonssummeringen. Provet kontrollerar nekade anrop till detaljsidan och fordonssummeringen som förare samt till fordonssummeringen i ett annat konto som ekonomiroll. Cykeln har 29 platser. De tidigare proven med ekonomiläsning använde 26 platser. Vanlig `--mixed-routes` använder 23 platser.
 
-Två perioder per företag skapas med den ordinarie importen och låses med den ordinarie stängningsfunktionen i en tillfällig databas. Provet ändrar därefter det första dokumentet i detaljsorteringen och kontrollerar att periodlistan och detaljsidan fortfarande återger det låsta antalet dokument, Wh, priset och detaljens ursprungliga revision. Motläsning sker med ekonomiroller för respektive företag. Förarens motsvarande detaljanrop ska ge exakt HTTP 403. JSONL redovisar förväntade utfall, roll och antalet företag vars underlag matchade, separat för respektive roamingväg.
+Provet importerar 48 kostnadsposter per företag och kopplar två poster vardera till 24 verifierade fordon genom den ordinarie granskningen. En kredit med enbart tokenkoppling ska redovisas som oallokerad. Provet förseglar månaden och en mindre föregående period i tillfällig PostgreSQL. Efter stängningen ändras en fordonskoppling och en underlagsrevision. Kontrollerna jämför den låsta perioden, detaljens ursprungliga revision, fordonens exakta antal, Wh och ören samt den oallokerade krediten med facit från importen. Fordonssummeringen läses med två sidor om 12 fordon och kontrollerar båda sidmarkörerna. JSONL redovisar förväntade utfall, roll och antalet företag vars underlag matchade, separat per roamingväg.
 
 ```sh
 node scripts/quality/capacity-http.mjs \
@@ -161,6 +161,15 @@ node scripts/quality/capacity-http.mjs \
 ```
 
 Fyrasekundersprovet på laddrevision `1bfc939affb939de1476a92a7086b4d39075fe66` gav 400 av 400 väntade HTTP-utfall och 920 av 920 beständiga telemetriobservationer. Periodlistan och detaljsidan gav vardera 15 av 15 korrekta svar över alla tolv företag. Alla 15 anrop som förare nekades med `403 FORBIDDEN`. Underlaget omfattade 24 frysta perioder med sammanlagt 36 dokument och tolv efterhandsrevisioner.
+
+Två korta prov på `40156b2` använde PostgreSQL 18.6, 49 migrationsfiler, syntetisk inloggning och `--metered-observations`. Varje prov omfattade 12 000 flottfordon. Samtliga anrop gav väntad status och nyttolast och alla telemetriobservationer sparades och stämdes av.
+
+| Fördelning | Provtid | HTTP | Telemetri | Kostnadsposter med verifierad fordonskoppling | Fordonssummering | Nekade anrop per kontroll |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tolv företag | 20 s | 2 000 | 4 600 | 576 | 69 korrekta, p95 152,4 ms | 69 |
+| Ett företag | 10 s | 1 000 | 2 300 | 48 | 34 korrekta, p95 26,4 ms | 34 |
+
+Båda kontrollerna för fordonssummeringen gav exakta `403 FORBIDDEN` för förare och ekonomiroll som läste ett annat konto. När flottan fördelades över tolv företag riktades den andra kontrollen mot en förseglad period i ett annat företag. P95 beskriver dessa korta körningar med delade lokala resurser.
 
 ## Lokalt telemetriprov R53
 
