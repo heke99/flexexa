@@ -1,5 +1,11 @@
 # Beslut
 
+## Beslut 2026-11-22 — leverantörsval för laddpiloten
+
+Enode är senarelagt. Första piloten kan genomföras med en avtalad laddbox eller annan vald styrväg som klarar R46 och R58. En laddbox med verifierad effekt och sessionsenergi räcker för kWh-piloten. Fordonstelemetri provas separat med den leverantör och exakt fordonsvariant som väljs.
+
+Flexexas API, portal och planering använder gemensamma modeller för kapabilitet, telemetri, kommando och mätbevis. Leverantörens ID:n, protokoll och felkoder hanteras i adaptern. Vilka funktioner som får användas avgörs per anslutning och utrustning. Samma fysiska resurs har en aktiv styrväg. Byte kräver avstämning av pågående kommandon, mätning och mandat. Beslutet ersätter Enode som första prov i den [bifogade byggordningen](FLEXEXA_REVISED_BUILD_ORDER_2026-11-22.md). [Pilotprotokoll](progress/charging-pilot.md) · [Fordonskatalog och leverantörsprov](progress/vehicle-pilot.md)
+
 ## Beslut 2026-11-13 — uppsägning och nya konsumentvillkor
 
 Ägaren har beslutat två månaders bindningstid per förlängning och en kalendermånads uppsägningstid. Begäran får registreras under bindningstiden; tjänst och betalningsskyldighet fortsätter till första bindningsperiodslut efter uppsägningstiden. Ny v5-version i portalrepot bevarar tidigare accepterade versioner. Registreringsnummer ska identifiera avtalet i ordervy och mottagningsbevis. Lagstadgad ånger kan inte automatiskt tas bort efter en enskild laddning; användning och ersättning prövas enligt distansavtalslagen 2 kap. 10–15 §§. Webbtexten återger dessa regler och länkar till v5-PDF. Kommersiella köp är fortsatt stängda.

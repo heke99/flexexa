@@ -1,4 +1,4 @@
-# Fordonskatalog och Enode-pilot · steg 2
+# Fordonskatalog och leverantörsprov · steg 2
 
 Datum 2026-11-22. Katalogutdraget är lokalt verifierat mot källan. Anslutning, telemetri och styrning på verkliga pilotbilar väntar på leverantörsåtkomst och utsedd provutrustning. [Reviderad byggordning](../FLEXEXA_REVISED_BUILD_ORDER_2026-11-22.md) · [Första laddpiloten](charging-pilot.md)
 
@@ -29,22 +29,22 @@ node --test test/vehicle-pilot-catalog.test.mjs
 
 Den 22 november gav båda liveuppslagen en verifierad källrad och samma JSON som det sparade utdraget. Alla tre lokala katalogtester passerade med Node 24.19.0. Kontrollerna gäller katalogen och dess källurval.
 
-## Pilot med Enode
+## Prov med vald leverantör
 
-Enodes publika BMW-lista visar 330e och i4 i Europa med stöd på modellfamiljsnivå för laddstatus och start/stopp. Enode listar bland annat BMW ConnectedDrive Remote Services, krav på primär användare samt situationer då en laddbox behöver länkas för att möjliggöra styrning. Fältens aktualitet, faktisk åtkomst och styrning behöver verifieras per anslutet exemplar. Enodes aktuella utvecklarsida kräver inloggning i plattformen. [Enodes BMW-matris](https://platform.enode.com/brands/BMW) · [BMW:s anslutningsåtgärder](https://platform.enode.com/brands/learn/BMW/interventions) · [Enodes utvecklaråtkomst](https://developers.enode.com/)
+Enode är senarelagt. Första laddpiloten kan mäta och styra via vald laddbox. Vid behov av biltelemetri eller direkt fordonsstyrning utvärderas vald leverantör på exakt bilvariant, marknad och konto. Tidigare Enode-undersökning finns kvar som referens för ett eventuellt senare prov. [Leverantörsbeslut](../DECISIONS.md#beslut-2026-11-22--leverantörsval-för-laddpiloten) · [Enodes BMW-matris](https://platform.enode.com/brands/BMW)
 
-Laddbackenden i `charging-subscription` har en separat energi-runtime och ett simulerat flöde för acceptans av plan, kö, skugga och mätutfall. Anslut Enode vid styrbackendens leverantörsgräns när det aktuella kontraktet är verifierat och låt kundflödena läsa den kanoniska statusen. Samma fysiska resurs ska fortsatt ha en aktiv styrväg. Om BMW kräver länkat ladddon ska pilotprotokollet ange var den faktiska styrningen och mätningen sker. [Energi-runtime](https://github.com/heke99/charging-subscription/blob/c26766fdfb2d1b3872d245f77301e2b5888c9aa7/src/energy-api-runtime.mjs) · [Första laddpiloten](charging-pilot.md)
+Anslut leverantören vid styrbackendens adaptergräns och låt kundflödena läsa den kanoniska statusen. Dokumentera var fysisk styrning och mätning faktiskt sker när en bil och ett ladddon kan styra samma session. Använd samma kontraktsprov för nästa adapter och registrera stöd separat för läsning, styrning och mätning. [Energi-runtime](https://github.com/heke99/charging-subscription/blob/c26766fdfb2d1b3872d245f77301e2b5888c9aa7/src/energy-api-runtime.mjs) · [Första laddpiloten](charging-pilot.md)
 
 | Ordning | Prov och beslutbart utfall |
 | --- | --- |
-| 1. Tillgång och kontrakt | Integrationsägaren får ett avgränsat Enode-testprojekt, region EU och tillgång till gällande SDK/API. Dokumentera fält, källtider, rättigheter för lagring/visning/vidareleverans, kvoter per miljö och debiteringsgrund. Bekräfta pilotplats, exakt 330e-variant, vald BEV, respektive fordonskonto, giltigt läsmandat och separat styrmandat. |
-| 2. Sandbox | Kör leverantörens Link-flöde genom Flexexas konto, API och arbetsprocess med virtuella fordon. Prova avbruten länkning, frånkoppling, gammal SoC, dubbletter, försenad händelse, kvotrespons, tappad kommandokvittens och återkallat mandat före dispatch. Fäst resultat vid revision och miljö. [Enode Sandbox](https://enode.com/updates/introducing-the-new-sandbox-enhanced-device-testing-for-standout-energy-apps) |
+| 1. Tillgång och kontrakt | Bekräfta pilotplats, utrustning, testmiljö, gällande API eller protokoll och mandat per funktion. Dokumentera fält, källtider, rättigheter för lagring, visning och vidareleverans, kvoter och debiteringsgrund. För bilprov dokumenteras också exakt variant och fordonskonto. |
+| 2. Sandbox | Kör leverantörens anslutning genom Flexexas konto, API och arbete i kön. Prova frånkoppling, gammal observation, dubbletter, försenad händelse, kvotrespons, tappad kvittens och återkallat mandat före dispatch. Fäst resultat vid revision och miljö. |
 | 3. Läsning på de två bilarna | Länka varje utsedd bil med ägarens mandat. Matcha marknad, typ, variant och årsmodell mot pilotunderlaget. Mät försök och lyckade anslutningar per bil, senaste leverantörsmättid för SoC, ankomstdatum, tillgängliga kapabiliteter och lyckad återanslutning. Redovisa anslutning per bil och antal försök. Den lilla piloten kan ge ett observerat utfall per kombination, med separat prov för att uppskatta flottans anslutningsgrad. |
 | 4. Styrning och mätning | Kör start, paus, återupptagning och slutvärde med övervakad laddplats, verifierad mätpunkt och gällande platsgränser. Samla tid för begäran, kvittens, återläst tillstånd och bekräftad fysisk effekt. Stäm av leverantörens eventuella sessionstal mot mätpunktens uppmätta kWh. Logga SoC-ålder och energikälla separat. Följ [R46 och R58](charging-pilot.md). |
-| 5. Utvärdering | Redovisa användbara data- och styrfält, mätavvikelser, anrop och avtalad kostnadsbas per aktiv bil. Vid en betydande lucka, kör samma kontroller på samma pilotvariant med Smartcar där avtalet medger. Utvärdera direktadapter när ett verifierat gap motiverar arbetet. [Smartcars EU-täckning](https://smartcar.com/product/compatible-vehicles/eu) |
+| 5. Utvärdering | Redovisa användbara data- och styrfält, mätavvikelser, anrop och avtalad kostnadsbas per aktiv resurs. Vid en betydande lucka, kör samma kontroller med en annan avtalad leverantör på samma pilotutrustning. |
 
 Spara anonymiserad kombination av modellvariant, marknad, konto och firmware, revisioner, tidsserie med käll- och mottagningstid, kvot och debiteringsgrund, sessionskWh och referensmätning. Märk utfallen per funktion och provmiljö. Fullständiga fordonsidentifierare och ägaruppgifter hör hemma i pilotmiljöns avsedda system. Katalogposterna innehåller inga funktionstillstånd för drift. Inställd eller indragen åtkomst ska synas genom status och kommandogrindar även för redan köade jobb.
 
-**Nästa handling för integrationsägaren och pilotansvarig** är att tilldela Enode-klientens sandbox, utse bekräftad BEV och tillgängliggöra rätt laddplats och pilotmandat. Kör sedan punkt 2 med verifierat API-kontrakt innan verklig bil ansluts.
+**Nästa handling för integrationsägaren och pilotansvarig** är att välja en avtalad laddbox och mätpunkt för kWh-piloten. Kör testmiljöprovet med den valda adaptern. Utse och verifiera bilvarianter när separata bilfunktioner behövs.
 
 Skills för deluppdraget är repots `verification` och `investigation-mode` samt datautbytesprofilen. Inspelning av levande telemetri, databas och klientaktivering hör till respektive integrationsleverans.

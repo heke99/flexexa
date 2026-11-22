@@ -32,6 +32,10 @@ Pilotregressionen följer anslutning via kund-API, beständig planering och star
 
 ## Fysisk körning på vald styrväg
 
+Enode är senarelagt. Pilotens kWh-flöde kan börja med en avtalad laddbox, till exempel via en direkt adapter eller en laddplattform med OCPP där utrustning och avtal medger det. Kontrollera varje kapabilitet mot den aktuella kombinationen av leverantör, plats och utrustning. [Leverantörsbeslut](../DECISIONS.md#beslut-2026-11-22--leverantörsval-för-laddpiloten)
+
+Laddboxspårets planering ska utgå från ett explicit kWh-mål och faktiskt uppmätta Wh för sessionen. Dagens procentbaserade simulator använder bilens batteriprocent. Verifiera styrning, effektmätning, energimätning och eventuell biltelemetri var för sig för den valda adaptern.
+
 Använd en dedikerad pilotplats med exakt boxmodell och firmware, en avtalad kundrelation, en bil och en verifierad mätpunkt. Dokumentera laddarens styr- och avläsningsfunktioner, platsens effekt- och fasgränser, övrig last, gällande lokala reservplan, tidsgränser, möjlig manuell överstyrning och vem som följer mätningen. Välj en avtalad mättolerans med leverantören och fastställ antal godkända upprepningar före körningen. Koppla samma korrelations-ID genom kundbegäran, plan, kommando, leverantörens tillstånd och mätserie. Mät serverns och leverantörens tider var för sig.
 
 | Prov | Körsteg | Godkänt utfall och bevis |
