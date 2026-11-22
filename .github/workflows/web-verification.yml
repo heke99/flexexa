@@ -42,6 +42,8 @@ jobs:
           pnpm verify:web:source
       - name: Verify production HTTP and desktop/mobile Chromium
         run: pnpm test:web:http
+      - name: Verify customer account preview in Chromium
+        run: node scripts/web/verify-customer-account.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

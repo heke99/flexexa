@@ -5,9 +5,11 @@ Datum: 2026-11-01. Repo: heke99/flexexa. Marknad: Sverige. Domän: flexexa.com.
 ## Dokumentkarta och auktoritet
 
 - [Aktuell masterplan](FLEXEXA_MASTERPLAN_2026-11-01.md): laddabonnemang, gemensam webb/PWA, ett projekt utan monorepo och krav FX-001–016.
+- [Reviderad byggordning 2026-11-22](FLEXEXA_REVISED_BUILD_ORDER_2026-11-22.md): företagsåtkomst, första laddpilot, R42–R58 och kapacitetskrav. Den namnger `heke99/charging-subscription` som bas för befintliga ladd-, kund- och ekonomiflöden.
+- [Leverantörsbeslut 2026-11-22](DECISIONS.md#beslut-2026-11-22--leverantörsval-för-laddpiloten): Enode är senarelagt. Första fysiska provet använder vald styrväg och samma acceptanskrav.
 - [V1-baslinje](../FLEXEXA_MASTER_BUILD_PROMPT_V1.md): bevarade långsiktiga energi-/marknadskrav. Den nya planens uttryckliga strukturändringar har företräde.
 - [Beslut](DECISIONS.md), [checkpoint](PROJECT_STATE.md), [arbetslogg](work/2026-11-01-masterplan.md).
-- [Byggstandard](ENGINEERING_STANDARD.md), antagen Engineering Startkit 3.0.0.
+- [Byggstandard](ENGINEERING_STANDARD.md), antagen Engineering Startkit 3.0.0. Den reviderade planen anger v3.1.0 för nästa genomgång. [Baslinjen](progress/revised-baseline.md) redovisar paketstatus.
 - [Verifieringsarbetssätt](CI_INTEGRATION.md). Den importerade standardens generella kommandoförslag är inte nya exekverbara app-scripts.
 - Befintligt docs/progress/masterplan-coverage.json fortsätter spåra V1. Ny plan ersätter inte dess otestade punkter med godkända.
 

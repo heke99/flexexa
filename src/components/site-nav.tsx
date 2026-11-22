@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {usePathname} from "next/navigation";
+import { customerPortalEntry } from "@/lib/customer-portal-entry";
 
 const links = [
   ["/energi", "För företag"],
@@ -17,6 +18,6 @@ export function SiteNav() {
       aria-current={pathname === href || pathname.startsWith(href + "/") ? "page" : undefined}>
       {label}
     </Link>)}
-    <a href="https://ladda.flexexa.com" className="nav-account">Mitt konto</a>
+    <a href={customerPortalEntry("konto")} className="nav-account">Mitt konto</a>
   </nav>;
 }

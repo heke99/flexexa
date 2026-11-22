@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "id": "eea-co2-cars-2023-final-v28",
+    "publisher": "European Environment Agency (EEA)",
+    "rightsHolder": "Directorate-General for Climate Action (DG CLIMA)",
+    "dataset": "Monitoring of CO2 emissions from passenger cars, 2023 - Final",
+    "url": "https://sdi.eea.europa.eu/catalogue/srv/api/records/87fd2bce-6ad5-46d8-af41-f27cfd2e45a8",
+    "license": "CC-BY-4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "changes": "Selected Swedish records and normalized model names and powertrain classifications."
+  },
+  "vehicles": [
+    {
+      "id": "bmw-330e",
+      "make": "BMW",
+      "model": "330e",
+      "powertrain": "PHEV",
+      "registeredIn": "SE",
+      "registrationYear": 2023,
+      "source": {
+        "id": "eea-co2-cars-2023-final-v28",
+        "modelName": "330E",
+        "queryUrl": "https://discodata.eea.europa.eu/sql?query=SELECT+TOP+1+%5BMS%5D%2C%5BMk%5D%2C%5BCn%5D%2C%5BFt%5D%2C%5BFm%5D%2C%5BYear%5D%2C%5BStatus%5D%2C%5BVersion_file%5D+FROM+%5BCO2Emission%5D.%5Blatest%5D.%5Bco2cars_2023Fv28%5D+WHERE+%5BYear%5D%3D2023+AND+%5BStatus%5D%3D%27F%27+AND+%5BMS%5D%3D%27SE%27+AND+%5BMk%5D%3D%27BMW%27+AND+%5BCn%5D%3D%27330E%27+AND+%5BFm%5D%3D%27P%27&p=1&nrOfHits=1"
+      }
+    },
+    {
+      "id": "bmw-i4-edrive40",
+      "make": "BMW",
+      "model": "i4 eDrive40",
+      "powertrain": "BEV",
+      "registeredIn": "SE",
+      "registrationYear": 2023,
+      "source": {
+        "id": "eea-co2-cars-2023-final-v28",
+        "modelName": "I4 EDRIVE40",
+        "queryUrl": "https://discodata.eea.europa.eu/sql?query=SELECT+TOP+1+%5BMS%5D%2C%5BMk%5D%2C%5BCn%5D%2C%5BFt%5D%2C%5BFm%5D%2C%5BYear%5D%2C%5BStatus%5D%2C%5BVersion_file%5D+FROM+%5BCO2Emission%5D.%5Blatest%5D.%5Bco2cars_2023Fv28%5D+WHERE+%5BYear%5D%3D2023+AND+%5BStatus%5D%3D%27F%27+AND+%5BMS%5D%3D%27SE%27+AND+%5BMk%5D%3D%27BMW%27+AND+%5BCn%5D%3D%27I4+EDRIVE40%27+AND+%5BFm%5D%3D%27E%27&p=1&nrOfHits=1"
+      }
+    }
+  ]
+}
