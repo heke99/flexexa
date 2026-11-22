@@ -97,3 +97,9 @@ Det tidigare sandbox-API:t svarade HTTP 200 på liveness och readiness. Flexexas
 Ett nytt HTTP- och databasprov verifierar att en felaktig signatur avvisas och att `invoice.paid` utan en ännu känd prenumerationskoppling läggs för omförsök. Den riktiga arbetarloopen går vidare till en signerad `checkout.session.completed` och skapar exakt ett betalt abonnemang. Kundens konto kan läsa abonnemanget och en annan kund nekas. Omförsök och dubblerad leverans slutför båda inboxraderna utan nya abonnemang. Provet använder den lokala databasmotorn PGlite och syntetiska svar från betalningsleverantören. Migreringsparitetsprovet passerade separat i lokal PostgreSQL 17.6.
 
 Hela lokala backendsviten passerade med 402 godkända prov och ett överhoppat tjänstebundet prov.
+
+## Mätunderlag över svensk tidsgräns
+
+Det lokala roamingprovet importerade två namngivna syntetiska källor som använde samma externa referens under varsin version av klockslaget 02.30 när svensk sommartid upphörde. En post som slutade millisekunden före månadsskiftet ingick i oktober. Posten som slutade exakt vid skiftet ingick i november. Efter försegling importerades en ny revision för den ena källan. Oktoberexporten behöll de tre ursprungliga raderna med 3 200 Wh och 190 öre exklusive moms. Avstämningen mot den nya revisionen gav −150 Wh och −15 öre. PostgreSQL 17.6 godkände alla fyra proven i roamingsviten. [Produktkrav FX-007](../progress/november-product-baseline.md)
+
+Den lokala PostgreSQL-matrisen på laddkandidaten passerade 44 prov i 18 scenarier. Ytterligare 18 backendprov och ett flottprov passerade i egna databaser.
