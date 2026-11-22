@@ -103,3 +103,7 @@ Hela lokala backendsviten passerade med 402 godkända prov och ett överhoppat t
 Det lokala roamingprovet importerade två namngivna syntetiska källor som använde samma externa referens under varsin version av klockslaget 02.30 när svensk sommartid upphörde. En post som slutade millisekunden före månadsskiftet ingick i oktober. Posten som slutade exakt vid skiftet ingick i november. Efter försegling importerades en ny revision för den ena källan. Oktoberexporten behöll de tre ursprungliga raderna med 3 200 Wh och 190 öre exklusive moms. Avstämningen mot den nya revisionen gav −150 Wh och −15 öre. PostgreSQL 17.6 godkände alla fyra proven i roamingsviten. [Produktkrav FX-007](../progress/november-product-baseline.md)
 
 Den lokala PostgreSQL-matrisen på laddkandidaten passerade 44 prov i 18 scenarier. Ytterligare 18 backendprov och ett flottprov passerade i egna databaser.
+
+## Attmos AB sandbox som testleverantör
+
+Stripe-anslutningen gav skrivskyddad åtkomst till Attmos AB sandbox med `livemode=false`. Stripe listade inga priser, Checkout-sessioner eller webhook-endpoints. Flexexas betalningssandbox hade två aktiva Stripe-priskopplingar, en för förskottsköp och en för abonnemang. Båda gav `No such price` mot Attmos. Ett köp genom Flexexa kräver därför att testpriser, begränsad testnyckel och webhook-signering pekar på samma sandbox. Kontrollera den kopplingen innan en ny order skapas. Ingen live- eller sandboxkonfiguration ändrades vid kontrollen.
