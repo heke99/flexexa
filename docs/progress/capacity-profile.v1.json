@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "source": "Flexexa reviderad byggordning och beslut, 2026-11-22, avsnitt 5 och 12",
+  "thresholdStatus": "proposed_pending_pilot_and_provider_quota_review",
+  "vehicleCapacityMinimum": 12000,
+  "scenarios": {
+    "distributed": {"cohorts": 12, "fleetTenants": 12},
+    "concentrated": {"cohorts": 12, "fleetTenants": 1},
+    "quick": {"cohorts": 1, "fleetTenants": 1}
+  },
+  "fixture": {
+    "siteSizesPerCohort": [40, 60, 100, 140, 180, 220, 260],
+    "controlTenants": 2,
+    "providerCount": 2,
+    "history": {
+      "months": 12,
+      "startDate": "2025-01-01",
+      "days": 365,
+      "sessionsPerVehiclePerDay": 2,
+      "targetSessionRows": 8760000,
+      "requiredVariants": ["provider_history", "late_cdr", "credit", "billing_period"]
+    },
+    "clientRoles": {
+      "mobile": ["driver"],
+      "web": ["driver"],
+      "company": ["owner", "operations", "finance", "integration_manager"],
+      "superadmin": ["superadmin"],
+      "partner": ["integration_client"]
+    }
+  },
+  "load": {
+    "concurrentChargingSessions": 3000,
+    "normal": {"telemetryEventsPerSecond": 230, "apiRequestsPerSecond": 100},
+    "peak": {"telemetryEventsPerSecond": 600, "apiRequestsPerSecond": 300, "durationSeconds": 600},
+    "reconnect": {"additionalEvents": 12000, "durationSeconds": 60},
+    "enduranceSeconds": 86400,
+    "requiredDuringMixedLoad": ["operator_webhooks", "billing_jobs", "report_exports"],
+    "faults": ["provider_quota", "latency", "duplicate_events", "out_of_order_events", "delayed_events", "provider_outage", "worker_restart"]
+  },
+  "thresholds": {
+    "criticalReadP95Ms": 500,
+    "criticalReadUnexpectedErrorRatioMax": 0.005,
+    "durableJobAckP95Ms": 1000,
+    "telemetryStatusP95Seconds": 30,
+    "readyJobQueueP95Seconds": 60,
+    "completeFleetReplanSeconds": 900,
+    "recoverQueueAgeSeconds": 1800,
+    "closeBillingPeriodSeconds": 14400,
+    "acceptedEventsLost": 0,
+    "duplicateBusinessEffects": 0,
+    "unauthorizedAccesses": 0,
+    "confirmedSiteLimitViolations": 0
+  }
+}

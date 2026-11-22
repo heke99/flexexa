@@ -10,7 +10,7 @@
     "dev": "node scripts/web/dev.mjs",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/web/*.test.mjs scripts/quality/impact.test.mjs scripts/quality/masterplan.test.mjs && node --experimental-strip-types --test test/*.test.mjs",
+    "test": "node --test scripts/web/*.test.mjs scripts/quality/impact.test.mjs scripts/quality/masterplan.test.mjs scripts/quality/capacity-profile.test.mjs && node --experimental-strip-types --test test/*.test.mjs",
     "index:codebase": "node scripts/quality/build-codebase-index.mjs",
     "impact": "node scripts/quality/impact-analysis.mjs",
     "plan:check": "node scripts/quality/masterplan-report.mjs --check",

@@ -1,3 +1,20 @@
+# Checkpoint 2026-11-22
+
+Den [reviderade byggordningen](FLEXEXA_REVISED_BUILD_ORDER_2026-11-22.md) gäller för arbetspaketen nedan. Produktändringar integreras från `charging-subscription` main `c26766f`. Projektstatus, kapacitetsprofil och samlad verifiering utgår från `flexexa` main `37aec07`. Lokala integrationsgrenar heter `codex/flexexa-revised-plan` i respektive repo. [Baslinje och driftevidens](progress/revised-baseline.md)
+
+| Krav | Ansvar och leverans | Arbetsläge | Nästa verifiering |
+| --- | --- | --- | --- |
+| Steg 0 | Baslinje, aktuell webb, Actions, 93 fynd och Engineering Startkit | Källrevisioner och Vercel-build verifierade | Hämta Startkit v3.1.0 och matcha aktuell AWS- och databasmiljö |
+| R42–R43 | Ekonomi, mätunderlag och avtalsstyrt tillägg | Lokalt verifierad avräkning och isolerad samtidighetskontroll | Avstämning i betalningsmiljö med aktuella avtal och verkliga mätbevis |
+| R45, R56 | API, webb, mobil och företagsdelegering | Lokal behörighetskontroll och webbresan verifierade | Partner-OAuth och webhook, signerad app på fysisk enhet samt blandad last |
+| R46, R58 | Laddintegration, [laddpilot](progress/charging-pilot.md) | Simulerat start-, paus- och återupptagningsprov godkänt | Kör samma sekvens på avtalad utrustning med lokal reserv och uppmätt kWh |
+| R49 | Gridex och återhämtning av köpförsök | Lokal portal och API verifierade för återupptagen testorder | Verifiera separata avtalsutfall i avsedd partner- och betalningsmiljö |
+| R51–R58 | Kapacitetsprofil och [belastningsprov](progress/capacity-verification.md) | Testdata verifierade | Kör hela profilen med ordinarie flöden och testroller i produktionslik miljö |
+| R52 | Samordnaren, asynkrona beräkningsförslag per gemensam effektgräns | Lokal HTTP-/kö-/solververifiering | Verifiera fasgränser, faktisk platskoppling, kvoter och samlad belastning |
+| R44, R47–R48, R50 | Produkt, laddpartner och ekonomi | Öppet | Validera verifieringsmetod för fordonskoppling, CDR och dess rättelser samt villkor för marknadsprogram och mottagare |
+
+Releasebedömningen är röd. Fysisk styrning, partneravräkning, betalning och full kapacitetsacceptans har öppna grindar. Arbetspaketen ovan avser den lokala integrationsversionen. [Kravmatris och bevis](work/2026-11-22-revised-build.md)
+
 # Senaste tillägg: 2026-11-02
 
 Ansökningsflöde för elbilsabonnemang implementerat. Supabase-migrationer och smal ägarautentiseringsfunktion driftsatta. Superadmin: hekmat.h@div3rsa.com, verifierad e-postinloggning och befintlig kanonisk plattformsroll. Produktionspublicering och leveranskontroll följs i work/2026-11-02-subscription-applications.md. Nedanstående äldre checkpoint är historik.
