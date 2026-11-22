@@ -89,23 +89,21 @@ Använd `--profile-http` vid felsökning för intervall, faktisk avsändningsfö
 
 På revisioner med den simulerade telemetrihistoriken verifierar provet också att den äldre avläsningen sparas, att en identisk upprepning lämnar en rad och att en motsägande upprepning saknas i historiken. Antal, summor och versioner i historiktabellen stäms av per konto. Prov på äldre revisioner visar aktuell skuggstatus med `history.available=false`. Leverantörsingång, avräkning av sessionsenergi och fysisk mätning återstår för R53.
 
-### Tio minuter med 12 000 fordon hos ett företag
-
-Det koncentrerade delprovet kördes 22 november 2026 kl. 11.32–11.42 UTC på laddbackenden `46cf79002b628940067c0bd389cd101578a23e7e`. PostgreSQL 18.6 spelade upp 41 migrationer. På 600 sekunder behandlades 180 000 första sidor vid 300 anrop/s utan fel, tapp eller främmande fordonsrader. Fordonslistan gav 7,9 ms p95 och 28 ms p99 inklusive schemaläggning hos den lokala klienten. Samtidigt sparades alla 360 000 telemetriobservationer vid 600/s. P95 till beständig skuggstatus var 1,3 ms.
-
-Avstämningen matchade samtliga 12 000 aktuella skuggvärden och 360 003 historikrader. Den sena versionen sparades, den exakta upprepningen lagrades en gång och den motstridiga versionen avvisades. De syntetiska avläsningarna i detta delprov saknade mätarperiod. Delprovet använde den sidindelade listvägen och lokal simulatortelemetri. Produktionslik blandad last med övriga klient-, partner-, ekonomi- och leverantörsflöden återstår.
-
 ### Tiominuterstopp
 
-På `charging-subscription` vid `46cf79002b628940067c0bd389cd101578a23e7e` spelades 41 migreringar upp på PostgreSQL 18.6. Den koncentrerade körningen startade 12 000 fordon hos ett företag och två separata kontrollfordon, med syntetiska observationer där mätarepoken saknade värde. Den använde den gemensamma poolen med tio anslutningar och testklienten utan SQL-profileraren.
+På `charging-subscription` vid `46cf79002b628940067c0bd389cd101578a23e7e` spelades 41 migreringar upp på PostgreSQL 18.6. Båda körningarna den 22 november 2026 använde 12 000 fordon, två separata kontrollfordon, den gemensamma poolen med tio anslutningar och testklienten utan SQL-profileraren. Den fördelade körningen använde `--scenario distributed --metered-observations` med samma fas och varaktighet som kommandot ovan.
 
-| Mätning | Koncentrerad fördelning |
-| --- | --- |
-| Fordonslistan vid 300 anrop/s i 600 sekunder | 180 000 av 180 000 med HTTP 200. P95 7,9 ms, p99 28,0 ms. Inga tappade anrop, oväntade fel eller främmande fordonsrader. |
-| Telemetri vid 600 observationer/s i 600 sekunder | 360 000 av 360 000 beständiga. P95 1,3 ms från schemalagd observation till beständigt skuggvärde. |
-| Skugga och historik | 12 000 av 12 000 avstämda aktuella värden, exakt 13 500 042 000 syntetiska kumulativa Wh. 360 003 historikrader inkluderade tre förkontroller. Den sena observationen bevarades, upprepningen räknades en gång och den motsägande upprepningen uteslöts. |
+| Mätning | Ett företag | 12 företag |
+| --- | --- | --- |
+| Körtid, svensk tid | 12.32–12.42 | 12.44–12.54 |
+| Fordon med mätarepok | 0 | 3 000 |
+| Fordonslistan vid 300 anrop/s i 600 sekunder | 180 000 av 180 000 med HTTP 200. P95/p99 7,9/28,0 ms. | 180 000 av 180 000 med HTTP 200. P95/p99 8,1/26,7 ms. |
+| Telemetri vid 600 observationer/s i 600 sekunder | 360 000 av 360 000 beständiga. P95 1,3 ms till beständigt skuggvärde. | 360 000 av 360 000 beständiga. P95 1,4 ms till beständigt skuggvärde. |
+| Aktuell status och historik | 12 000 avstämda värden och 360 003 historikrader. | 12 000 avstämda värden och 360 003 historikrader, varav 90 003 med mätarepok. |
 
-Detta verifierar ett avgränsat lokalt topprov för sidvis listning och simulatorobservationer. Lastmatrisen för samtidiga klienter, driftprofil och fysiska leverantörer återstår.
+Vardera datamängden matchade 13 500 042 000 syntetiska kumulativa Wh. Samtliga listanrop gällde första sidan med 100 poster. Båda körningarna gav noll tappade anrop, oväntade fel eller främmande fordonsrader. Tre förkontrollrader ingår i historiken. Den sena observationen bevarades, den identiska upprepningen lagrades en gång och den motsägande upprepningen uteslöts.
+
+Detta verifierar ett avgränsat lokalt topprov för sidvis listning och simulatorobservationer. Den lokala poolgränsen på tio används även av `src/main.mjs`. `deploy/lambda.mjs` och `src/energy-api-runtime.mjs` begränsar respektive instans till en anslutning. Instansskalning, TLS över nät och full Supabase-sessionsverifiering ligger utanför den lokala mätningen med en gemensam pool och syntetisk identitetsrespons. Lastmatrisen för samtidiga klienter, driftprofil och fysiska leverantörer återstår.
 
 ## Provmatris
 
