@@ -73,6 +73,10 @@ export async function verifyBrowser(base) {
           headingFontSize: parseFloat(getComputedStyle(document.querySelector('h1')).fontSize)};`, args: [canary],
       });
       assertSnapshot(snapshot, width);
+      const accountEntry = await request(`${prefix}/execute/sync`, {
+        script: 'return document.querySelector("nav .nav-account")?.getAttribute("href");', args: [],
+      });
+      assert.equal(accountEntry, '/app/konto', 'WEB_BROWSER_PORTAL_ACCOUNT_LINK');
       const logs = await request(`${prefix}/se/log`, { type: 'browser' });
       // Asset status is separately enforced by the production HTTP test. This
       // gate checks actual JavaScript/console failures, not a missing favicon.
