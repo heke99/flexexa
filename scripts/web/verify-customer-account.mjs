@@ -1,0 +1,274 @@
+import assert from 'node:assert/strict';
+import { spawn, execFileSync } from 'node:child_process';
+import { createHash, createHmac, randomBytes, randomUUID, X509Certificate } from 'node:crypto';
+import { once } from 'node:events';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer as createHttpsServer } from 'node:https';
+import { createServer as createSocket } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+
+const host = '127.0.0.1';
+const portal = 'https://ladda.flexexa.com/';
+const overview = '/app/konto/oversikt';
+const publishableKey = 'sb_publishable_local_browser_fixture';
+const password = 'fixture-only-customer-password';
+const accounts = {
+  first: [{ id: '11111111-1111-4111-8111-111111111111', kind: 'personal', name: 'Konto Grön', role: 'owner' }],
+  second: [{ id: '22222222-2222-4222-8222-222222222222', kind: 'business', name: 'Konto Blå', role: 'billing' }],
+};
+const childProcesses = [];
+const verified = [];
+
+async function pending(expectation, timeout = 8000) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    if (await expectation()) return;
+    await delay(100);
+  }
+  assert.fail('The expected browser or service state did not appear before the deadline');
+}
+
+async function portAvailable() {
+  const socket = createSocket();
+  socket.listen(0, host);
+  await once(socket, 'listening');
+  const { port } = socket.address();
+  await new Promise((done) => socket.close(done));
+  return port;
+}
+
+function launch(executable, args, options = {}) {
+  const child = spawn(executable, args, { stdio: 'inherit', ...options });
+  let failure;
+  child.on('error', (error) => { failure = error; });
+  childProcesses.push(child);
+  return () => {
+    if (failure) throw failure;
+    assert.equal(child.exitCode, null, `${executable} stopped before verification completed`);
+  };
+}
+
+async function request(url, options = {}) {
+  return fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(6000), ...options });
+}
+
+function assertPortalRedirect(response, expected) {
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get('location'), expected);
+  assert.match(response.headers.get('cache-control') ?? '', /\bno-store\b/);
+  assert.equal(response.headers.get('set-cookie'), null);
+}
+
+const scratch = await mkdtemp(join(tmpdir(), 'flexexa-customer-browser-'));
+const certificatePath = join(scratch, 'cert.pem');
+const privateKeyPath = join(scratch, 'key.pem');
+const calls = [];
+const issued = new Map();
+const signingKey = randomBytes(32);
+let fixture;
+let startURL;
+let upstream;
+let secondRequiresMfa = true;
+let webdriver;
+let session;
+
+try {
+  execFileSync('openssl', [
+    'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=127.0.0.1',
+    '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', privateKeyPath, '-out', certificatePath,
+  ], { stdio: 'ignore' });
+  const cert = await readFile(certificatePath);
+  const certPin = createHash('sha256').update(new X509Certificate(cert).publicKey.export({ type: 'spki', format: 'der' })).digest('base64');
+  fixture = createHttpsServer({ cert, key: await readFile(privateKeyPath) }, async (req, res) => {
+    const url = new URL(req.url, upstream);
+    const reply = (status, body) => {
+      res.writeHead(status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': startURL,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, apikey, x-client-info, x-supabase-api-version, content-type',
+        'Cache-Control': 'no-store',
+      });
+      res.end(body === undefined ? '' : JSON.stringify(body));
+    };
+    try {
+      if (req.method === 'OPTIONS') return reply(204);
+      const bearer = req.headers.authorization?.replace(/^Bearer /, '');
+      if (url.pathname === '/auth/v1/token' && req.method === 'POST' && url.searchParams.get('grant_type') === 'password') {
+        const input = JSON.parse(await Array.fromAsync(req).then((chunks) => Buffer.concat(chunks)));
+        const actor = input.email === 'first@example.test' ? 'first' : input.email === 'second@example.test' ? 'second' : null;
+        if (!actor || input.password !== password || req.headers.apikey !== publishableKey) return reply(400, { message: 'Invalid credentials' });
+        const timestamp = Math.floor(Date.now() / 1000);
+        const user = { id: randomUUID(), email: input.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+        const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+        const jwt = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: user.id, iss: `${upstream}/auth/v1`, aud: 'authenticated', role: 'authenticated', aal: 'aal1', session_id: randomUUID(), iat: timestamp, exp: timestamp + 3600 })}`;
+        const accessToken = `${jwt}.${createHmac('sha256', signingKey).update(jwt).digest('base64url')}`;
+        issued.set(accessToken, actor);
+        calls.push({ method: req.method, path: url.pathname, actor });
+        return reply(200, { user, access_token: accessToken, refresh_token: `fixture-refresh-${actor}`, expires_in: 3600, token_type: 'bearer' });
+      }
+      const actor = issued.get(bearer);
+      calls.push({ method: req.method, path: url.pathname, actor, scope: url.searchParams.get('scope') });
+      if (!actor) return reply(401, { error: 'UNAUTHENTICATED' });
+      if (url.pathname === '/auth/v1/logout' && req.method === 'POST') {
+        issued.delete(bearer);
+        return reply(204);
+      }
+      if (url.pathname === '/v1/accounts' && req.method === 'GET' && !url.search) {
+        if (actor === 'second' && secondRequiresMfa) return reply(403, { error: 'MFA_REQUIRED' });
+        return reply(200, { items: accounts[actor] });
+      }
+      return reply(404, { error: 'UNEXPECTED_FIXTURE_ROUTE' });
+    } catch {
+      return reply(500, { error: 'FIXTURE_ERROR' });
+    }
+  });
+  fixture.listen(0, host);
+  await once(fixture, 'listening');
+  upstream = `https://${host}:${fixture.address().port}`;
+  const [enabledPort, disabledPort, driverPort] = await Promise.all([portAvailable(), portAvailable(), portAvailable()]);
+  const nextBin = resolve('node_modules/next/dist/bin/next');
+  const launchNext = (port, enabled) => {
+    const nextAlive = launch(process.execPath, [nextBin, 'start', '--hostname', host, '--port', String(port)], {
+      env: { ...process.env, NODE_ENV: 'production', NODE_EXTRA_CA_CERTS: certificatePath,
+        FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW: String(enabled), FLEXEXA_CUSTOMER_AUTH_URL: upstream,
+        FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY: publishableKey, FLEXEXA_CUSTOMER_API_URL: upstream },
+    });
+    const base = `http://${host}:${port}`;
+    return pending(async () => {
+      nextAlive();
+      try {
+        const response = await request(base);
+        await response.body?.cancel();
+        return response.ok;
+      } catch { return false; }
+    }).then(() => base);
+  };
+  startURL = await launchNext(enabledPort, true);
+  const disabled = await launchNext(disabledPort, false);
+  const hostileQuery = '?next=https%3A%2F%2Foutside.invalid&code=ignored-fixture';
+  assertPortalRedirect(await request(disabled + '/app/konto' + hostileQuery), portal);
+  assertPortalRedirect(await request(disabled + overview + hostileQuery), portal);
+  const enabled = await request(startURL + '/app/konto' + hostileQuery);
+  assertPortalRedirect(enabled, overview);
+  const unauthenticated = await request(startURL + '/api/kundkonto');
+  assert.equal(unauthenticated.status, 401);
+  assert.match(unauthenticated.headers.get('cache-control') ?? '', /\bno-store\b/);
+  assert.equal(calls.length, 0, 'Unauthenticated HTTP and portal routes must stay local to Next');
+
+  const driver = process.env.CHROMEDRIVER || join(process.env.CHROMEWEBDRIVER || '/usr/local/share/chromedriver-linux64', 'chromedriver');
+  const driverAlive = launch(driver, [`--port=${driverPort}`, `--allowed-ips=${host}`]);
+  webdriver = async (path, body, method = body === undefined ? 'GET' : 'POST') => {
+    const response = await request(`http://${host}:${driverPort}${path}`, {
+      method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const { value } = await response.json();
+    assert.ok(response.ok && !value?.error, `WebDriver ${method} ${path} ${value?.error ?? response.status}`);
+    return value;
+  };
+  await pending(async () => {
+    driverAlive();
+    try { return (await webdriver('/status')).ready; } catch { return false; }
+  });
+  const browser = await webdriver('/session', { capabilities: { alwaysMatch: {
+    browserName: 'chrome', 'goog:chromeOptions': {
+      ...(process.env.CHROME_BINARY ? { binary: process.env.CHROME_BINARY } : {}),
+      args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking', `--ignore-certificate-errors-spki-list=${certPin}`],
+    }, timeouts: { pageLoad: 15000, script: 5000, implicit: 0 },
+  } } });
+  session = `/session/${browser.sessionId}`;
+  const browserCommand = (path, body) => webdriver(session + path, body);
+  const execute = (script, ...args) => browserCommand('/execute/sync', { script, args });
+  const text = () => execute('return document.body.innerText;');
+  const viewport = (width, height, mobile) => browserCommand('/goog/cdp/execute', {
+    cmd: 'Emulation.setDeviceMetricsOverride', params: { width, height, deviceScaleFactor: 1, mobile },
+  });
+  const elementKey = 'element-6066-11e4-a52e-4f735466cecf';
+  const enter = async (label, value) => {
+    const element = await execute('return [...document.querySelectorAll("label")].find(label => label.innerText.trim() === arguments[0])?.control;', label);
+    assert.ok(element?.[elementKey], `Missing form control ${label}`);
+    await browserCommand(`/element/${element[elementKey]}/value`, { text: value });
+  };
+  const clickButton = async (label) => {
+    const element = await execute('return [...document.querySelectorAll("button")].find(button => button.innerText.trim() === arguments[0]);', label);
+    assert.ok(element?.[elementKey], `Missing button ${label}`);
+    await browserCommand(`/element/${element[elementKey]}/click`, {});
+  };
+  const assertFallback = async () => {
+    const fallback = await execute('return [...document.links].find(link => link.innerText.trim() === "Öppna kundportalen")?.href;');
+    assert.equal(fallback, portal, 'The account overview must expose the fixed portal fallback');
+  };
+  const login = async (actor) => {
+    await enter('E-post', `${actor}@example.test`);
+    await enter('Lösenord', password);
+    await clickButton('Logga in');
+  };
+  const assertNoStorage = async () => {
+    const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
+    for (const token of [...issued.keys(), 'fixture-refresh-', password, ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
+      assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
+    }
+    assert.doesNotMatch(persisted, /sb-[^"\s]*-auth-token/);
+  };
+
+  await viewport(1440, 900, false);
+  await browserCommand('/url', { url: startURL + overview });
+  await pending(async () => (await text()).includes('Endast nödvändiga'));
+  await clickButton('Endast nödvändiga');
+  await pending(async () => /Logga in/.test(await text()));
+  await assertFallback();
+  await login('first');
+  await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
+  assert.match(await text(), /Konto Grön · Privat · Ägare/);
+  assert.doesNotMatch(await text(), /Konto Blå/);
+  assert.equal(await execute('return document.querySelector("main h2")?.textContent?.trim();'), 'Mina konton');
+  await assertNoStorage();
+  await clickButton('Logga ut');
+  await pending(async () => /Logga in/.test(await text()) && !/Konto Grön/.test(await text()));
+  await assertNoStorage();
+  await pending(() => calls.some(({ path, actor, scope }) => path === '/auth/v1/logout' && actor === 'first' && scope === 'local'));
+  verified.push('desktop password sign-in, scoped accounts, session-local logout and storage');
+
+  await viewport(390, 844, true);
+  await login('second');
+  await pending(async () => (await text()).includes('Fortsätt i kundportalen för att bekräfta din inloggning.'));
+  assert.doesNotMatch(await text(), /Konto Grön|Konto Blå/);
+  await assertFallback();
+  await assertNoStorage();
+  secondRequiresMfa = false;
+  await browserCommand('/url', { url: startURL + overview });
+  await pending(async () => /Logga in/.test(await text()));
+  await login('second');
+  await pending(async () => /Mina konton[\s\S]*Konto Blå/.test(await text()));
+  assert.match(await text(), /Konto Blå · Företag · Ekonomi/);
+  assert.doesNotMatch(await text(), /Konto Grön/);
+  assert.equal(await execute('return document.documentElement.scrollWidth <= window.innerWidth;'), true);
+  await assertNoStorage();
+  await browserCommand('/refresh', {});
+  await pending(async () => /Logga in/.test(await text()) && !/Konto Blå/.test(await text()));
+  assert.deepEqual(calls.filter(({ path }) => path.startsWith('/v1/')).map(({ method, path, actor }) => [method, path, actor]), [
+    ['GET', '/v1/accounts', 'first'], ['GET', '/v1/accounts', 'second'], ['GET', '/v1/accounts', 'second'],
+  ]);
+  verified.push('mobile MFA fallback, separate second identity, and reload');
+  console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
+} finally {
+  if (session) {
+    try { await webdriver(session, undefined, 'DELETE'); } catch { /* Browser processes are stopped below. */ }
+  }
+  await Promise.all(childProcesses.map(async (child) => {
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+    const exit = once(child, 'exit');
+    child.kill('SIGTERM');
+    await Promise.race([exit, delay(2000, undefined, { ref: false })]);
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  }));
+  if (fixture?.listening) {
+    await new Promise((done) => {
+      fixture.close(done);
+      fixture.closeAllConnections();
+    });
+  }
+  await rm(scratch, { force: true, recursive: true });
+}
