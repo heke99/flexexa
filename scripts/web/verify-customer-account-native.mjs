@@ -101,24 +101,36 @@ try {
     assert.equal(response.status, 200);
     return (await response.json()).access_token;
   };
-  const [recipient, outsider, billing] = await Promise.all([scenario.recipient, scenario.outsider, scenario.billing].map(tokenFor));
+  const [recipient, outsider, billing, owner] = await Promise.all([
+    scenario.recipient, scenario.outsider, scenario.billing, scenario.owner,
+  ].map(tokenFor));
+  const productPath = `/v1/accounts/${scenario.company}/product-access`;
+  const requested = await fetchLocal(`${stackApi}${productPath}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productKey: 'grid_rewards' }),
+  });
+  assert.equal(requested.status, 202);
+  await requested.body?.cancel();
 
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
-  let upstreamReads = 0, unexpectedRequests = 0, redirectUpstream = false;
+  let upstreamReads = 0, productReads = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
-    if (request.method !== 'GET' || request.url !== '/v1/accounts' || request.headers.cookie) {
+    const accountList = request.url === '/v1/accounts';
+    const productAccess = request.url === productPath;
+    if (request.method !== 'GET' || (!accountList && !productAccess) || request.headers.cookie) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
     }
-    upstreamReads += 1;
+    if (accountList) upstreamReads += 1;
+    else productReads += 1;
     if (redirectUpstream) {
       response.writeHead(307, { Location: '/unexpected' }).end();
       return;
     }
     try {
-      const result = await fetchLocal(`${stackApi}/v1/accounts`, {
+      const result = await fetchLocal(`${stackApi}${request.url}`, {
         headers: { Authorization: request.headers.authorization ?? '' },
       });
       response.writeHead(result.status, { 'Content-Type': result.headers.get('content-type') });
@@ -138,15 +150,16 @@ try {
   });
   const nextOrigin = `http://${loopback}:${nextPort}`;
   await awaitHealthy(next, `${nextOrigin}/`, 'Next production build');
-  const account = async (token, status) => {
-    const response = await fetchLocal(`${nextOrigin}/api/kundkonto`, {
-      headers: { Cookie: 'flexexa_admin=fixture-must-stay-local', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  const requestAccount = async (path, authorization, status) => {
+    const response = await fetchLocal(`${nextOrigin}/api/kundkonto${path}`, {
+      headers: { Cookie: 'flexexa_admin=fixture-must-stay-local', ...(authorization ? { Authorization: authorization } : {}) },
     });
     assert.equal(response.status, status);
     assert.match(response.headers.get('cache-control') ?? '', /\bno-store\b/);
     assert.equal(response.headers.get('set-cookie'), null);
     return response.json();
   };
+  const account = (token, status) => requestAccount('', token ? `Bearer ${token}` : null, status);
   await account(null, 401);
   assert.equal(upstreamReads, 0);
   const signatureStart = recipient.lastIndexOf('.') + 1;
@@ -166,8 +179,27 @@ try {
   redirectUpstream = true;
   assert.deepEqual(await account(recipient, 503), { error: 'UNAVAILABLE' });
   assert.equal(upstreamReads, 5);
+  redirectUpstream = false;
+
+  const products = (accountId, authorization, status) => requestAccount(`/${accountId}/produkter`, authorization, status);
+  assert.deepEqual(await products(scenario.company, null, 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await products(scenario.company, 'Basic Zml4dHVyZQ==', 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await products('not-an-account-id', `Bearer ${billing}`, 400), { error: 'INVALID_INPUT' });
+  assert.equal(productReads, 0);
+  assert.deepEqual(await products(scenario.company, `Bearer ${outsider}`, 403), { error: 'ACCESS_DENIED' });
+  const access = await products(scenario.company, `Bearer ${billing}`, 200);
+  assert.ok(Array.isArray(access.items));
+  assert.match(access.requests?.[0]?.requested_at ?? '', /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.deepEqual({ ...access, items: access.items.toSorted((a, b) => a.product_key.localeCompare(b.product_key)) }, {
+    items: ['charging_subscription', 'electricity_contract'].map(product_key => ({
+      product_key, status: 'active', version: 1, expires_at: null, enabled: true,
+    })),
+    requests: [{ product_key: 'grid_rewards', requested_at: access.requests[0].requested_at }],
+  });
+  assert.equal(productReads, 2);
+  assert.equal(upstreamReads, 5);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next customer accounts through native PostgreSQL with two isolated customers and a billing member.');
+  console.log('Verified Next customer accounts and product access through native PostgreSQL with two isolated customers and a billing member.');
 } finally {
   await stop(next);
   if (tls?.listening) {
