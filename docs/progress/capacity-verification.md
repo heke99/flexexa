@@ -46,6 +46,32 @@ En separat sekund per belastningsnivå med `--legacy-list` visade att opaginerad
 
 Det lokala provet täcker delar av R51, R52 och R56. Återstående miljöprov omfattar full historik, fysisk laddning, klientbyggen och deras cache, betalnings- och webhooktrafik, beroendekvoter, fasgränser, driftens resursprofil och hela tidsprofilen för lasttest.
 
+### Blandad lokal läsning och behörighetsgränser
+
+`--mixed-routes` kör de ordinarie HTTP-vägarna med en fast blandning av fall. Provet använder första och mittersta fordonssidan, registreringssökning med matchande och icke-matchande verifieringsfilter, produktåtkomst och ekonomibehörig läsning av företagets egna order. Partnerspåret registrerar en testintegration och skapar riktiga medgivanden via API för 36 syntetiska privata konton. Varje sådant konto har en delad och en privat bil. Partnerns svar stäms av mot exakt den delade bilen. De 72 extra testbilarna tillhör behörighetsprovet utöver de 12 000 flottfordonen.
+
+De avsiktliga nekandena omfattar ett främmande konto, en pekare för ett annat konto, förarens försök att läsa ekonomi, avsaknad partneridentitet, ett delat åtkomstbevis utanför partnerkontraktet och en obehörig plattformsadministrativ översikt. Det ordinarie statusanropet för plattformsroll verifierar att den vanliga användaren saknar administratörsrollen.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --seconds 1 --mixed-routes --telemetry --skip-reconnect
+```
+
+Resultatet redovisar schemalagda anrop, roll, statuskoder, väntade utfall, tapp och avvikelser per fall. P95, p99 och andelen oväntade utfall gäller de giltiga läsvägarna, med schemalagda anrop till respektive väg som nämnare för felfrekvensen. Avsiktliga nekanden redovisas med väntad status och felkod i egna fall. En framgång på en spärrad väg eller en lyckad läsning med oväntat innehåll ger felkod från provet efter att resultaten har skrivits ut. Använd fas- och varaktighetsflaggorna nedan för längre lokala mätningar av samma blandning.
+
+På laddbackenden `e8a63803060019348eae2644cbb8f094dfcd70a0` kördes fem sekunder vardera vid 100 och 300 anrop/s i båda fördelningarna. Provet gav 4 000 av 4 000 väntade HTTP-utfall, inklusive 1 032 exakta nekanden, och inga otillåtna eller oväntade svar. Samtliga sju giltiga vägar klarade svarstidsgränsen vid 100 anrop/s.
+
+| Femsekunderstopp vid 300 anrop/s och 600 simulatorobservationer/s | Ett företag | 12 företag |
+| --- | --- | --- |
+| Svarstid | Sju av sju läsvägar klarade p95-målet. Sökning hade högst p95 med 103,4 ms. | Samtliga sju läsvägar överskred p95-målet. P95 var 1 256,1–1 665,1 ms, högst för partnerläsning. |
+| Simulatorobservationer | 3 000 av 3 000 beständiga. | 2 940 av 3 000 beständiga. Schemaläggaren nådde taket för samtidiga testobservationer. |
+
+Ett separat profilerat tresekundersprov med 12 företag på `dd53cb20e8cb721ad7a7f651c6fef994fbff4a27` gav 900 väntade HTTP-utfall av 900 och 1 800 beständiga observationer av 1 800. Sökningens HTTP-p95 var 405,5 ms. Sökfrågan hade 8,17 ms p95 inklusive SQL-rundtur och söktjänstens poolväntan var 183,3 ms p95. Partnerlistan hade 556,1 ms HTTP-p95, 187,5 ms för poolväntan och 2,56 ms för transaktionslåset. I detta prov var anslutningsväntan större än själva sökfrågan och partnerns låsväntan.
+
+Detta är ett avgränsat blandprov av HTTP-kontrakt, behörighet och lokal samtidighet. Driftlik belastning med hela produktmixen och längre uthållighet återstår för R51 och R56.
+
 ## Lokalt telemetriprov R53
 
 Lägg till `--telemetry` för att prova den befintliga simulatoradaptern, arbetarrollen och uppdateringen av aktuell status i båda fordonsfördelningarna. Samma loopback-server används för autentiserad uppdatering och HTTP-läsning. Använd `--telemetry --skip-reconnect` för ett kort utvecklingsprov.

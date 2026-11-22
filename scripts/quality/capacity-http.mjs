@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { capacityHttpProbe } from './capacity-http-profile.mjs';
+import { grantMixedPartnerScope, measureMixedReads, seedMixedRoutes } from './capacity-mixed-routes.mjs';
 import { profile, vehicleRows } from './capacity-profile.mjs';
 import { telemetryFixture } from './capacity-telemetry.mjs';
 
@@ -29,10 +30,12 @@ const { values } = parseArgs({ options: {
   'profile-http': { type: 'boolean' },
   phase: { type: 'string', default: 'all' },
   'peak-seconds': { type: 'string' },
+  'mixed-routes': { type: 'boolean' },
 } });
 assert.ok(values.charging, 'Supply --charging with the path to the charging-subscription checkout');
 assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
 assert.ok(!values['metered-observations'] || values.telemetry, '--metered-observations requires --telemetry');
+assert.ok(!values['mixed-routes'] || !values['legacy-list'], '--mixed-routes requires paginated routes');
 assert.ok(values.scenario === undefined || ['distributed', 'concentrated'].includes(values.scenario),
   '--scenario must be distributed or concentrated');
 assert.ok(['all', 'normal', 'peak', 'reconnect'].includes(values.phase), '--phase must be all, normal, peak, or reconnect');
@@ -60,6 +63,7 @@ const { Service } = serviceModule;
 const { server } = httpModule;
 const { SupabaseAuth } = authModule;
 const { runFleetPlanJob, solveFleet } = fleetWorker;
+const partnerModule = values['mixed-routes'] ? await importFile(join(checkout, 'src/partner-energy.mjs')) : null;
 const telemetryModules = values.telemetry ? {
   ...await importFile(join(checkout, 'src/energy-service.mjs')),
   ...await importFile(join(checkout, 'src/energy-device-adapter.mjs')),
@@ -70,6 +74,7 @@ const [numpyVersion, ortoolsVersion] = execFileSync(values.python,
 const migrations = (await readdir(join(checkout, 'database'))).filter(name => /^\d+.*\.sql$/u.test(name)).sort();
 const applicationFiles = ['src/service.mjs', 'src/read-model.mjs', ...migrations.map(name => `database/${name}`)];
 if (values.telemetry) applicationFiles.push('src/energy-service.mjs', 'src/energy-device-adapter.mjs');
+if (partnerModule) applicationFiles.push('src/partner-energy.mjs', 'src/product-access.mjs', 'src/http.mjs');
 const digest = createHash('sha256');
 for (const name of applicationFiles) digest.update(name).update('\0').update(await readFile(join(checkout, name)));
 const implementationSha256 = digest.digest('hex');
@@ -132,7 +137,7 @@ async function seed(pool, fixture, issueToken) {
   const tenants = new Map();
   for (const name of [...tenantIds, 'control-1', 'control-2']) {
     const id = randomUUID();
-    tenants.set(name, { id, vehicleIds: [], vehicleSet: new Set() });
+    tenants.set(name, { id, vehicleIds: [], vehicleSet: new Set(), plates: [] });
     await pool.query("INSERT INTO charging_subscription.accounts(id,kind,name) VALUES($1,'business',$2)", [id, name]);
     if (name !== 'control-2') await pool.query(`
       INSERT INTO charging_subscription.product_access(account_id,product_key,status,version,approved_by,reason)
@@ -150,6 +155,7 @@ async function seed(pool, fixture, issueToken) {
     const tenant = tenants.get(vehicle.tenantId);
     tenant.vehicleIds.push(ids[index]);
     tenant.vehicleSet.add(ids[index]);
+    tenant.plates.push(plates[index]);
     testVehicleIds.set(vehicle.vehicleId, ids[index]);
     return tenant.id;
   });
@@ -166,7 +172,7 @@ async function seed(pool, fixture, issueToken) {
     await pool.query('INSERT INTO charging_subscription.identities(issuer,subject,principal_id) VALUES($1,$2,$3)',
       [issuer, subject, principal]);
     await pool.query('INSERT INTO charging_subscription.memberships VALUES($1,$2,$3)', [tenant.id, principal, role]);
-    return { token: issueToken(subject), tenant, principal };
+    return { token: issueToken(subject), tenant, principal, role };
   }
 
   const fleet = tenantIds.map(name => tenants.get(name));
@@ -191,7 +197,14 @@ async function seed(pool, fixture, issueToken) {
   for (let index = 0; index < totalActors; index += 1) {
     loadActors.push(await actor(fleet[index % fleet.length], index % 2 === 0 ? 'owner' : 'billing'));
   }
-  return { owners, control, subscriptionOnly, driver, subscription, loadActors, testVehicleIds };
+  const controls = { cursorActors: [], financeDrivers: [] };
+  if (values['mixed-routes']) {
+    for (let index = 0; index < 16; index += 1) {
+      controls.cursorActors.push(await actor(control.tenant, 'owner'));
+      controls.financeDrivers.push(await actor(driver.tenant, 'driver'));
+    }
+  }
+  return { owners, control, subscriptionOnly, driver, subscription, loadActors, testVehicleIds, ...controls };
 }
 
 function authenticationFixture() {
@@ -208,12 +221,13 @@ function authenticationFixture() {
   });
   return {
     auth,
-    issueToken(subject) {
+    issueToken(subject, { oauthClientId } = {}) {
       const now = Math.floor(Date.now() / 1000);
       const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
       const token = `${encode({ alg: 'HS256' })}.${encode({
         iss: issuer, sub: subject, session_id: randomUUID(), aud: 'authenticated', role: 'authenticated',
         aal: 'aal1', iat: now, exp: now + 3600, amr: [{ method: 'password', timestamp: now }],
+        ...(oauthClientId ? { client_id: oauthClientId } : {}),
       })}.${randomUUID()}`;
       users.set(token, { id: subject, email: `${subject}@capacity.invalid`, email_confirmed_at: new Date().toISOString() });
       return token;
@@ -222,11 +236,13 @@ function authenticationFixture() {
 }
 
 function createRequest(origin) {
-  return async function request(actor, resource, { account = actor.tenant.id, method = 'GET', body, key } = {}) {
-    const response = await fetch(`${origin}/v1/accounts/${account}/${resource}`, {
+  return async function request(actor, resource, { account = actor.tenant.id, method = 'GET', body, key, partnerProof } = {}) {
+    const path = resource.startsWith('/v1/') ? resource : `/v1/accounts/${account}/${resource}`;
+    const response = await fetch(origin + path, {
       method,
       headers: {
         authorization: `Bearer ${actor.token}`,
+        ...(partnerProof ? { 'x-flexexa-partner-authorization': `Bearer ${partnerProof}` } : {}),
         ...(body !== undefined ? { 'content-type': 'application/json', 'idempotency-key': key } : {}),
       },
       ...(body !== undefined ? { body } : {}),
@@ -257,6 +273,10 @@ async function verifyVehicleAccess(request, fixtures, db) {
       assert.ok(result.body.items.length <= 100);
       gathered.push(...result.body.items.map(row => row.id));
       cursor = result.body.nextCursor;
+      if (values['mixed-routes'] && gathered.length === Math.floor(actor.tenant.vehicleIds.length / 200) * 100) {
+        assert.ok(cursor, 'Expected a midpoint cursor for the capacity fixture');
+        actor.tenant.fixturePage = { after: cursor, offset: gathered.length };
+      }
       pages += 1;
     } while (cursor);
     assert.deepEqual(gathered, actor.tenant.vehicleIds);
@@ -448,17 +468,20 @@ async function scenario(cluster, name) {
     const probe = values['profile-http'] ? capacityHttpProbe(pool) : null;
     const db = new Database(probe?.pool ?? pool);
     const service = new Service(db);
-    probe?.wrap(service, db);
     const vehicles = [...vehicleRows(name)];
     const { auth, issueToken } = authenticationFixture();
     const fixtures = await seed(pool, vehicles, issueToken);
+    const mixed = partnerModule ? await seedMixedRoutes(pool, db, fixtures, { issuer, issueToken }) : null;
+    const partnerEnergy = partnerModule ? new partnerModule.PartnerEnergyService(service, null) : null;
+    probe?.wrap(service, db, partnerEnergy);
     const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service, {
       metered: values['metered-observations'],
     }) : null;
     if (telemetry) await telemetry.seed(pool, vehicles, fixtures);
-    listener = server({ service, auth, fleetPlanningEnabled: true, energy: telemetry?.energy });
+    listener = server({ service, auth, fleetPlanningEnabled: true, energy: telemetry?.energy, partnerEnergy });
     const port = await bindLoopback(listener);
     const request = createRequest(`http://127.0.0.1:${port}`);
+    if (mixed) await grantMixedPartnerScope(request, mixed);
     const access = await verifyVehicleAccess(request, fixtures, db);
     const explain = await probe?.explain(db, auth, fixtures.owners.values().next().value);
     const refresh = await telemetry?.verifyRefresh(request, fixtures);
@@ -466,10 +489,13 @@ async function scenario(cluster, name) {
     const telemetrySamples = [];
     const profiles = {};
     let driverRevocation, planner;
+    const read = mixed
+      ? (rate, duration) => measureMixedReads(request, { ...fixtures, ...mixed }, rate, duration, percentile)
+      : (rate, duration) => measureReads(request, fixtures, rate, duration);
     if (hasPhase('normal')) {
       probe?.start();
       const normal = await Promise.allSettled([
-        measureReads(request, fixtures, normalRate),
+        read(normalRate, seconds),
         verifyPlanning(request, fixtures, db, vehicles),
         verifyDriverRevocation(request, fixtures),
         telemetry?.measure('normal', seconds),
@@ -484,7 +510,7 @@ async function scenario(cluster, name) {
     if (hasPhase('peak')) {
       probe?.start();
       const peak = await Promise.allSettled([
-        measureReads(request, fixtures, peakRate, peakSeconds),
+        read(peakRate, peakSeconds),
         telemetry?.measure('peak', peakSeconds),
       ]);
       profiles.peak = probe?.stop();
@@ -503,9 +529,14 @@ async function scenario(cluster, name) {
       databaseVersion, nodeVersion: process.version, migrationsReplayed: migrations.length, startedAtUtc,
       finishedAtUtc: new Date().toISOString(), fixtureVehicles: vehicles.length, controlVehicles: 2,
       vehicleAccess: { ...access, ...driverRevocation }, readSamples, planner,
+      ...(mixed ? { mixedRoutes: { privateAccounts: mixed.privateCustomers.length,
+        privateFixtureVehicles: mixed.privateCustomers.length * 2 } } : {}),
       ...(telemetry ? { telemetry: { refresh, samples: telemetrySamples, reconciliation } } : {}),
       ...(probe ? { profiling: { explain, ...profiles } } : {}),
     }));
+    assert.ok(!mixed || readSamples.every(sample => sample.routeSamples.every(route =>
+      route.wrongPayload === 0 && route.unauthorizedSuccess === 0)),
+    'A mixed route delivered an unexpected payload or authorized a denied request');
   } finally {
     if (listener) await close(listener);
     await pool.end();

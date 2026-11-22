@@ -11,7 +11,11 @@ function queryType(sql) {
   if (sql.includes('auth_cutoffs')) return 'session-cutoff';
   if (sql.includes('identities')) return 'identity';
   if (sql.includes('memberships')) return 'membership';
-  if (sql.includes('charging_subscription.vehicles')) return 'vehicle-query';
+  if (sql.includes('charging_subscription.vehicles')) {
+    if (sql.includes('regexp_replace')) return 'vehicle-search-query';
+    if (sql.includes('(plate,id)>')) return 'vehicle-cursor-query';
+    return 'vehicle-query';
+  }
   if (sql.includes('set_config') || sql.startsWith('SET LOCAL')) return 'transaction-context';
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return 'transaction-control';
   return 'other';
@@ -71,12 +75,24 @@ export function capacityHttpProbe(pool) {
         return result.rows[0]['QUERY PLAN'][0];
       });
     },
-    wrap(service, db) {
+    wrap(service, db, partnerEnergy) {
       const rate = service.rate.bind(service);
       const page = service.page.bind(service);
       const transaction = db.transaction.bind(db);
       service.rate = (...args) => scope.run('rate', () => timed('rate', 'service', () => rate(...args)));
-      service.page = (...args) => scope.run('vehicle-page', () => timed('vehicle-page', 'service', () => page(...args)));
+      service.page = (...args) => {
+        const resource = args[2];
+        const options = args[3];
+        let group = resource === 'vehicles' ? 'vehicle-page' : `${resource}-page`;
+        if (resource === 'vehicles' && options?.after) group = 'vehicle-cursor-page';
+        if (resource === 'vehicles' && (options?.search || options?.verification)) group = 'vehicle-search-page';
+        return scope.run(group, () => timed(group, 'service', () => page(...args)));
+      };
+      if (partnerEnergy) {
+        const vehicles = partnerEnergy.vehicles.bind(partnerEnergy);
+        partnerEnergy.vehicles = (...args) =>
+          scope.run('partner-vehicles', () => timed('partner-vehicles', 'service', () => vehicles(...args)));
+      }
       db.transaction = (role, work) => scope.run(scope.getStore() ?? role, () => transaction(role, work));
     },
     pool: {
