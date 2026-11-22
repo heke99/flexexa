@@ -16,6 +16,7 @@ const publishableKey = 'sb_publishable_local_browser_fixture';
 const password = 'fixture-only-customer-password';
 const incorrectCode = '135790';
 const validCode = '648275';
+const validEmailCode = '825174';
 const verifiedFactor = { id: '44444444-4444-4444-8444-444444444444', factor_type: 'totp', status: 'verified' };
 const secondFactors = [
   { id: '55555555-5555-4555-8555-555555555555', factor_type: 'totp', status: 'unverified' },
@@ -100,23 +101,31 @@ let startURL;
 let upstream;
 let secondHasTotp = false;
 let heldTotpReply;
+let heldEmailReply;
+let otpRequests = 0;
+let availableEmailCode = false;
 let webdriver;
 let session;
 
-function issueAuthSession(actor, user, sessionId, assurance) {
+function issueAuthSession(actor, user, sessionId, assurance, signInMethod = 'password') {
   const timestamp = Math.floor(Date.now() / 1000);
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const claims = { sub: user.id, iss: `${upstream}/auth/v1`, aud: 'authenticated', role: 'authenticated',
     aal: assurance, session_id: sessionId, iat: timestamp, exp: timestamp + 3600,
-    amr: (assurance === 'aal2' ? ['password', 'totp'] : ['password']).map((method) => ({ method, timestamp })) };
+    amr: (assurance === 'aal2' ? [signInMethod, 'totp'] : [signInMethod]).map((method) => ({ method, timestamp })) };
   const jwt = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(claims)}`;
   const accessToken = `${jwt}.${createHmac('sha256', signingKey).update(jwt).digest('base64url')}`;
-  issued.set(accessToken, { actor, user, sessionId, assurance, signedOut: false });
+  issued.set(accessToken, { actor, user, sessionId, assurance, signInMethod, signedOut: false });
   return { user, access_token: accessToken, refresh_token: `fixture-refresh-${actor}`, expires_in: 3600, token_type: 'bearer' };
 }
 
 async function requestBody(req) {
   return JSON.parse(await Array.fromAsync(req).then((chunks) => Buffer.concat(chunks)));
+}
+
+function fixtureUser(actor, email) {
+  return { id: userIds[actor], email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {},
+    factors: actor === 'second' && secondHasTotp ? secondFactors : [], email_confirmed_at: new Date().toISOString(), created_at: new Date().toISOString() };
 }
 
 try {
@@ -146,14 +155,35 @@ try {
         const input = await requestBody(req);
         const actor = input.email === 'first@example.test' ? 'first' : input.email === 'second@example.test' ? 'second' : null;
         if (!actor || input.password !== password || req.headers.apikey !== publishableKey) return reply(400, { message: 'Invalid credentials' });
-        const user = { id: userIds[actor], email: input.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {},
-          factors: actor === 'second' && secondHasTotp ? secondFactors : [], email_confirmed_at: new Date().toISOString(), created_at: new Date().toISOString() };
         calls.push({ method: req.method, path: url.pathname, actor });
-        return reply(200, issueAuthSession(actor, user, randomUUID(), 'aal1'));
+        return reply(200, issueAuthSession(actor, fixtureUser(actor, input.email), randomUUID(), 'aal1'));
+      }
+      if (url.pathname === '/auth/v1/otp' && req.method === 'POST') {
+        const input = await requestBody(req);
+        otpRequests += 1;
+        calls.push({ method: req.method, path: url.pathname });
+        if (input.email !== 'first@example.test' || input.create_user !== false || input.code_challenge || url.search || req.headers.apikey !== publishableKey) {
+          return reply(400, { code: 'unexpected_otp_request' });
+        }
+        if (otpRequests === 2) return reply(429, { code: 'over_email_send_rate_limit' });
+        availableEmailCode = true;
+        return reply(200, {});
+      }
+      if (url.pathname === '/auth/v1/verify' && req.method === 'POST') {
+        const input = await requestBody(req);
+        calls.push({ method: req.method, path: url.pathname });
+        if (!availableEmailCode || input.type !== 'email' || input.email !== 'first@example.test' || input.token !== validEmailCode || req.headers.apikey !== publishableKey) {
+          return reply(403, { code: 'otp_expired', message: 'Invalid fixture email code' });
+        }
+        availableEmailCode = false;
+        const hold = heldEmailReply;
+        heldEmailReply = undefined;
+        if (hold) await hold;
+        return reply(200, issueAuthSession('first', fixtureUser('first', input.email), randomUUID(), 'aal1', 'otp'));
       }
       const login = issued.get(bearer);
-      const { actor, user, sessionId, assurance, signedOut } = login ?? {};
-      calls.push({ method: req.method, path: url.pathname, actor, assurance, scope: url.searchParams.get('scope') });
+      const { actor, user, sessionId, assurance, signInMethod, signedOut } = login ?? {};
+      calls.push({ method: req.method, path: url.pathname, actor, assurance, signInMethod, scope: url.searchParams.get('scope') });
       if (!actor || signedOut) return reply(401, { error: 'UNAUTHENTICATED' });
       if (url.pathname === '/auth/v1/logout' && req.method === 'POST') {
         for (const issuedSession of issued.values()) {
@@ -177,7 +207,7 @@ try {
         const hold = heldTotpReply;
         heldTotpReply = undefined;
         if (hold) await hold;
-        return reply(200, issueAuthSession(actor, user, sessionId, 'aal2'));
+        return reply(200, issueAuthSession(actor, user, sessionId, 'aal2', signInMethod));
       }
       if (url.pathname.startsWith('/v1/accounts') && actor === 'second' && assurance !== 'aal2') {
         return reply(403, { error: 'MFA_REQUIRED' });
@@ -204,12 +234,13 @@ try {
   fixture.listen(0, host);
   await once(fixture, 'listening');
   upstream = `https://${host}:${fixture.address().port}`;
-  const [enabledPort, disabledPort, driverPort] = await Promise.all([portAvailable(), portAvailable(), portAvailable()]);
+  const [enabledPort, disabledPort, passwordOnlyPort, driverPort] = await Promise.all(Array.from({ length: 4 }, portAvailable));
   const nextBin = resolve('node_modules/next/dist/bin/next');
-  const launchNext = (port, enabled) => {
+  const launchNext = (port, enabled, emailOtp = false) => {
     const nextAlive = launch(process.execPath, [nextBin, 'start', '--hostname', host, '--port', String(port)], {
       env: { ...process.env, NODE_ENV: 'production', NODE_EXTRA_CA_CERTS: certificatePath,
         FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW: String(enabled), FLEXEXA_CUSTOMER_AUTH_URL: upstream,
+        FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW: String(emailOtp),
         FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY: publishableKey, FLEXEXA_CUSTOMER_API_URL: upstream },
     });
     const base = `http://${host}:${port}`;
@@ -222,8 +253,14 @@ try {
       } catch { return false; }
     }).then(() => base);
   };
-  startURL = await launchNext(enabledPort, true);
+  startURL = await launchNext(enabledPort, true, true);
   const disabled = await launchNext(disabledPort, false);
+  const passwordOnly = await launchNext(passwordOnlyPort, true);
+  const passwordOnlyPage = await request(passwordOnly + overview);
+  assert.equal(passwordOnlyPage.status, 200);
+  const passwordOnlyHtml = await passwordOnlyPage.text();
+  assert.match(passwordOnlyHtml, /Lösenord/);
+  assert.doesNotMatch(passwordOnlyHtml, /Logga in med e-postkod/);
   const hostileQuery = '?next=https%3A%2F%2Foutside.invalid&code=ignored-fixture';
   assertPortalRedirect(await request(disabled + '/app/konto' + hostileQuery), portal);
   assertPortalRedirect(await request(disabled + overview + hostileQuery), portal);
@@ -289,7 +326,8 @@ try {
   };
   const assertNoStorage = async () => {
     const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
-    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
+    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode,
+      'first@example.test', 'second@example.test', ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
     assert.doesNotMatch(persisted, /sb-[^"\s]*-auth-token/);
@@ -425,6 +463,80 @@ try {
     ['POST', challengePath], ['POST', verifyPath], ['POST', challengePath], ['POST', verifyPath], ['POST', challengePath], ['POST', verifyPath],
   ]);
   verified.push('mobile MFA fallback, wrong code, late cancellation, AAL2 account and product reads, and reload');
+
+  const emailNotice = 'Om adressen har ett konto och en kod kan skickas får du ett mejl.';
+  const startEmailLogin = async () => {
+    await clickButton('Logga in med e-postkod');
+    await enter('E-post', 'FIRST@example.test');
+    await clickButton('Skicka kod');
+    await pending(async () => (await text()).includes(emailNotice));
+  };
+  const verifyEmailCode = async (code) => {
+    await enter('Kod från e-post', code);
+    await clickButton('Bekräfta e-postkod');
+  };
+  const emailOtpStart = businessCalls().length;
+  await execute(`const nativeTimeout = window.setTimeout;
+    window.setTimeout = (callback, timeout, ...args) => {
+      const id = nativeTimeout(callback, timeout, ...args);
+      if (timeout >= 59_000 && timeout <= 60_000) {
+        window.setTimeout = nativeTimeout;
+        window.finishOtpCooldown = () => { clearTimeout(id); callback(...args); };
+      }
+      return id;
+    };`);
+  await startEmailLogin();
+  assert.equal(otpRequests, 1);
+  assert.equal(await execute(`return [...document.querySelectorAll('main button')]
+    .find(button => button.textContent === 'Skicka ny kod')?.disabled;`), true);
+  assert.doesNotMatch(await text(), /Mina konton|Konto Blå|Konto Grön/);
+  await assertNoStorage();
+  await execute('window.finishOtpCooldown();');
+  await pending(() => execute(`return [...document.querySelectorAll('main button')]
+    .some(button => button.textContent === 'Skicka ny kod' && !button.disabled);`));
+  await clickButton('Skicka ny kod');
+  await pending(async () => otpRequests === 2 && (await text()).includes(emailNotice));
+  await verifyEmailCode(incorrectCode);
+  await pending(async () => (await text()).includes('Koden kunde inte bekräftas. Försök igen.'));
+  assert.equal(businessCalls().length, emailOtpStart);
+  assert.equal(await execute(`return document.querySelector('#account-email-code')?.value;`), '');
+
+  const delayedEmail = Promise.withResolvers();
+  heldEmailReply = delayedEmail.promise;
+  try {
+    await verifyEmailCode(validEmailCode);
+    await pending(() => calls.filter(({ path }) => path === '/auth/v1/verify').length === 2);
+    await clickButton('Avbryt');
+    await pending(async () => /Logga in/.test(await text()) && !(await text()).includes('Bekräfta e-postkoden'));
+    await clickButton('Logga in med e-postkod');
+    assert.equal(await execute(`return [...document.querySelectorAll('main button')]
+      .find(button => button.textContent === 'Skicka kod')?.disabled;`), true);
+  } finally {
+    delayedEmail.resolve();
+  }
+  await pending(() => calls.some(({ path, actor, signInMethod, scope }) =>
+    path === '/auth/v1/logout' && actor === 'first' && signInMethod === 'otp' && scope === 'local'));
+  assert.equal(businessCalls().length, emailOtpStart, 'A cancelled email verification must not read accounts');
+  await assertNoStorage();
+
+  await browserCommand('/refresh', {});
+  await pending(async () => (await text()).includes('Logga in med e-postkod'));
+  await startEmailLogin();
+  await verifyEmailCode(validEmailCode);
+  await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
+  assert.doesNotMatch(await text(), /Konto Blå/);
+  assert.deepEqual(businessCalls().slice(emailOtpStart).map(({ path, actor, signInMethod }) => [path, actor, signInMethod]), [
+    ['/v1/accounts', 'first', 'otp'],
+  ]);
+  assert.equal(new URL(await browserCommand('/url')).search, '');
+  assert.equal(otpRequests, 3);
+  await assertNoStorage();
+  await clickButton('Logga ut');
+  await pending(async () => /Logga in/.test(await text()) && !/Konto Grön/.test(await text()));
+  await pending(() => calls.filter(({ path, actor, signInMethod, scope }) =>
+    path === '/auth/v1/logout' && actor === 'first' && signInMethod === 'otp' && scope === 'local').length === 2);
+  await assertNoStorage();
+  verified.push('opt-in email OTP, throttled resend, wrong code, stale verification cleanup and correct account');
   console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
 } finally {
   if (session) {

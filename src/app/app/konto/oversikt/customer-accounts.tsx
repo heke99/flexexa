@@ -10,8 +10,20 @@ const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kund
 const productsUnavailable = "Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const expired = "Sessionen har löpt ut. Logga in igen.";
 const invalidCode = "Koden kunde inte bekräftas. Försök igen.";
+const emailCodeNotice = "Om adressen har ett konto och en kod kan skickas får du ett mejl.";
+const emailCodeCooldownMs = 60_000;
 type CustomerLogin = { client: SupabaseClient; session: Session };
 type VerificationFactor = { id: string; name: string };
+type EmailCodeStep = "address" | { address: string };
+
+function customerAuth(authUrl: string, publishableKey: string) {
+  return createClient(authUrl, publishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: (input, init) => fetch(input, {
+      ...init, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
+    }) },
+  });
+}
 
 async function releaseCustomerAuth(client?: SupabaseClient) {
   if (!client) return null;
@@ -47,7 +59,9 @@ function accountError(code: string) {
   }
 }
 
-export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string; publishableKey: string }) {
+export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
+  authUrl: string; publishableKey: string; emailOtpEnabled: boolean;
+}) {
   const active = useRef<CustomerLogin | null>(null);
   const pending = useRef<{ login: CustomerLogin; factors: VerificationFactor[] } | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -62,6 +76,8 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
   const [accounts, setAccounts] = useState<CustomerAccount[] | null>(null);
   const [products, setProducts] = useState<ProductSelection | null>(null);
   const [factors, setFactors] = useState<VerificationFactor[] | null>(null);
+  const [emailStep, setEmailStep] = useState<EmailCodeStep | null>(null);
+  const [emailRetryAt, setEmailRetryAt] = useState(0);
 
   const clear = useCallback((reason = "") => {
     const client = active.current?.client ?? pending.current?.login.client;
@@ -70,6 +86,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     clearTimeout(expiration.current);
     active.current = null;
     pending.current = null;
+    setEmailStep(null);
     setFactors(null);
     setAccounts(null);
     setProducts(null);
@@ -166,6 +183,12 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     };
   }, [clear, load]);
 
+  useEffect(() => {
+    if (!emailRetryAt) return;
+    const timer = setTimeout(() => setEmailRetryAt(0), Math.max(0, emailRetryAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [emailRetryAt]);
+
   async function showProducts(account: CustomerAccount, productKey?: RequestedProductKey) {
     const login = active.current;
     if (!login || working) return;
@@ -211,6 +234,13 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     }
   }
 
+  function openSession(client: SupabaseClient, session: Session) {
+    active.current = { client, session };
+    clearTimeout(expiration.current);
+    expiration.current = setTimeout(() => { void clear(expired); }, sessionDuration(session));
+    void load();
+  }
+
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (operation.current || active.current || pending.current) return;
@@ -224,24 +254,81 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
     let client: SupabaseClient | undefined;
     let handedOff = false;
     try {
-      client = createClient(authUrl, publishableKey, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-        global: { fetch: (input, init) => fetch(input, {
-          ...init, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
-        }) },
-      });
+      client = customerAuth(authUrl, publishableKey);
       const { data, error } = await client.auth.signInWithPassword(credentials);
       if (operation.current !== request) return;
       if (error || !data.session) {
         setMessage(error?.status === 429 ? accountError("RATE_LIMITED") : "Inloggningen lyckades inte. Kontrollera dina uppgifter eller fortsätt i kundportalen.");
         return;
       }
-      active.current = { client, session: data.session };
       handedOff = true;
-      expiration.current = setTimeout(() => { void clear(expired); }, sessionDuration(data.session));
-      void load();
+      openSession(client, data.session);
     } catch {
       if (operation.current === request) setMessage("Inloggningen kunde inte slutföras. Försök igen eller öppna kundportalen.");
+    } finally {
+      if (!handedOff) void releaseCustomerAuth(client);
+      if (operation.current === request) {
+        operation.current = null;
+        setWorking(false);
+      }
+    }
+  }
+
+  async function requestEmailCode() {
+    if (!emailOtpEnabled || !emailStep || operation.current || active.current || pending.current || Date.now() < emailRetryAt) return;
+    const address = (emailStep === "address" ? email.current?.value : emailStep.address)?.trim().toLowerCase();
+    if (!address || address.length > 254 || !/^[^@\s]+@[^@\s]+$/.test(address)) return;
+    const request = new AbortController();
+    operation.current = request;
+    setWorking(true);
+    setMessage("");
+    setEmailRetryAt(Date.now() + emailCodeCooldownMs);
+    let client: SupabaseClient | undefined;
+    try {
+      client = customerAuth(authUrl, publishableKey);
+      await client.auth.signInWithOtp({ email: address, options: { shouldCreateUser: false } });
+    } catch {
+      // Delivery and account existence are both unknown to this screen.
+    } finally {
+      client?.auth.dispose();
+      if (operation.current === request) {
+        operation.current = null;
+        setWorking(false);
+        setEmailStep({ address });
+        setMessage(emailCodeNotice);
+      }
+    }
+  }
+
+  async function confirmEmailCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!emailOtpEnabled || !emailStep || emailStep === "address" || operation.current || active.current || pending.current) return;
+    const digits = code.current?.value ?? "";
+    event.currentTarget.reset();
+    if (!/^[0-9]{6}$/.test(digits)) {
+      setMessage(invalidCode);
+      return;
+    }
+    const request = new AbortController();
+    operation.current = request;
+    setWorking(true);
+    setMessage("");
+    let client: SupabaseClient | undefined;
+    let handedOff = false;
+    try {
+      client = customerAuth(authUrl, publishableKey);
+      const { data, error } = await client.auth.verifyOtp({ email: emailStep.address, token: digits, type: "email" });
+      if (operation.current !== request) return;
+      const session = data.session;
+      if (error || !session || session.user.email?.trim().toLowerCase() !== emailStep.address) {
+        setMessage(invalidCode);
+        return;
+      }
+      handedOff = true;
+      setEmailStep(null);
+      openSession(client, session);
+    } catch {
+      if (operation.current === request) setMessage(invalidCode);
     } finally {
       if (!handedOff) void releaseCustomerAuth(client);
       if (operation.current === request) {
@@ -298,10 +385,7 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
       }
       pending.current = null;
       setFactors(null);
-      clearTimeout(expiration.current);
-      active.current = { client: login.client, session };
-      expiration.current = setTimeout(() => { void clear(expired); }, sessionDuration(session));
-      void load();
+      openSession(login.client, session);
     } catch {
       if (operation.current === request) {
         if (upgraded) {
@@ -359,12 +443,37 @@ export function CustomerAccounts({ authUrl, publishableKey }: { authUrl: string;
         <button type="submit" className="button primary" disabled={working}>{working ? "Bekräftar …" : "Bekräfta kod"}</button>
         <button type="button" className="button" onClick={() => { void clear(); }}>Avbryt</button>
       </div>
-    </form> : <form className="wizard-form" method="post" onSubmit={signIn} aria-busy={working}>
+    </form> : emailStep === "address" ? <form key="email-address" className="wizard-form" method="post" onSubmit={event => {
+      event.preventDefault();
+      void requestEmailCode();
+    }} aria-busy={working}>
+      <h2>Logga in med e-postkod</h2>
+      <label>E-post<input id="account-otp-email" ref={email} type="email" autoComplete="username" maxLength={254} required disabled={working} /></label>
+      <div className="actions">
+        <button type="submit" className="button primary" disabled={working || emailRetryAt > 0}>Skicka kod</button>
+        <button type="button" className="button" onClick={() => { void clear(); }}>Avbryt</button>
+      </div>
+      {emailRetryAt > 0 && !working && <p>Vänta en minut mellan kodförfrågningar.</p>}
+    </form> : emailStep ? <form key="email-code" className="wizard-form" method="post" onSubmit={confirmEmailCode} aria-busy={working}>
+      <h2>Bekräfta e-postkoden</h2>
+      <label>Kod från e-post<input id="account-email-code" ref={code} type="text" inputMode="numeric" autoComplete="one-time-code"
+        pattern="[0-9]{6}" maxLength={6} required disabled={working} /></label>
+      <div className="actions">
+        <button type="submit" className="button primary" disabled={working}>Bekräfta e-postkod</button>
+        <button type="button" className="button" disabled={working || emailRetryAt > 0} onClick={() => { void requestEmailCode(); }}>Skicka ny kod</button>
+        <button type="button" className="button" onClick={() => { void clear(); }}>Avbryt</button>
+      </div>
+      {emailRetryAt > 0 && !working && <p>Vänta en minut mellan kodförfrågningar.</p>}
+    </form> : <form key="password" className="wizard-form" method="post" onSubmit={signIn} aria-busy={working}>
       <h2>Logga in</h2>
       {/* Unnamed inputs stay out of native form submissions before hydration. */}
       <label>E-post<input id="account-email" ref={email} type="email" autoComplete="username" maxLength={254} required disabled={working} /></label>
       <label>Lösenord<input id="account-password" ref={password} type="password" autoComplete="current-password" required disabled={working} /></label>
       <button type="submit" className="button primary" disabled={working}>{working ? "Loggar in …" : "Logga in"}</button>
+      {emailOtpEnabled && <button type="button" className="button" disabled={working} onClick={() => {
+        setMessage("");
+        setEmailStep("address");
+      }}>Logga in med e-postkod</button>}
     </form>}
     {message && <p className="fine" role="status">{message}</p>}
   </section>;
