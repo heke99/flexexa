@@ -91,3 +91,9 @@ Betalningssandboxens separata journalsteg `20261119183453` hämtades skrivskydda
 ## Tillgänglighet för externa kund- och betalningsprov
 
 Det tidigare sandbox-API:t svarade HTTP 200 på liveness och readiness. Flexexas publika Auth-nyckelendpoint i Supabase svarade HTTP 200. Båda tillgängliga Stripe-kopplingarna rapporterade samma Trafexa-konto med `livemode=true`. De gav därför ingen verifierad väg till ett separat Flexexa-testkonto för ett nytt köp. Ingen betalnings- eller Auth-fixture skapades i de externa tjänsterna. Lokalt passerade 50 riktade betalnings- och arbetartester. Next mot PostgreSQL verifierade konto-, ekonomi- och förarbehörigheter med testidentiteter. Chromium verifierade lösenord, MFA, e-postkod, kontobyte och utloggning med samma testgräns. [Acceptansmatris](../progress/masterplan-remaining-2026-11-22.md)
+
+## Lokal betalningskedja med omkastade webhookar
+
+Ett nytt HTTP- och databasprov verifierar att en felaktig signatur avvisas och att `invoice.paid` utan en ännu känd prenumerationskoppling läggs för omförsök. Den riktiga arbetarloopen går vidare till en signerad `checkout.session.completed` och skapar exakt ett betalt abonnemang. Kundens konto kan läsa abonnemanget och en annan kund nekas. Omförsök och dubblerad leverans slutför båda inboxraderna utan nya abonnemang. Provet använder den lokala databasmotorn PGlite och syntetiska svar från betalningsleverantören. Migreringsparitetsprovet passerade separat i lokal PostgreSQL 17.6.
+
+Hela lokala backendsviten passerade med 402 godkända prov och ett överhoppat tjänstebundet prov.
