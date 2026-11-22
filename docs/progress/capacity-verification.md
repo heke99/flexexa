@@ -59,6 +59,15 @@ node scripts/quality/capacity-http.mjs \
 
 Provet matar syntetiska avläsningar genom den befintliga adaptervalideringen och den riktiga statusuppdateringen i PostgreSQL. Det kör 230 schemalagda avläsningar/s tillsammans med listning, planjobb och återkallelse, följt av 600/s tillsammans med sidvis fordonsläsning. Återanslutningsvågen omfattar ytterligare 12 000 avläsningar under en minut ovanpå 230/s. Den avgränsade toppens längd styrs av `--seconds`. Återanslutningsvågen har en fast minut enligt [lastprofilen](capacity-profile.v1.json).
 
+Välj `--scenario concentrated` för alla 12 000 fordon i ett företag eller `--scenario distributed` för 12 företag. Välj `--phase normal`, `--phase peak` eller `--phase reconnect` för en enskild fas. Med `--peak-seconds 600` kör toppfasen de föreskrivna tio minuterna med den paginerade fordonslistan och syntetiska telemetriobservationer. Kör belastningsprovet utan annan pågående lokal CPU-belastning. HTTP-server, databas och lastgenerator delar resurser i den lokala miljön.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --scenario concentrated --phase peak --peak-seconds 600 --telemetry
+```
+
 HTTP-provet verifierar att en identisk version kan upprepas, att en sen version och en motsägande upprepning avvisas och att en felaktig leverantörsidentitet aldrig skrivs. Förare och främmande konton saknar åtkomst. Därefter stämmer provet av sista version, mättidpunkt och lagrade kumulativa Wh mot skickade avläsningar per fordon, samt läser tillbaka den senast lagrade statusen via konto-API:t. Telemetritiden mäts från schemalagd avläsning till beständigt skuggvärde. En fullständigt genomförd körning återger slutresultat för båda fördelningarna i JSONL.
 
 Den 22 november 2026 kördes båda fördelningarna mot `charging-subscription` vid `4cfcfcf8bf49428f4ab33ee31e28f1634b7c09bf` på PostgreSQL 18.6 och Node 24.19.0. Alla 29 950 schemalagda avläsningar per fördelning skrevs utan fel eller tapp, inklusive 13 800 normala avläsningar och 12 000 återanslutningar i minutprovet. Samtliga 12 000 skuggvärden per fördelning och den kumulativa mätarsumman 2 384 225 619 Wh matchade syntetiskt facit. Tabellen visar p95 från planerad avläsning till beständigt skuggvärde.
@@ -70,7 +79,13 @@ Den 22 november 2026 kördes båda fördelningarna mot `charging-subscription` v
 
 Alla 4 000 anrop till den paginerade fordonslistan lyckades med rätt konto under det korta blandade provet. När samtliga fordon tillhörde ett företag gav 300 listanrop/s samtidigt med 600 avläsningar/s en p95 på 778 ms för fordonslistan. Det överskred den föreslagna R51-gränsen på 500 ms.
 
-Den tillgängliga kodvägen sparar aktuell simulatorstatus. Äldre eller motsägande versioner avvisas utan en egen historikrad. Provresultatet omfattar därför versionsskydd och deduplicerad aktuell energimätare. Råhändelser, separat leverantörsingång, avräkning av sessionsenergi, fysisk mätning och tio minuters topplast återstår för R53.
+Ett uppföljande femsekundersprov i en ledig lokal miljö på `01724850a6daf23e5b63b5d61dab55acfc7373e8` gav 8,5 ms p95 för listan i det koncentrerade scenariot och 8,9 ms i det fördelade. Den första sidans SQL-plan använde `vehicles_account_plate_id_idx` och tog 0,384 ms i ett separat instrumenterat prov. Instrumenteringen mätte 1,90 ms p95 inklusive SQL-rundtur för fordonsfrågan och 1,82 ms väntetid p95 på databasanslutning i listtjänsten. En fordonsläsning gjorde 36 SQL-anrop över två autentiserade transaktioner. Händelseslingans belastning var 62 procent och p95-fördröjningen 10,6 ms. Det lokala uppföljningsprovet återskapade ingen isolerad flaskhals i fordonsfrågan.
+
+Ett instrumenterat tvåsekundersprov på `6147b61472ff34c8ca492537019be24582ec4ace` pågick samtidigt som andra lokala processer. Det koncentrerade scenariot gav 1 341,9 ms p95 för listan. P95 för väntan på anslutning var 667,6 ms i åtkomstkontrollen och 675,5 ms i listtjänsten. Själva fordonsfrågan tog 5,49 ms p95 inklusive rundtur och testklientens schemalagda fördröjning till avsändning var 14,9 ms p95. Händelseslingans belastning var 91,9 procent och 11 av 1 200 telemetriobservationer nådde testets kötak. De höga svarstiderna sammanföll med väntan i den gemensamma poolen på tio anslutningar. Resultatet motiverar isolerad lokal mätning och särskild uppföljning av väntetid och resursfördelning i lastmiljön.
+
+Använd `--profile-http` vid felsökning för intervall, faktisk avsändningsfördröjning, SQL-plan och fasprofiler för kontoåtkomst, fordonsfråga och poolväntan. Varje steg behåller högst 4 096 latensmätningar för percentiler. Antalet anrop och summan av tider omfattar alla anrop. Kör tidsjämförelser med samma instrumenteringsläge.
+
+På revisioner med den simulerade telemetrihistoriken verifierar provet också att den äldre avläsningen sparas, att en identisk upprepning lämnar en rad och att en motsägande upprepning saknas i historiken. Antal, summor och versioner i historiktabellen stäms av per konto. Prov på äldre revisioner visar aktuell skuggstatus med `history.available=false`. Leverantörsingång, avräkning av sessionsenergi och fysisk mätning återstår för R53.
 
 ## Provmatris
 

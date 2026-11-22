@@ -4,21 +4,24 @@ import { profile } from './capacity-profile.mjs';
 
 const capabilities = ['read_soc', 'start_charge', 'stop_charge', 'set_power_limit'];
 
-function reading(asset, version) {
+function reading(asset, version, reportedAt = Date.parse('2026-11-22T00:00:00Z') + version * 1_000) {
   return {
     accountId: asset.accountId, vehicleId: asset.vehicleId,
     make: 'Synthetic', model: 'Capacity fixture',
     batteryKwh: 60, efficiency: 0.9, minKw: 0, maxKw: 11, capabilities,
     soc: 20 + (asset.number + version) % 60, plugged: true, powerKw: 3.6,
     energyWh: asset.number * 10 + version * 3,
-    reportedAt: Date.parse('2026-11-22T00:00:00Z') + version * 1_000, stateVersion: version,
+    reportedAt, stateVersion: version,
   };
 }
 
 export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEnergyAdapter }, db, service) {
   const snapshots = new Map();
   const latest = new Map();
+  const historyExpected = new Map();
   let refreshCalls = 0;
+  let nextVersion = 1_000;
+  let historyAvailable = false;
   const simulation = {
     mode: 'simulation',
     async getAsset({ vehicleId }) {
@@ -32,6 +35,10 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
   let assets;
 
   async function seed(pool, vehicles, fixtures) {
+    const { rows: [history] } = await pool.query(`
+      SELECT to_regclass('charging_subscription.simulated_energy_telemetry') IS NOT NULL AS available
+    `);
+    historyAvailable = history.available;
     assets = vehicles.map((vehicle, index) => ({
       accountId: fixtures.owners.get(vehicle.tenantId).tenant.id,
       vehicleId: fixtures.testVehicleIds.get(vehicle.vehicleId),
@@ -47,6 +54,18 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     `, [assets.map(asset => asset.accountId), assets.map(asset => asset.vehicleId), JSON.stringify(capabilities)]);
   }
 
+  function recordExpectedHistory(sample) {
+    if (!historyAvailable) return;
+    let totals = historyExpected.get(sample.accountId);
+    if (!totals) {
+      totals = { observations: 0, cumulativeEnergyWh: 0, versionSum: 0 };
+      historyExpected.set(sample.accountId, totals);
+    }
+    totals.observations += 1;
+    totals.cumulativeEnergyWh += sample.energyWh;
+    totals.versionSum += sample.stateVersion;
+  }
+
   async function verifyRefresh(request, fixtures) {
     const asset = assets[0];
     const owner = fixtures.owners.values().next().value;
@@ -54,6 +73,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     const post = (actor, account = actor.tenant.id) =>
       request(actor, route, { account, method: 'POST', body: '{}', key: 'read-only-simulation-refresh' });
     const initial = reading(asset, 1);
+    const late = reading(asset, 2);
     const fresh = reading(asset, 3);
     snapshots.set(asset.vehicleId, initial);
     const priorCalls = refreshCalls;
@@ -67,7 +87,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     assert.equal(newer.status, 200);
     assert.equal(newer.body.stateVersion, 3);
     assert.equal((await post(owner)).status, 200);
-    for (const invalid of [reading(asset, 2), { ...fresh, energyWh: fresh.energyWh + 2 }]) {
+    for (const invalid of [late, { ...fresh, energyWh: fresh.energyWh + 2 }]) {
       snapshots.set(asset.vehicleId, invalid);
       const rejected = await post(owner);
       assert.equal(rejected.status, 409);
@@ -84,23 +104,36 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     assert.equal((await request(fixtures.control, 'energy-vehicles', { account: asset.accountId })).status, 403);
     assert.deepEqual((await request(fixtures.control, 'energy-vehicles')).body.items, []);
     latest.set(asset.vehicleId, fresh);
+    if (historyAvailable) {
+      const { rows: samples } = await db.transaction('worker', client => client.query(`
+        SELECT state_version, energy_wh, reported_at FROM charging_subscription.simulated_energy_telemetry
+        WHERE account_id=$1 AND vehicle_id=$2 AND provider_key='simulator' ORDER BY state_version
+      `, [asset.accountId, asset.vehicleId]));
+      const expected = [initial, late, fresh];
+      assert.deepEqual(samples.map(row => [row.state_version, Number(row.energy_wh), +row.reported_at]),
+        expected.map(sample => [sample.stateVersion, sample.energyWh, sample.reportedAt]));
+      for (const sample of expected) recordExpectedHistory(sample);
+    }
     return { refreshAccepted: 3, exactReplay: 1, conflictsRejected: 2, scopeDenials: 4, wrongProviderAssetRejected: 1 };
   }
 
-  function scheduledEvents(kind, duration) {
+  function* scheduledEvents(kind, duration) {
     const baseline = profile.load.normal.telemetryEventsPerSecond;
     const rate = kind === 'peak' ? profile.load.peak.telemetryEventsPerSecond : baseline;
-    const waves = [{ count: duration * rate, rate, source: 'normal_observation' }];
-    if (kind === 'reconnect') waves.push({
-      count: profile.load.reconnect.additionalEvents,
-      rate: profile.load.reconnect.additionalEvents / duration,
-      source: 'reconnect_observation',
-    });
-    const versions = { normal: 1_000, peak: 10_000, reconnect: 30_000 };
-    return waves.flatMap(wave => Array.from({ length: wave.count }, (_, index) => ({
-      target: assets[index % assets.length], offsetMs: index * 1_000 / wave.rate, source: wave.source,
-    }))).sort((left, right) => left.offsetMs - right.offsetMs)
-      .map((event, index) => ({ ...event, version: versions[kind] + index }));
+    const baseCount = duration * rate;
+    const reconnectCount = kind === 'reconnect' ? profile.load.reconnect.additionalEvents : 0;
+    let base = 0;
+    let reconnect = 0;
+    while (base < baseCount || reconnect < reconnectCount) {
+      const nextBase = base < baseCount ? base * 1_000 / rate : Infinity;
+      const nextReconnect = reconnect < reconnectCount ? reconnect * duration * 1_000 / reconnectCount : Infinity;
+      const reconnecting = nextReconnect < nextBase;
+      const index = reconnecting ? reconnect++ : base++;
+      // This step is coprime to the 12,000-vehicle corpus, spreading successive observations across all fleet cohorts.
+      const target = assets[index * 7_919 % assets.length];
+      const source = reconnecting ? 'reconnect_observation' : kind === 'peak' ? 'peak_observation' : 'normal_observation';
+      yield { target, offsetMs: Math.min(nextBase, nextReconnect), source, version: nextVersion++ };
+    }
   }
 
   async function measure(kind, duration) {
@@ -110,10 +143,13 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     const perVehicle = new Map();
     const committedBySource = {};
     const failures = {};
+    let scheduled = 0;
     let dropped = 0;
     let maxInFlight = 0;
     const started = performance.now();
+    const startedAt = Date.now();
     for (const event of events) {
+      scheduled += 1;
       const when = started + event.offsetMs;
       const waiting = when - performance.now();
       if (waiting > 0) await delay(waiting);
@@ -122,7 +158,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
         continue;
       }
       const { target } = event;
-      const next = reading(target, event.version);
+      const next = reading(target, event.version, startedAt + Math.floor(event.offsetMs));
       const adapter = simulatedEnergyAdapter({ ...simulation, getAsset: async () => next });
       const previous = perVehicle.get(target.vehicleId) ?? Promise.resolve();
       const operation = previous.then(async () => {
@@ -130,6 +166,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
         await db.transaction('worker', client => storeEnergyShadow(client, sample));
         latencies.push(performance.now() - when);
         latest.set(target.vehicleId, next);
+        recordExpectedHistory(next);
         committedBySource[event.source] = (committedBySource[event.source] ?? 0) + 1;
       }).catch(error => {
         const code = error.code ?? 'TELEMETRY_WRITE_ERROR';
@@ -147,10 +184,10 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     latencies.sort((left, right) => left - right);
     const p95 = latencies[Math.ceil(latencies.length * 0.95) - 1];
     return {
-      phase: kind, scheduledSeconds: duration, scheduled: events.length, committed: latencies.length,
+      phase: kind, scheduledSeconds: duration, scheduled, committed: latencies.length,
       committedBySource, dropped, failures, maxInFlight, observedSeconds: Number(observedSeconds.toFixed(3)),
       p95MsScheduledToShadowCommit: p95 === undefined ? null : Number(p95.toFixed(1)),
-      allObservationsCommitted: latencies.length === events.length,
+      allObservationsCommitted: latencies.length === scheduled,
     };
   }
 
@@ -181,8 +218,32 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
       assert.deepEqual([row.state_version, row.energy_wh === null ? null : Number(row.energy_wh)],
         expected ? [expected.stateVersion, expected.energyWh] : [null, null]);
     }
+    const history = historyAvailable ? await reconcileHistory() : { available: false };
     return { shadowRows: stored.rows.length, ownerVisibleVehicles: visible.body.items.length,
-      storedEnergyWh, expectedEnergyWh, incorrectRows: 0 };
+      storedEnergyWh, expectedEnergyWh, incorrectRows: 0, history };
+  }
+
+  async function reconcileHistory() {
+    const { rows } = await db.transaction('worker', client => client.query(`
+      SELECT account_id, count(*)::int AS observations, count(DISTINCT state_version)::int AS distinct_versions,
+             sum(energy_wh) AS cumulative_energy_wh, sum(state_version) AS version_sum
+      FROM charging_subscription.simulated_energy_telemetry
+      WHERE provider_key='simulator'
+      GROUP BY account_id
+    `));
+    assert.equal(rows.length, historyExpected.size);
+    let observations = 0;
+    for (const row of rows) {
+      assert.ok(historyExpected.has(row.account_id));
+      assert.equal(row.observations, row.distinct_versions);
+      assert.deepEqual({
+        observations: row.observations, cumulativeEnergyWh: Number(row.cumulative_energy_wh),
+        versionSum: Number(row.version_sum),
+      }, historyExpected.get(row.account_id));
+      observations += row.observations;
+    }
+    return { available: true, accounts: rows.length, observations, exactReplayDeduplicated: true,
+      lateObservationRetained: true, conflictingReplayExcluded: true };
   }
 
   return { energy, seed, verifyRefresh, measure, reconcile };

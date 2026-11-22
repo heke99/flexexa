@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { capacityHttpProbe } from './capacity-http-profile.mjs';
 import { profile, vehicleRows } from './capacity-profile.mjs';
 import { telemetryFixture } from './capacity-telemetry.mjs';
 
@@ -23,11 +24,24 @@ const { values } = parseArgs({ options: {
   'legacy-list': { type: 'boolean' },
   telemetry: { type: 'boolean' },
   'skip-reconnect': { type: 'boolean' },
+  scenario: { type: 'string' },
+  'profile-http': { type: 'boolean' },
+  phase: { type: 'string', default: 'all' },
+  'peak-seconds': { type: 'string' },
 } });
 assert.ok(values.charging, 'Supply --charging with the path to the charging-subscription checkout');
 assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
+assert.ok(values.scenario === undefined || ['distributed', 'concentrated'].includes(values.scenario),
+  '--scenario must be distributed or concentrated');
+assert.ok(['all', 'normal', 'peak', 'reconnect'].includes(values.phase), '--phase must be all, normal, peak, or reconnect');
+assert.ok(values.phase !== 'reconnect' || (values.telemetry && !values['skip-reconnect']),
+  '--phase reconnect requires --telemetry');
 const seconds = Number(values.seconds);
 assert.ok(Number.isInteger(seconds) && seconds >= 1 && seconds <= 30, '--seconds must be an integer from 1 to 30');
+const peakSeconds = Number(values['peak-seconds'] ?? seconds);
+assert.ok(Number.isInteger(peakSeconds) && peakSeconds >= 1 && peakSeconds <= profile.load.peak.durationSeconds,
+  `--peak-seconds must be an integer from 1 to ${profile.load.peak.durationSeconds}`);
+const hasPhase = name => values.phase === 'all' || values.phase === name;
 const checkout = resolve(values.charging);
 const localRequire = createRequire(join(checkout, 'package.json'));
 const importFile = path => import(pathToFileURL(path).href);
@@ -170,7 +184,8 @@ async function seed(pool, fixture, issueToken) {
     await pool.query('INSERT INTO charging_subscription.driver_grants VALUES($1,$2,$3)', [tenant.id, driver.principal, id]);
   }
   const loadActors = [];
-  const totalActors = Math.ceil((normalRate + peakRate) * seconds / 90) + 12;
+  const requestedPerMinute = normalRate * Math.min(60, seconds) + peakRate * Math.min(60, peakSeconds);
+  const totalActors = Math.ceil(requestedPerMinute / 90) + 12;
   for (let index = 0; index < totalActors; index += 1) {
     loadActors.push(await actor(fleet[index % fleet.length], index % 2 === 0 ? 'owner' : 'billing'));
   }
@@ -278,10 +293,12 @@ async function verifyDriverRevocation(request, fixtures) {
   return { driverGrantRevoked: true, controlTenantRetained: true };
 }
 
-async function measureReads(request, fixtures, rate) {
+async function measureReads(request, fixtures, rate, duration = seconds) {
   const route = values['legacy-list'] ? 'vehicles' : 'vehicles?limit=100';
-  const attempts = rate * seconds;
+  const attempts = rate * duration;
   const latencies = [];
+  const dispatchDelays = [];
+  const responseLatencies = [];
   const statuses = {};
   const pending = new Set();
   let bytes = 0;
@@ -298,11 +315,15 @@ async function measureReads(request, fixtures, rate) {
       continue;
     }
     const actor = fixtures.loadActors[index % fixtures.loadActors.length];
+    const dispatched = performance.now();
+    dispatchDelays.push(dispatched - scheduled);
     const operation = request(actor, route).then(result => {
       const status = String(result.status);
       statuses[status] = (statuses[status] ?? 0) + 1;
       if (result.status !== 200) return;
-      latencies.push(performance.now() - scheduled);
+      const completed = performance.now();
+      latencies.push(completed - scheduled);
+      responseLatencies.push(completed - dispatched);
       bytes += result.bytes;
       const expected = values['legacy-list'] ? actor.tenant.vehicleIds.length : 100;
       if (result.body.items?.length !== expected || result.body.items.some(row => !actor.tenant.vehicleSet.has(row.id))) {
@@ -321,9 +342,10 @@ async function measureReads(request, fixtures, rate) {
   const unexpectedErrorRatio = (attempts - (statuses['200'] ?? 0)) / attempts;
   return {
     route: `GET /v1/accounts/:account/${route}`,
-    offeredRequestsPerSecond: rate, scheduledSeconds: seconds, requests: attempts, statuses, dropped, wrongRows,
+    offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests: attempts, statuses, dropped, wrongRows,
     observedSeconds: Number(observedSeconds.toFixed(3)), scheduleMilliseconds: Math.round(scheduleElapsed), maxInFlight,
     p95Ms, p99Ms: percentile(latencies, 0.99), unexpectedErrorRatio, bytes,
+    dispatchDelayP95Ms: percentile(dispatchDelays, 0.95), sentToReadP95Ms: percentile(responseLatencies, 0.95),
     withinProposedThresholds: p95Ms !== null && p95Ms <= profile.thresholds.criticalReadP95Ms
       && unexpectedErrorRatio <= profile.thresholds.criticalReadUnexpectedErrorRatioMax,
   };
@@ -421,8 +443,10 @@ async function scenario(cluster, name) {
   try {
     const databaseVersion = (await pool.query('SHOW server_version')).rows[0].server_version;
     for (const migration of migrations) await pool.query(await readFile(join(checkout, 'database', migration), 'utf8'));
-    const db = new Database(pool);
+    const probe = values['profile-http'] ? capacityHttpProbe(pool) : null;
+    const db = new Database(probe?.pool ?? pool);
     const service = new Service(db);
+    probe?.wrap(service, db);
     const vehicles = [...vehicleRows(name)];
     const { auth, issueToken } = authenticationFixture();
     const fixtures = await seed(pool, vehicles, issueToken);
@@ -432,29 +456,51 @@ async function scenario(cluster, name) {
     const port = await bindLoopback(listener);
     const request = createRequest(`http://127.0.0.1:${port}`);
     const access = await verifyVehicleAccess(request, fixtures, db);
+    const explain = await probe?.explain(db, auth, fixtures.owners.values().next().value);
     const refresh = await telemetry?.verifyRefresh(request, fixtures);
-    const concurrent = await Promise.allSettled([
-      measureReads(request, fixtures, normalRate),
-      verifyPlanning(request, fixtures, db, vehicles),
-      verifyDriverRevocation(request, fixtures),
-      telemetry?.measure('normal', seconds),
-    ]);
-    for (const result of concurrent) if (result.status === 'rejected') throw result.reason;
-    const peak = await Promise.allSettled([measureReads(request, fixtures, peakRate), telemetry?.measure('peak', seconds)]);
-    for (const result of peak) if (result.status === 'rejected') throw result.reason;
-    const telemetrySamples = telemetry ? [concurrent[3].value, peak[1].value] : null;
-    if (telemetry && !values['skip-reconnect']) {
+    const readSamples = [];
+    const telemetrySamples = [];
+    const profiles = {};
+    let driverRevocation, planner;
+    if (hasPhase('normal')) {
+      probe?.start();
+      const normal = await Promise.allSettled([
+        measureReads(request, fixtures, normalRate),
+        verifyPlanning(request, fixtures, db, vehicles),
+        verifyDriverRevocation(request, fixtures),
+        telemetry?.measure('normal', seconds),
+      ]);
+      profiles.normal = probe?.stop();
+      for (const result of normal) if (result.status === 'rejected') throw result.reason;
+      readSamples.push(normal[0].value);
+      planner = normal[1].value;
+      driverRevocation = normal[2].value;
+      if (telemetry) telemetrySamples.push(normal[3].value);
+    }
+    if (hasPhase('peak')) {
+      probe?.start();
+      const peak = await Promise.allSettled([
+        measureReads(request, fixtures, peakRate, peakSeconds),
+        telemetry?.measure('peak', peakSeconds),
+      ]);
+      profiles.peak = probe?.stop();
+      for (const result of peak) if (result.status === 'rejected') throw result.reason;
+      readSamples.push(peak[0].value);
+      if (telemetry) telemetrySamples.push(peak[1].value);
+    }
+    if (telemetry && !values['skip-reconnect'] && hasPhase('reconnect')) {
       telemetrySamples.push(await telemetry.measure('reconnect', profile.load.reconnect.durationSeconds));
     }
     const reconciliation = await telemetry?.reconcile(request, fixtures);
     assert.deepEqual(poolErrors, []);
     console.log(JSON.stringify({
-      scope: 'local_loopback_native_postgres', scenario: name, revision, implementationSha256, numpyVersion, ortoolsVersion,
+      scope: 'local_loopback_native_postgres', scenario: name, phase: values.phase,
+      revision, implementationSha256, numpyVersion, ortoolsVersion,
       databaseVersion, nodeVersion: process.version, migrationsReplayed: migrations.length, startedAtUtc,
       finishedAtUtc: new Date().toISOString(), fixtureVehicles: vehicles.length, controlVehicles: 2,
-      vehicleAccess: { ...access, ...concurrent[2].value }, readSamples: [concurrent[0].value, peak[0].value],
-      planner: concurrent[1].value,
+      vehicleAccess: { ...access, ...driverRevocation }, readSamples, planner,
       ...(telemetry ? { telemetry: { refresh, samples: telemetrySamples, reconciliation } } : {}),
+      ...(probe ? { profiling: { explain, ...profiles } } : {}),
     }));
   } finally {
     if (listener) await close(listener);
@@ -463,7 +509,7 @@ async function scenario(cluster, name) {
   }
 }
 
-for (const name of ['distributed', 'concentrated']) {
+for (const name of values.scenario ? [values.scenario] : ['distributed', 'concentrated']) {
   const cluster = await freshCluster();
   try {
     await scenario(cluster, name);
