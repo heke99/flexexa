@@ -15,6 +15,7 @@ import { capacityHttpProbe } from './capacity-http-profile.mjs';
 import { capacityIdentity } from './capacity-identity.mjs';
 import { grantMixedPartnerScope, measureMixedReads, seedMixedRoutes } from './capacity-mixed-routes.mjs';
 import { profile, vehicleRows } from './capacity-profile.mjs';
+import { seedRoamingCosts } from './capacity-roaming-routes.mjs';
 import { percentile } from './capacity-timings.mjs';
 import { telemetryFixture } from './capacity-telemetry.mjs';
 
@@ -34,6 +35,7 @@ const { values } = parseArgs({ options: {
   phase: { type: 'string', default: 'all' },
   'peak-seconds': { type: 'string' },
   'mixed-routes': { type: 'boolean' },
+  'roaming-cost-routes': { type: 'boolean' },
   'split-pools': { type: 'boolean' },
   'endurance-seconds': { type: 'string' },
   'fixture-token-seconds': { type: 'string' },
@@ -43,6 +45,7 @@ assert.ok(values.charging, 'Supply --charging with the path to the charging-subs
 assert.ok(!values['skip-reconnect'] || values.telemetry, '--skip-reconnect requires --telemetry');
 assert.ok(!values['metered-observations'] || values.telemetry, '--metered-observations requires --telemetry');
 assert.ok(!values['mixed-routes'] || !values['legacy-list'], '--mixed-routes requires paginated routes');
+assert.ok(!values['roaming-cost-routes'] || values['mixed-routes'], '--roaming-cost-routes requires --mixed-routes');
 assert.ok(!values['split-pools'] || values.telemetry, '--split-pools requires --telemetry');
 assert.ok(values.scenario === undefined || ['distributed', 'concentrated'].includes(values.scenario),
   '--scenario must be distributed or concentrated');
@@ -86,6 +89,10 @@ const { server } = httpModule;
 const { SupabaseAuth } = authModule;
 const { runFleetPlanJob, solveFleet } = fleetWorker;
 const partnerModule = values['mixed-routes'] ? await importFile(join(checkout, 'src/partner-energy.mjs')) : null;
+const roamingModules = values['roaming-cost-routes'] ? {
+  ...await importFile(join(checkout, 'src/charging-evidence.mjs')),
+  ...await importFile(join(checkout, 'src/roaming-cost-close.mjs')),
+} : null;
 const telemetryModules = values.telemetry ? {
   ...await importFile(join(checkout, 'src/energy-service.mjs')),
   ...await importFile(join(checkout, 'src/energy-device-adapter.mjs')),
@@ -94,9 +101,12 @@ const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, enc
 const [numpyVersion, ortoolsVersion] = execFileSync(values.python,
   ['-c', 'import numpy, ortools; print(numpy.__version__, ortools.__version__)'], { encoding: 'utf8' }).trim().split(' ');
 const migrations = (await readdir(join(checkout, 'database'))).filter(name => /^\d+.*\.sql$/u.test(name)).sort();
+assert.ok(!roamingModules || migrations.includes('050-company-roaming-cost-read.sql'),
+  'Roaming cost load requires migration 050');
 const applicationFiles = ['src/service.mjs', 'src/read-model.mjs', ...migrations.map(name => `database/${name}`)];
 if (values.telemetry) applicationFiles.push('src/energy-service.mjs', 'src/energy-device-adapter.mjs');
 if (partnerModule) applicationFiles.push('src/partner-energy.mjs', 'src/product-access.mjs', 'src/http.mjs');
+if (roamingModules) applicationFiles.push('src/charging-evidence.mjs', 'src/roaming-cost-close.mjs', 'src/company-roaming-costs.mjs');
 const digest = createHash('sha256');
 for (const name of applicationFiles) digest.update(name).update('\0').update(await readFile(join(checkout, name)));
 const implementationSha256 = digest.digest('hex');
@@ -230,7 +240,11 @@ async function seed(pool, fixture, issueCredential) {
       controls.financeDrivers.push(await actor(driver.tenant, 'driver'));
     }
   }
-  return { owners, control, subscriptionOnly, driver, subscription, loadActors, testVehicleIds, ...controls };
+  const roamingBillers = [];
+  if (values['roaming-cost-routes']) {
+    for (const tenant of fleet) roamingBillers.push(await actor(tenant, 'billing'));
+  }
+  return { owners, control, subscriptionOnly, driver, subscription, loadActors, testVehicleIds, roamingBillers, ...controls };
 }
 
 function authenticationFixture() {
@@ -489,6 +503,7 @@ async function scenario(cluster, name) {
     const { auth, credential, stats } = authenticationFixture();
     const fixtures = await seed(pool, vehicles, credential);
     const mixed = partnerModule ? await seedMixedRoutes(pool, db, fixtures, { issuer, issueCredential: credential }) : null;
+    if (roamingModules) mixed.roamingCosts = await seedRoamingCosts(db, fixtures.owners, roamingModules);
     const partnerEnergy = partnerModule ? new partnerModule.PartnerEnergyService(service, null) : null;
     probe?.wrap(service, db, partnerEnergy, telemetryDb);
     const telemetry = values.telemetry ? telemetryFixture(telemetryModules, db, service, {
@@ -579,7 +594,8 @@ async function scenario(cluster, name) {
       finishedAtUtc: new Date().toISOString(), fixtureVehicles: vehicles.length, controlVehicles: 2,
       vehicleAccess: { ...access, ...driverRevocation }, readSamples, planner,
       ...(mixed ? { mixedRoutes: { privateAccounts: mixed.privateCustomers.length,
-        privateFixtureVehicles: mixed.privateCustomers.length * 2 } } : {}),
+        privateFixtureVehicles: mixed.privateCustomers.length * 2,
+        ...(mixed.roamingCosts ? { roamingCosts: mixed.roamingCosts } : {}) } } : {}),
       ...(endurance ? { endurance: enduranceEvidence } : {}),
       ...(telemetry ? { telemetry: { refresh, samples: telemetrySamples, reconciliation } } : {}),
       ...(probe ? { profiling: { explain, ...profiles } } : {}),

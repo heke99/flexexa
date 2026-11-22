@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { profile } from './capacity-profile.mjs';
+import { roamingRoutes } from './capacity-roaming-routes.mjs';
 import { capacityTimings } from './capacity-timings.mjs';
 
 const partnerKey = 'capacity-partner';
@@ -90,8 +91,8 @@ const routes = {
         valid: body => matchesVehiclePage(body, vehicleIds.slice(offset, offset + 100), offset + 100 < vehicleIds.length) };
     } },
   vehicle_search: { route: '/v1/accounts/:account/vehicles?limit=100&search=:plate&verification=:state', weight: 3,
-    build: ({ actor, index, iteration }) => {
-      const position = Math.floor(index / routeCycle.length) % actor.tenant.vehicleIds.length;
+    build: ({ actor, index, iteration, cycleLength }) => {
+      const position = Math.floor(index / cycleLength) % actor.tenant.vehicleIds.length;
       const plate = actor.tenant.plates[position], id = actor.tenant.vehicleIds[position];
       const verified = Number(plate.at(-1)) % 2 === 0;
       const match = iteration % 4 !== 3;
@@ -142,14 +143,17 @@ const routes = {
     build: () => ({ resource: '/v1/platform/product-access/accounts' }) },
 };
 
-const routeCycle = Object.keys(routes).flatMap(key => Array(routes[key].weight).fill(key));
-
 export async function measureMixedReads(request, fixtures, rate, duration, { bounded = false, signal } = {}) {
+  const selectedRoutes = fixtures.roamingCosts ? { ...routes, ...roamingRoutes } : routes;
+  const routeCycle = Object.keys(selectedRoutes).flatMap(key => Array(selectedRoutes[key].weight).fill(key));
   const measurements = new Map();
   const pending = new Set();
   let maxInFlight = 0;
   let partnerReads = 0;
   let scheduledRequests = 0;
+  const billingActors = fixtures.roamingCosts
+    ? [...fixtures.roamingBillers, ...fixtures.loadActors.filter(actor => actor.role === 'billing')] : [];
+  const billingFor = iteration => billingActors[iteration % billingActors.length];
   const nextPartner = () => fixtures.privateCustomers[partnerReads++ % fixtures.privateCustomers.length];
   const started = performance.now();
   for (let index = 0; index < rate * duration; index += 1) {
@@ -159,15 +163,17 @@ export async function measureMixedReads(request, fixtures, rate, duration, { bou
     if (wait > 0) await delay(wait);
     if (signal?.aborted) break;
     const key = routeCycle[index % routeCycle.length];
-    const spec = routes[key];
+    const spec = selectedRoutes[key];
     if (!measurements.has(key)) measurements.set(key, { attempts: 0, dropped: 0, statuses: {}, errorCodes: {}, actorRoles: {},
       expectedOutcomes: 0, wrongPayload: 0, unauthorizedSuccess: 0,
-      timings: spec.denied ? null : capacityTimings(bounded), bytes: 0 });
+      timings: spec.denied ? null : capacityTimings(bounded), bytes: 0,
+      matchedAccounts: Object.hasOwn(roamingRoutes, key) ? new Set() : null });
     const sample = measurements.get(key);
     sample.attempts += 1;
     scheduledRequests += 1;
     const actor = fixtures.loadActors[index % fixtures.loadActors.length];
-    const testCase = spec.build({ actor, fixtures, index, iteration: sample.attempts - 1, nextPartner });
+    const testCase = spec.build({ actor, fixtures, index, iteration: sample.attempts - 1, nextPartner, billingFor,
+      cycleLength: routeCycle.length });
     const caller = testCase.actor ?? actor;
     sample.actorRoles[caller.role] = (sample.actorRoles[caller.role] ?? 0) + 1;
     if (pending.size >= 400) {
@@ -188,7 +194,10 @@ export async function measureMixedReads(request, fixtures, rate, duration, { bou
       } else if (result.status === 200) {
         sample.timings.add(performance.now() - scheduled);
         sample.bytes += result.bytes;
-        if (testCase.valid(result.body)) sample.expectedOutcomes += 1;
+        if (testCase.valid(result.body)) {
+          sample.expectedOutcomes += 1;
+          sample.matchedAccounts?.add(caller.tenant.id);
+        }
         else sample.wrongPayload += 1;
       }
     }).catch(() => { sample.statuses.error = (sample.statuses.error ?? 0) + 1; })
@@ -198,11 +207,12 @@ export async function measureMixedReads(request, fixtures, rate, duration, { bou
   }
   await Promise.all(pending);
   const routeSamples = [...measurements].map(([key, sample]) => {
-    const { route, denied } = routes[key];
-    const { timings, ...counts } = sample;
+    const { route, denied } = selectedRoutes[key];
+    const { timings, matchedAccounts, ...counts } = sample;
     const p95Ms = timings?.percentile(0.95);
     const unexpectedErrorRatio = (sample.attempts - sample.expectedOutcomes) / sample.attempts;
     return { key, route: `GET ${route}`, expectedStatus: denied?.[0] ?? 200, ...counts,
+      ...(matchedAccounts && !denied ? { matchedAccounts: matchedAccounts.size } : {}),
       unexpectedOutcomes: sample.attempts - sample.expectedOutcomes,
       ...(denied ? { expectedError: denied[1], accessChecksPassed: unexpectedErrorRatio === 0 } : {
         p95Ms, p99Ms: timings.percentile(0.99), unexpectedErrorRatio,

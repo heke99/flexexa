@@ -121,6 +121,22 @@ En dag vid 230 observationer/s schemalägger 19 872 000 observationer plus förk
 
 Åttasekundersprovet på laddrevision `119a50fb7f8fcded7752b5216bf62a4abede57bb` gav 800 av 800 väntade HTTP-utfall och 1 840 av 1 840 beständiga observationer. Alla 1 843 historikrader stämdes av, varav 463 med mätarepok. Provet gjorde 172 tokenförnyelser med 140 skapade syntetiska sessioner, 130 använda och lagrade sessionsposter samt 230 kvarhållna token. Telemetritabellen med index upptog 712 704 byte vid slutet av körningen. Tre enhetstester verifierade förnyelse, latensräkning och avbruten schemaläggning vid otillgänglig testdisk. Hela dygnsprovet återstår.
 
+#### Frysta roamingkostnader i blandningen
+
+`--roaming-cost-routes` kräver `--mixed-routes` och migrationsfil 050 från laddbackenden. Flaggan lägger till ett anrop för periodlistan, ett för första detaljsidan och ett för nekad detaljläsning som förare per trafikcykel. Cykeln har därmed 26 platser. Tidigare körningar och vanlig `--mixed-routes` använder cykeln med 23 platser. Den totala anropsfrekvensen för fasen är densamma.
+
+Två perioder per företag skapas med den ordinarie importen och låses med den ordinarie stängningsfunktionen i en tillfällig databas. Provet ändrar därefter det första dokumentet i detaljsorteringen och kontrollerar att periodlistan och detaljsidan fortfarande återger det låsta antalet dokument, Wh, priset och detaljens ursprungliga revision. Motläsning sker med ekonomiroller för respektive företag. Förarens motsvarande detaljanrop ska ge exakt HTTP 403. JSONL redovisar förväntade utfall, roll och antalet företag vars underlag matchade, separat för respektive roamingväg.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /workspace/charging-subscription \
+  --python /path/to/fleet-venv/bin/python \
+  --scenario distributed --phase endurance --endurance-seconds 4 \
+  --telemetry --mixed-routes --roaming-cost-routes
+```
+
+Fyrasekundersprovet på laddrevision `1bfc939affb939de1476a92a7086b4d39075fe66` gav 400 av 400 väntade HTTP-utfall och 920 av 920 beständiga telemetriobservationer. Periodlistan och detaljsidan gav vardera 15 av 15 korrekta svar över alla tolv företag. Alla 15 anrop som förare nekades med `403 FORBIDDEN`. Underlaget omfattade 24 frysta perioder med sammanlagt 36 dokument och tolv efterhandsrevisioner.
+
 ## Lokalt telemetriprov R53
 
 Lägg till `--telemetry` för att prova den befintliga simulatoradaptern, arbetarrollen och uppdateringen av aktuell status i båda fordonsfördelningarna. Samma loopback-server används för autentiserad uppdatering och HTTP-läsning. Använd `--telemetry --skip-reconnect` för ett kort utvecklingsprov.
