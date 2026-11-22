@@ -77,6 +77,13 @@ export async function verifyBrowser(base) {
           headingFontSize: parseFloat(getComputedStyle(document.querySelector('h1')).fontSize)};`, args: [canary],
       });
       assertSnapshot(snapshot, width);
+      const manifest = await request(`${prefix}/goog/cdp/execute`, { cmd: 'Page.getAppManifest', params: {} });
+      assert.equal(manifest.url, new URL('/manifest.webmanifest', target).href, 'WEB_BROWSER_MANIFEST_URL');
+      assert.deepEqual(manifest.errors, [], 'WEB_BROWSER_MANIFEST_ERRORS');
+      const { installabilityErrors } = await request(`${prefix}/goog/cdp/execute`, {
+        cmd: 'Page.getInstallabilityErrors', params: {},
+      });
+      assert.deepEqual(installabilityErrors, [], 'WEB_BROWSER_INSTALLABILITY_ERRORS');
       const accountEntry = await request(`${prefix}/execute/sync`, {
         script: 'return document.querySelector("nav .nav-account")?.getAttribute("href");', args: [],
       });
@@ -90,10 +97,10 @@ export async function verifyBrowser(base) {
       const image = Buffer.from(screenshot, 'base64');
       assert.ok(image.length > 100 && image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), 'WEB_BROWSER_SCREENSHOT_INVALID');
       writeFileSync(join(output, `web-${name}.png`), image);
-      viewports.push({ name, width, height, javascriptErrors, horizontalOverflow: false });
+      viewports.push({ name, width, height, javascriptErrors, horizontalOverflow: false, installabilityErrors });
     }
     const report = { gate: 'web-chromium-v1', status: 'passed', browser: created.capabilities.browserVersion, viewports,
-      scope: 'Real Chromium render/CSS/error checks on the public production shell. Not Auth, tenant, backend or device acceptance.' };
+      scope: 'Real Chromium render, CSS and manifest eligibility checks on the public production shell. Installation on end-user devices is outside this check.' };
     writeFileSync(join(output, 'web-browser-report.json'), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report));
   } finally {

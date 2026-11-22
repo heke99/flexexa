@@ -33,6 +33,30 @@ try {
   if (!response || response.status !== 200) throw new Error('WEB_SERVER_NOT_READY');
   const html = await response.text();
   assertPage(response.status, response.headers.get('content-type'), html);
+  assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest"[^>]*>/, 'WEB_MANIFEST_LINK');
+  assert.match(html, /<link rel="apple-touch-icon" href="\/icon-192\.png"[^>]*>/, 'WEB_APPLE_ICON_LINK');
+  const manifestResponse = await request('/manifest.webmanifest');
+  assert.equal(manifestResponse.status, 200, 'WEB_MANIFEST_STATUS');
+  assert.match(manifestResponse.headers.get('content-type') ?? '', /^application\/manifest\+json\b/i, 'WEB_MANIFEST_CONTENT_TYPE');
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.name, 'Flexexa', 'WEB_MANIFEST_NAME');
+  assert.equal(manifest.lang, 'sv', 'WEB_MANIFEST_LOCALE');
+  assert.equal(manifest.id, '/', 'WEB_MANIFEST_ID');
+  assert.equal(manifest.start_url, '/', 'WEB_MANIFEST_START_URL');
+  assert.equal(manifest.scope, '/', 'WEB_MANIFEST_SCOPE');
+  assert.equal(manifest.display, 'standalone', 'WEB_MANIFEST_DISPLAY');
+  for (const size of [192, 512]) {
+    const icon = manifest.icons.find((entry) => entry.sizes === `${size}x${size}`);
+    assert.equal(icon?.src, `/icon-${size}.png`, 'WEB_MANIFEST_ICON_PATH');
+    assert.equal(icon.type, 'image/png', 'WEB_MANIFEST_ICON_TYPE');
+    const image = await request(icon.src);
+    assert.equal(image.status, 200, 'WEB_MANIFEST_ICON_STATUS');
+    assert.equal(image.headers.get('content-type'), 'image/png', 'WEB_MANIFEST_ICON_CONTENT_TYPE');
+    const raw = Buffer.from(await image.arrayBuffer());
+    assert.equal(raw.subarray(0, 16).toString('hex'), '89504e470d0a1a0a0000000d49484452', 'WEB_MANIFEST_ICON_PNG_HEADER');
+    assert.equal(raw.readUInt32BE(16), size, 'WEB_MANIFEST_ICON_WIDTH');
+    assert.equal(raw.readUInt32BE(20), size, 'WEB_MANIFEST_ICON_HEIGHT');
+  }
   const assets = staticAssets(html);
   for (const path of assets) {
     const asset = await request(path);
@@ -87,7 +111,7 @@ try {
   if (!process.argv.includes('--http-only')) await verifyBrowser(base);
   const report = { gate: 'web-production-http-v1', status: 'passed', page: true, staticAssets: assets.length,
     negativeRoutes: missingRoutes.length, portalRedirects: portalEntries.length, contactDefaults: contactInterests.length, secretCanaryAbsent: true,
-    scope: 'Public shell, assets, contact defaults and fixed portal redirects. The portal session, commerce API and device operations are outside this check.' };
+    pwaManifest: true, scope: 'Public shell, manifest, assets, contact defaults and fixed portal redirects. The portal session, commerce API and device operations are outside this check.' };
   mkdirSync('.flexexa/index', { recursive: true });
   writeFileSync('.flexexa/index/web-http-report.json', `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report));
