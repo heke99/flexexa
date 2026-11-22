@@ -149,7 +149,9 @@ try {
   };
   await account(null, 401);
   assert.equal(upstreamReads, 0);
-  const altered = recipient.slice(0, -1) + (recipient.endsWith('a') ? 'b' : 'a');
+  const signatureStart = recipient.lastIndexOf('.') + 1;
+  const altered = recipient.slice(0, signatureStart) +
+    (recipient[signatureStart] === 'a' ? 'b' : 'a') + recipient.slice(signatureStart + 1);
   await account(altered, 401);
   assert.equal(upstreamReads, 1);
   assert.deepEqual(await account(recipient, 200), {
