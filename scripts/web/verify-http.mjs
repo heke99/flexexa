@@ -52,6 +52,19 @@ try {
     assert.ok(!body.includes(canary));
     if (path === '/app') assert.match(body, /INTERAKTIV FÖRHANDSVISNING/, 'WEB_APP_PREVIEW');
   }
+  const contactInterests = [
+    ['?intresse=energi', 'Smart energistyrning'],
+    ['', 'Partnerskap'],
+    ['?intresse=okant', 'Partnerskap'],
+    ['?intresse=energi&intresse=okant', 'Partnerskap'],
+  ];
+  for (const [query, expected] of contactInterests) {
+    const contact = await request('/kontakt' + query);
+    assert.equal(contact.status, 200, 'WEB_CONTACT_ROUTE');
+    const choices = (await contact.text()).match(/<select\b[^>]*\bname="interest"[^>]*>([\s\S]*?)<\/select>/)?.[1];
+    const selected = choices?.match(/<option\b[^>]*\bselected(?:="[^"]*")?[^>]*>([^<]*)<\/option>/)?.[1];
+    assert.equal(selected, expected, `WEB_CONTACT_DEFAULT_INTEREST ${query || 'empty query'}`);
+  }
   assert.match(html, /href="\/app\/konto"/, 'WEB_PORTAL_ACCOUNT_LINK');
   const wizard = await request('/energy-wizard');
   assert.equal(wizard.status, 200, 'WEB_ENERGY_WIZARD');
@@ -73,8 +86,8 @@ try {
   }
   if (!process.argv.includes('--http-only')) await verifyBrowser(base);
   const report = { gate: 'web-production-http-v1', status: 'passed', page: true, staticAssets: assets.length,
-    negativeRoutes: missingRoutes.length, portalRedirects: portalEntries.length, secretCanaryAbsent: true,
-    scope: 'Public shell, assets and fixed portal redirects. The portal session, commerce API and device operations are outside this check.' };
+    negativeRoutes: missingRoutes.length, portalRedirects: portalEntries.length, contactDefaults: contactInterests.length, secretCanaryAbsent: true,
+    scope: 'Public shell, assets, contact defaults and fixed portal redirects. The portal session, commerce API and device operations are outside this check.' };
   mkdirSync('.flexexa/index', { recursive: true });
   writeFileSync('.flexexa/index/web-http-report.json', `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report));
