@@ -289,6 +289,7 @@ try {
     }).then(() => base);
   };
   startURL = await launchNext(enabledPort, true, true);
+  const enabledNext = childProcesses.at(-1);
   const disabled = await launchNext(disabledPort, false);
   const passwordOnly = await launchNext(passwordOnlyPort, true);
   const passwordOnlyPage = await request(passwordOnly + overview);
@@ -619,6 +620,80 @@ try {
     path === '/auth/v1/logout' && actor === 'first' && signInMethod === 'otp' && scope === 'local').length === 2);
   await assertNoStorage();
   verified.push('opt-in email OTP, throttled resend, wrong code, stale verification cleanup and correct account');
+
+  const workerPath = () => execute(`return navigator.serviceWorker.controller
+    ? new URL(navigator.serviceWorker.controller.scriptURL).pathname : null;`);
+  const setOffline = (offline) => browserCommand('/goog/cdp/execute', {
+    cmd: 'Network.emulateNetworkConditions', params: { offline, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
+  });
+  const cacheNames = () => browserCommand('/execute/async', {
+    script: 'const done = arguments[arguments.length - 1]; caches.keys().then(done);', args: [],
+  });
+  await pending(async () => await workerPath() === '/service-worker.js');
+  const registration = await browserCommand('/execute/async', {
+    script: `const done = arguments[arguments.length - 1]; navigator.serviceWorker.ready.then(worker =>
+      done({scope: worker.scope, state: worker.active?.state, updateViaCache: worker.updateViaCache}));`, args: [],
+  });
+  assert.deepEqual(registration, { scope: `${startURL}/`, state: 'activated', updateViaCache: 'none' });
+  const privatePage = await request(startURL + overview);
+  assert.match(privatePage.headers.get('cache-control') ?? '', /\bno-store\b/);
+  await privatePage.body?.cancel();
+  await login('first');
+  await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
+  productAccess.get(company.id).requests.length = 0;
+  await productsFor(company);
+  await assertProductView(company, 'Ingen åtkomst', 'Aktiv');
+  const beforeOffline = businessCalls().length;
+  const writesBeforeOffline = businessCalls().filter(({ method }) => method === 'POST').length;
+  await setOffline(true);
+  try {
+    // Page-scoped CDP emulation alone leaves the worker's network reachable.
+    const stopped = once(enabledNext, 'exit');
+    assert.ok(enabledNext.kill('SIGTERM'));
+    await stopped;
+    await assert.rejects(request(startURL));
+    await pending(() => execute('return navigator.onLine === false;'));
+    await clickButton('Begär åtkomst till Laddabonnemang', true);
+    await pending(async () => (await productView()).includes('Begäran kunde inte bekräftas.'));
+    assert.doesNotMatch(await productView(), /Begärd/);
+    await clickButton('Försök igen');
+    await pending(async () => (await productView()).includes('Produkterna kunde inte hämtas.'));
+    assert.doesNotMatch(await productView(), /Laddabonnemang|Energioptimering/);
+    await clickButton('Uppdatera');
+    await pending(async () => (await text()).includes('Kontona kunde inte hämtas.'));
+    assert.doesNotMatch(await text(), /Konto Grön|Konto Guld|Konto Blå/);
+    assert.equal(businessCalls().length, beforeOffline);
+    assert.deepEqual(await cacheNames(), []);
+    await assertNoStorage();
+    await assert.rejects(browserCommand('/url', { url: startURL + overview }));
+    await assert.rejects(browserCommand('/url', { url: startURL + '/energi?offline-probe=1' }));
+    await browserCommand('/url', { url: startURL + '/ladda' });
+    assert.equal(await execute('return document.querySelector("h1")?.textContent;'), 'Du är offline');
+    assert.doesNotMatch(await text(), /Mina konton|Konto Grön|Konto Guld|Konto Blå/);
+    assert.deepEqual(await cacheNames(), []);
+  } finally {
+    await setOffline(false);
+  }
+  assert.equal(await launchNext(enabledPort, true, true), startURL);
+  const retry = await execute('return [...document.links].find(link => link.textContent === "Försök igen");');
+  assert.ok(retry?.[elementKey], 'Public offline page must offer a retry link');
+  await browserCommand(`/element/${retry[elementKey]}/click`, {});
+  await pending(() => execute('return navigator.onLine && document.querySelector("h1")?.textContent.startsWith("Mer väg.");'));
+  assert.equal(new URL(await browserCommand('/url')).pathname, '/ladda');
+  await browserCommand('/url', { url: startURL + overview });
+  await pending(async () => /Logga in/.test(await text()));
+  assert.doesNotMatch(await text(), /Konto Grön|Konto Guld|Konto Blå/);
+  await login('second');
+  await pending(mfaVisible);
+  await submitCode(validCode);
+  await pending(async () => /Mina konton[\s\S]*Konto Blå/.test(await text()));
+  await productsFor(otherCompany);
+  await assertProductView(otherCompany, 'Indragen', 'Ej tillgänglig');
+  assert.doesNotMatch(await text(), /Konto Grön|Konto Guld/);
+  assert.equal(businessCalls().filter(({ method }) => method === 'POST').length, writesBeforeOffline, 'Reconnect must not replay an offline product request');
+  assert.deepEqual(await cacheNames(), []);
+  await assertNoStorage();
+  verified.push('public offline fallback, no stored or queued account traffic, and a fresh identity after reconnect');
   console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
 } finally {
   if (session) {

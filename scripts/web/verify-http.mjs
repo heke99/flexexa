@@ -33,6 +33,11 @@ try {
   if (!response || response.status !== 200) throw new Error('WEB_SERVER_NOT_READY');
   const html = await response.text();
   assertPage(response.status, response.headers.get('content-type'), html);
+  const worker = await request('/service-worker.js');
+  assert.equal(worker.status, 200, 'WEB_SERVICE_WORKER_STATUS');
+  assert.match(worker.headers.get('content-type') ?? '', /^(?:text|application)\/javascript\b/i, 'WEB_SERVICE_WORKER_TYPE');
+  assert.match(worker.headers.get('cache-control') ?? '', /\bno-cache\b/, 'WEB_SERVICE_WORKER_REVALIDATION');
+  await worker.body?.cancel();
   assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest"[^>]*>/, 'WEB_MANIFEST_LINK');
   assert.match(html, /<link rel="apple-touch-icon" href="\/icon-192\.png"[^>]*>/, 'WEB_APPLE_ICON_LINK');
   const manifestResponse = await request('/manifest.webmanifest');
