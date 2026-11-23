@@ -156,6 +156,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     const failures = {};
     let scheduled = 0;
     let dropped = 0;
+    const droppedByScheduledMinute = {};
     let maxInFlight = 0;
     const started = performance.now();
     const startedAt = Date.now();
@@ -168,6 +169,8 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
       scheduled += 1;
       if (active.size >= 400) {
         dropped += 1;
+        const minute = Math.floor(event.offsetMs / 60_000) + 1;
+        droppedByScheduledMinute[minute] = (droppedByScheduledMinute[minute] ?? 0) + 1;
         continue;
       }
       const { target } = event;
@@ -198,7 +201,7 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
     const observedSeconds = (performance.now() - started) / 1_000;
     return {
       phase: kind, scheduledSeconds: duration, scheduled, committed: timings.count,
-      committedBySource, dropped, failures, maxInFlight, observedSeconds: Number(observedSeconds.toFixed(3)),
+      committedBySource, dropped, droppedByScheduledMinute, failures, maxInFlight, observedSeconds: Number(observedSeconds.toFixed(3)),
       p95MsScheduledToShadowCommit: timings.percentile(0.95),
       allObservationsCommitted: !signal?.aborted && timings.count === scheduled,
       ...(bounded ? { planned: duration * profile.load.normal.telemetryEventsPerSecond,

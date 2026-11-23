@@ -160,6 +160,7 @@ export async function measureMixedReads(request, fixtures, rate, duration, { bou
     ? [...fixtures.roamingBillers, ...fixtures.loadActors.filter(actor => actor.role === 'billing')] : [];
   const billingFor = iteration => billingActors[iteration % billingActors.length];
   const nextPartner = () => fixtures.privateCustomers[partnerReads++ % fixtures.privateCustomers.length];
+  const droppedByScheduledMinute = {};
   const started = performance.now();
   for (let index = 0; index < rate * duration; index += 1) {
     if (signal?.aborted) break;
@@ -183,6 +184,8 @@ export async function measureMixedReads(request, fixtures, rate, duration, { bou
     sample.actorRoles[caller.role] = (sample.actorRoles[caller.role] ?? 0) + 1;
     if (pending.size >= 400) {
       sample.dropped += 1;
+      const minute = Math.floor(index / (rate * 60)) + 1;
+      droppedByScheduledMinute[minute] = (droppedByScheduledMinute[minute] ?? 0) + 1;
       continue;
     }
     const operation = request(caller, testCase.resource, testCase.options).then(result => {
@@ -226,7 +229,7 @@ export async function measureMixedReads(request, fixtures, rate, duration, { bou
           && unexpectedErrorRatio <= profile.thresholds.criticalReadUnexpectedErrorRatioMax,
       }) };
   });
-  return { offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests: scheduledRequests, maxInFlight,
+  return { offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests: scheduledRequests, maxInFlight, droppedByScheduledMinute,
     ...(bounded ? { plannedRequests: rate * duration, latencyMethod: 'bounded_hdr_3_significant_figures' } : {}),
     observedSeconds: Number(((performance.now() - started) / 1_000).toFixed(3)), routeSamples };
 }
