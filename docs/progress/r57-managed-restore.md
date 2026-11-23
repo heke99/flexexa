@@ -145,3 +145,9 @@ Exemplens Bash-syntax, migreringskontroll, provdata, journalhash och kontoavgrä
 ## Externa beroenden före återupptagning
 
 Storage-objekt, Auth-inställningar och API-nycklar, Edge Functions, Realtime, integrationer och vissa projektinställningar hanteras separat. Tills respektive beroende är återställt och tidigare externa effekter har stämts av hålls automatiska utskick, avräkning och styrning frånkopplade i kopian. Det lokala processprovet under [R57 återläsning](r57-postgres-restore.md) verifierar separat att en simulerad leverantörsprocess kan startas om och att en redan registrerad effekt återläses utan nytt laddkommando. Det hanterade provet ovan registrerar databasåterställning och avgränsning. Ett sammanhängande driftprov kräver separat bevis för återställda externa beroenden. [Kopierade inställningar och undantag](https://supabase.com/docs/guides/platform/clone-project)
+
+## Förberedd syntetisk källa
+
+Projektet `flexexa-r57-restore-source` (`ignrthjkldhrfieocjrw`) i `eu-north-1` skapades separat för övningen. Laddrevision `a9d267a` applicerades med SHA-256 per migrationsfil. Källans 54 journalposter matchade den lokala kontrollsumman `8514fd77a7f441eb425b9fd910a6e464920e625586027fe02f4204c0dc902a30`. Databasen innehöll två syntetiska företag, två syntetiska fordon, noll Auth-användare och inga av de kontrollerade externa tilläggen. API-rollen såg sitt eget fordon och noll från det andra företaget.
+
+Markören `before` sparades den 23 november kl. 17.30.13 svensk tid. Nästa steg är att bekräfta en fysisk backup efter markören och därefter följa körboken för `after` och återställning till ett nytt projekt. Den anslutna Supabase-kopplingen kan varken lista fysiska säkerhetskopior eller välja en säkerhetskopia för återställning till nytt projekt. Ingen återställning har startats. [Källans backupöversikt](https://supabase.com/dashboard/project/ignrthjkldhrfieocjrw/database/backups/scheduled)
