@@ -181,3 +181,11 @@ Ett efterföljande sandboxprov använde en disponibel Supabase-identitet med bek
 Den lokala Chromiumkörningen gav 30 godkända scenarier för privat checkout, Gridex-offert och beställning på dator och mobil. Det signerade betalningsprovet för en misslyckad förnyelse behöll det betalda slutdatumet tills en aktuell faktura blev betald. Återspel av både misslyckade och betalda händelser gav samma abonnemang och ett enda nytt slutdatum. Fyra lokala PostgreSQL-prov för fakturaradskvittenser och 15 slutkreditprov passerade. Rewards provades mot disponibel PostgreSQL med tidsbundna mottagare, balanserade korrigeringar och städning av syntetiska underlag. Provet omfattade ingen verklig betalning, faktura eller Rewards-reglering.
 
 Laddrevision `08992bc` lade till arbetarkommandot `compare-operator-invoice-periods`. Det jämför ett verifierat utdrag mot 2–12 sammanhängande förseglade månader. Ett byte av månad för samma CDR blir en spårbar avvikelse. Om samma CDR ligger i två förseglade månader avvisas sammanställningen för manuell granskning. Sju riktade PostgreSQL-prov passerade på den integrerade revisionen. Commercepaketen för sandbox och produktion byggdes och verifierades lokalt. De publicerades inte.
+
+## Syntetisk operatörsmånad · lokal acceptans
+
+Laddrevision `41400fb` använder hela oktober 2026 i svensk tid. Ordinarie arbetarvägar importerade alla dagars CDR, båda observationerna i höstens upprepade timme och en post precis utanför periodens slut. Omförsök återgav befintliga resultat. Förseglingen omfattade 32 poster, 50 152 Wh och 68 451 öre exklusive moms. Ett efterföljande operatörsutdrag med en rättelse och en sen kredit stämdes av till +1 130 Wh och −26 öre. Den förseglade exporten förblev identisk.
+
+Samma abonnemang gav noll fakturarader utifrån roamingkostnaderna. Med accepterat kundavtal och verifierade hemunderlag skapade den ordinarie avräkningsvägen två fakturarader hos en Stripe-fixture, −48 000 öre ersättning och +7 500 öre energitillägg. Omförsök behöll samma rad-ID:n. En sen granskad hempriskorrigering sparades som −3 000 öre separat krediteringsunderlag. Ingen ny fakturarad eller utbetalning utfördes.
+
+Detta är lokal acceptans för den syntetiska månaden. En verklig operatörsfil, fullständig kundfaktura, leverans av den sena krediten och partneracceptans kräver fortsatt verifiering i avsedd miljö.
