@@ -189,3 +189,9 @@ Laddrevision `41400fb` använder hela oktober 2026 i svensk tid. Ordinarie arbet
 Samma abonnemang gav noll fakturarader utifrån roamingkostnaderna. Med accepterat kundavtal och verifierade hemunderlag skapade den ordinarie avräkningsvägen två fakturarader hos en Stripe-fixture, −48 000 öre ersättning och +7 500 öre energitillägg. Omförsök behöll samma rad-ID:n. En sen granskad hempriskorrigering sparades som −3 000 öre separat krediteringsunderlag. Ingen ny fakturarad eller utbetalning utfördes.
 
 Detta är lokal acceptans för den syntetiska månaden. En verklig operatörsfil, fullständig kundfaktura, leverans av den sena krediten och partneracceptans kräver fortsatt verifiering i avsedd miljö.
+
+## Sen hempriskredit · leveransprov
+
+På laddrevision `6b45483` registrerar migration 058 testavsikt och leverantörskvittens för en godkänd negativ hemprisrättelse. Det nya arbetarkommandot är begränsat till en kvalificerad originalfaktura och rätt kund i testmiljön. Originalfakturan ändras inte. Samma nyckel följer omförsök och kvittensen kontrolleras innan den sparas.
+
+Nio integrerade PostgreSQL-prov passerade. Den godkända krediten på 3 000 öre gav exakt en saldohändelse trots simulerade svarsförluster och samtidiga återförsök. Migrationsjournalen var ren efter applicering och omspelning. CLI:t avvisade live före anslutning. Flexexa Ladda – Staging identifierades som Stripe-testkonto. Saldohändelsen kördes mot en lokal Stripe-fixture. Anslutningen exponerade ingen idempotensheader för skrivverktyget, så ingen extern händelse skapades.
