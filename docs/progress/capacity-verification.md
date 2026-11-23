@@ -119,6 +119,15 @@ När testtoken förnyas behålls sessions-ID, OAuth-klient och ursprunglig inlog
 
 En dag vid 230 observationer/s schemalägger 19 872 000 observationer plus förkontroller. Ange `--scratch-dir` till en lokal testdisk som rymmer telemetritabell och index, WAL och tillfälligt utrymme för avstämningen. Provet kontrollerar ledigt utrymme före schemaläggning och sedan var femtonde sekund. Under 512 MiB ledigt stoppar schemaläggningen och pågående anrop får gå klart. Provet rapporterar minsta observerade lediga utrymme och telemetrirelationens storlek inklusive index. Ett avbrutet schema ger exitkod 2 efter avstämning.
 
+Använd ett slutfört lokalt uthållighetsprov med sparad `telemetryRelationBytes` och avstämd telemetrihistorik som underlag för dygnets utrymmesberäkning.
+
+```sh
+node scripts/quality/capacity-storage.mjs \
+  --sample /path/to/completed-endurance.jsonl --scratch-dir /path/to/scratch
+```
+
+Förkontrollen läser filsystemets lediga utrymme. Den räknar upp uppmätta byte per observation och reserverar 512 MiB för stoppgränsen. Exitkod 2 anger att den uppskattade telemetrirelationen och reserven behöver mer utrymme. WAL, andra relationer och temporära avstämningsfiler kräver utrymme utöver uppskattningen. Tiominutersprovet på `9ae60bb` innehöll 138 003 lagrade observationer och 46 751 744 byte för tabellen och dess index. Det motsvarar cirka 6 421 MiB för 19 872 003 observationer och 6 933 MiB inklusive reserven.
+
 Åttasekundersprovet på laddrevision `119a50fb7f8fcded7752b5216bf62a4abede57bb` gav 800 av 800 väntade HTTP-utfall och 1 840 av 1 840 beständiga observationer. Alla 1 843 historikrader stämdes av, varav 463 med mätarepok. Provet gjorde 172 tokenförnyelser med 140 skapade syntetiska sessioner, 130 använda och lagrade sessionsposter samt 230 kvarhållna token. Telemetritabellen med index upptog 712 704 byte vid slutet av körningen. Tre enhetstester verifierade förnyelse, latensräkning och avbruten schemaläggning vid otillgänglig testdisk. Hela dygnsprovet återstår.
 
 Tvåminutersprovet på `1bfc939` körde 12 000 fordon fördelade på tolv företag, 44 migrationer i PostgreSQL 18.6 samt `--roaming-cost-routes --metered-observations --fixture-token-seconds 15`. Samtliga 12 000 HTTP-anrop och 27 600 telemetriobservationer gav väntat utfall. Periodlistan och detaljvyn hade vardera 461 godkända ekonomianrop med rätt data från alla tolv företag. Alla 461 föraranrop nekades. Högsta läs-p95 var 9,0 ms, varav periodlistan hade 6,6 ms och detaljvyn 7,1 ms. Telemetri-p95 var 1,7 ms. Identitetsstubben förnyade 1 204 token och behöll 370 token för 210 skapade syntetiska sessioner med 200 använda sessionsposter i databasen. Tabell och index för simulerad telemetri tog 9 306 112 byte efter körningen. Siffrorna avser den lokala modellen med syntetisk identitet och cirka två minuters normal last.
@@ -186,7 +195,7 @@ node scripts/quality/capacity-http.mjs \
 
 Provet matar syntetiska avläsningar genom den befintliga adaptervalideringen och den riktiga statusuppdateringen i PostgreSQL. Det kör 230 schemalagda avläsningar/s tillsammans med listning, planjobb och återkallelse, följt av 600/s tillsammans med sidvis fordonsläsning. Återanslutningsvågen omfattar ytterligare 12 000 avläsningar under en minut ovanpå 230/s. Den avgränsade toppens längd styrs av `--seconds`. Återanslutningsvågen har en fast minut enligt [lastprofilen](capacity-profile.v1.json).
 
-Välj `--scenario concentrated` för alla 12 000 fordon i ett företag eller `--scenario distributed` för 12 företag. Välj `--phase normal`, `--phase peak` eller `--phase reconnect` för en enskild fas. Med `--peak-seconds 600` kör toppfasen de föreskrivna tio minuterna med den paginerade fordonslistan och syntetiska telemetriobservationer. Kör belastningsprovet utan annan pågående lokal CPU-belastning. HTTP-server, databas och lastgenerator delar resurser i den lokala miljön.
+Välj `--scenario concentrated` för alla 12 000 fordon i ett företag eller `--scenario distributed` för 12 företag. Välj `--phase normal`, `--phase peak` eller `--phase reconnect` för en enskild fas. Med `--peak-seconds 600` kör toppfasen de föreskrivna tio minuterna med den paginerade fordonslistan och syntetiska telemetriobservationer. Toppfasen använder samma utrymmesgräns som uthållighetsprovet och redovisar utfallet i `peak.storage`. Kör belastningsprovet utan annan pågående lokal CPU-belastning. HTTP-server, databas och lastgenerator delar resurser i den lokala miljön.
 
 ```sh
 node scripts/quality/capacity-http.mjs \

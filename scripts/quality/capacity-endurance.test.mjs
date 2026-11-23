@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { enduranceStorageGuard } from './capacity-endurance.mjs';
+import { enduranceStorageGuard, projectEnduranceStorage } from './capacity-endurance.mjs';
 import { capacityIdentity } from './capacity-identity.mjs';
 import { measureMixedReads } from './capacity-mixed-routes.mjs';
 import { capacityTimings } from './capacity-timings.mjs';
@@ -61,4 +61,21 @@ test('unavailable scratch storage stops the schedule before issuing a request', 
   } finally {
     assert.equal(disk.stop().stopReason, 'SCRATCH_SPACE_UNAVAILABLE');
   }
+});
+
+
+test('24-hour storage preflight reserves space beyond the measured telemetry relation', () => {
+  const sample = { scope: 'local_loopback_native_postgres', phase: 'endurance', revision: 'local-fixture',
+    endurance: { scheduleCompleted: true, telemetryRelationBytes: 46_751_744 },
+    telemetry: { samples: [{ committed: 138_000, allObservationsCommitted: true }],
+      reconciliation: { history: { available: true, observations: 138_003 } } } };
+  const mib = 1_048_576;
+  const short = projectEnduranceStorage(sample, 4_721 * mib);
+  assert.equal(short.projectedRows, 19_872_003);
+  assert.equal(short.projectedRelationMiB, 6_421);
+  assert.equal(short.minimumRequiredMiB, 6_933);
+  assert.equal(short.shortfallMiB, 2_212);
+  assert.equal(short.fitsRelationAndGuard, false);
+  assert.equal(projectEnduranceStorage(sample, short.minimumRequiredMiB * mib).fitsRelationAndGuard, true);
+  assert.throws(() => projectEnduranceStorage({ ...sample, phase: 'peak' }, 10_000 * mib), /completed native endurance/);
 });
