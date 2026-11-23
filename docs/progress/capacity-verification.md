@@ -301,3 +301,26 @@ I minutprovet med ett företag nådde 797 anrop lastgeneratorns kötak. De anrop
 P95 i tabellen räknas från schemalagd avsändning i den lokala lastgeneratorn, inklusive lokal kö och loopback. Driftens API-ingång, nätverk, ordinarie autentisering, samtidiga ekonomijobb och fysiska leverantörer ingick inte. Flottan fördelad över tolv företag klarade den provade minuten. Båda fördelningarna behöver full topptid med samma konfiguration för en jämförbar bedömning.
 
 Vid nästa lokala förkontroll nådde arbetsytan 8 185 MiB ledigt efter städning av äldre återskapbara byggcachefiler. Telemetritabell och stoppreserv uppskattas till sammanlagt 6 933 MiB. Det lämnar 1 252 MiB för WAL, temporära filer och andra relationer. Dygnsprovet behöver bedöma och mäta de delarna separat.
+
+### Färre databasrundor i den koncentrerade topplasten
+
+Laddkandidaten `a7d5047` samlar inställningen av verifierade identitetsuppgifter i ett SQL-anrop. PostgreSQL sätter även principal- och kontokontexten när den läser respektive rad genom ordinarie radbehörighet. För en redan registrerad identitet sparar det fyra SQL-anrop utan konto och sex med konto. Sessionskontroll, identitetslås och behörighetsläsning sker fortfarande vid varje relevant aktörstransaktion. Anropsbegränsningen har en egen transaktion. De inledande `SET LOCAL`-satserna låter rapportläsningar välja isoleringsnivå före första frågan. 22 prov med nativ PostgreSQL, nio prov för periodstängning och operatörsekonomi, sex prov för företagsrapporter samt 125 adapter-, HTTP- och databastester passerade på kandidaten.
+
+De lokala topplastproven använde testverktyget `57426bc`, 12 000 fordon i samma företag, PostgreSQL 18.6, 54 migrationer och en gemensam pool på tio anslutningar. I alla körningar erbjöds 300 blandade HTTP-anrop och 600 simulatorobservationer per sekund. Trafikmixen omfattade verifierade fordonssummor från redan förseglade kostnader.
+
+| Laddrevision | Provtid | HTTP med väntat utfall | Beständiga observationer | Högsta läs-p95 | Telemetri-p95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `6ab2e7c`, före ändringen | 60 s | 17 883 av 18 000 | 35 667 av 36 000 | 1 895,5 ms | 626,6 ms |
+| `6ab2e7c`, omprov | 60 s | 16 623 av 18 000 | 32 951 av 36 000 | 3 210,1 ms | 1 016,9 ms |
+| `a7d5047`, kandidat | 600 s | 179 907 av 180 000 | 359 614 av 360 000 | 62,6 ms | 6,8 ms |
+
+På kandidaten låg alla läs-p95 under 500 ms, med 16,4 ms för första fordonslistan, 30,2 ms för partnerrutten och 33,6 ms för fordonssummeringen. Lastgeneratorn nådde sitt tak på 400 pågående operationer och skickade aldrig 93 av de schemalagda HTTP-anropen och 386 telemetriobservationerna. De anrop som skickades gav väntade statusar och nyttolaster. Inga telemetriskrivningar rapporterade fel och alla 12 000 aktuella fordonsrader stämdes av mot de faktiskt lagrade observationerna. Provet avslutades med kod 2 och dygnsprovet startades inte. Kötaket visar var anrop föll bort. Olika provtider och delade lokala resurser begränsar jämförbarheten. Orsaken till de tillfälliga kötopparna återstår att mäta.
+
+Vid 9 minuter och 30 sekunder tog PostgreSQL:s datakatalog 512 MiB, varav 353 MiB var `pg_wal` och 158 MiB var `base`. Minsta uppmätta lediga utrymme var 7 757 MiB. Det ger en lokal punktmätning av WAL under topplast. Planeringen av dygnsprovet behöver även utrymme för WAL-variation och temporära avstämningsfiler.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /path/to/charging-subscription --python /path/to/fleet-venv/bin/python \
+  --scratch-dir /path/to/scratch --scenario concentrated --phase peak --peak-seconds 600 \
+  --telemetry --metered-observations --mixed-routes --roaming-cost-routes
+```
