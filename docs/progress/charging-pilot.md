@@ -69,3 +69,7 @@ Spara datum, miljöklass, kodrevision och klientbyggen, anonymiserade resursrefe
 **Nästa handling** är att välja testplats och avtalad styrväg, hämta dess verkliga API-/protokollkontrakt och mätdefinition, implementera adapter och efterkörning med återläsning i laddbackenden och genomföra den fysiska sekvensen. Lokal simulering lämnar R46 och R58 öppna. Inga fysiska kommandon eller driftändringar gjordes under denna checkpoint.
 
 Skills aktiverade för verifieringsspåret är repots `verification`, `investigation-mode` och `observability`. Datautbytes- och mobil/PWA-profilerna styr provomfattning. Databasmigrering, drift, API- och klientförändringar får sina respektive skills när den fysiska adaptern och dess läsmodell införs.
+
+### Omprov av lokal styrkedja den 23 november
+
+På den integrerade kandidaten med stoppkontroll `da49e16` passerade 23 lokala prov för adapterkontrakt, simulerad styrning, avbrott, köarbete och autentiserad planering. Separata PostgreSQL 17-prov med disponibla databaser verifierade samtidiga kunder, exakt en effekt, städning, anslutningsåterhämtning, sen telemetri, gammal effektinformation och kWh-mål genom paus och återupptagning. Produktionsprov med avtalad adapter och oberoende fysisk mätning kvarstår enligt R46 och R58.
