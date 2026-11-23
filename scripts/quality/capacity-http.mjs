@@ -351,7 +351,7 @@ async function verifyDriverRevocation(request, fixtures) {
   return { driverGrantRevoked: true, controlTenantRetained: true };
 }
 
-async function measureReads(request, fixtures, rate, duration = seconds) {
+async function measureReads(request, fixtures, rate, duration = seconds, { signal } = {}) {
   const route = values['legacy-list'] ? 'vehicles' : 'vehicles?limit=100';
   const attempts = rate * duration;
   const latencies = [];
@@ -362,12 +362,16 @@ async function measureReads(request, fixtures, rate, duration = seconds) {
   let bytes = 0;
   let wrongRows = 0;
   let dropped = 0;
+  let requests = 0;
   let maxInFlight = 0;
   const start = performance.now();
   for (let index = 0; index < attempts; index += 1) {
+    if (signal?.aborted) break;
     const scheduled = start + index * 1000 / rate;
     const wait = scheduled - performance.now();
     if (wait > 0) await delay(wait);
+    if (signal?.aborted) break;
+    requests += 1;
     if (pending.size >= 400) {
       dropped += 1;
       continue;
@@ -397,10 +401,10 @@ async function measureReads(request, fixtures, rate, duration = seconds) {
   const observedSeconds = (performance.now() - start) / 1_000;
   assert.equal(wrongRows, 0, 'A successful response contained unexpected or cross-tenant rows');
   const p95Ms = percentile(latencies, 0.95);
-  const unexpectedErrorRatio = (attempts - (statuses['200'] ?? 0)) / attempts;
+  const unexpectedErrorRatio = requests ? (requests - (statuses['200'] ?? 0)) / requests : null;
   return {
     route: `GET /v1/accounts/:account/${route}`,
-    offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests: attempts, statuses, dropped, wrongRows,
+    offeredRequestsPerSecond: rate, scheduledSeconds: duration, requests, statuses, dropped, wrongRows,
     observedSeconds: Number(observedSeconds.toFixed(3)), scheduleMilliseconds: Math.round(scheduleElapsed), maxInFlight,
     p95Ms, p99Ms: percentile(latencies, 0.99), unexpectedErrorRatio, bytes,
     dispatchDelayP95Ms: percentile(dispatchDelays, 0.95), sentToReadP95Ms: percentile(responseLatencies, 0.95),
@@ -530,10 +534,10 @@ async function scenario(cluster, name) {
     const readSamples = [];
     const telemetrySamples = [];
     const profiles = {};
-    let driverRevocation, planner, enduranceEvidence;
+    let driverRevocation, planner, enduranceEvidence, peakEvidence;
     const read = mixed
       ? (rate, duration, options) => measureMixedReads(request, { ...fixtures, ...mixed }, rate, duration, options)
-      : (rate, duration) => measureReads(request, fixtures, rate, duration);
+      : (rate, duration, options) => measureReads(request, fixtures, rate, duration, options);
     if (hasPhase('normal')) {
       probe?.start();
       const normal = await Promise.allSettled([
@@ -550,17 +554,27 @@ async function scenario(cluster, name) {
       if (telemetry) telemetrySamples.push(normal[3].value);
     }
     if (hasPhase('peak')) {
+      const guard = await enduranceStorageGuard(scratchDir);
+      const options = { signal: guard.signal };
+      let peak;
       probe?.start();
-      const peak = await Promise.allSettled([
-        read(peakRate, peakSeconds),
-        telemetry?.measure('peak', peakSeconds),
-      ]);
-      profiles.peak = probe?.stop();
+      try {
+        peak = await Promise.allSettled([
+          read(peakRate, peakSeconds, options),
+          telemetry?.measure('peak', peakSeconds, options),
+        ]);
+      } finally {
+        profiles.peak = probe?.stop();
+        peakEvidence = { storage: guard.stop() };
+      }
       for (const result of peak) if (result.status === 'rejected') throw result.reason;
-      readSamples.push(peak[0].value);
-      if (telemetry) telemetrySamples.push(peak[1].value);
+      const [httpLoad, telemetryLoad] = peak.map(result => result.value);
+      readSamples.push(httpLoad);
+      if (telemetryLoad) telemetrySamples.push(telemetryLoad);
+      peakEvidence.scheduleCompleted = !guard.signal.aborted && httpLoad.requests === peakRate * peakSeconds
+        && (!telemetryLoad || telemetryLoad.scheduled === profile.load.peak.telemetryEventsPerSecond * peakSeconds);
     }
-    if (telemetry && !values['skip-reconnect'] && hasPhase('reconnect')) {
+    if (telemetry && !values['skip-reconnect'] && hasPhase('reconnect') && peakEvidence?.scheduleCompleted !== false) {
       telemetrySamples.push(await telemetry.measure('reconnect', profile.load.reconnect.durationSeconds));
     }
     if (endurance) {
@@ -611,6 +625,7 @@ async function scenario(cluster, name) {
         privateFixtureVehicles: mixed.privateCustomers.length * 2,
         ...(mixed.roamingCosts ? { roamingCosts: mixed.roamingCosts } : {}) } } : {}),
       ...(endurance ? { endurance: enduranceEvidence } : {}),
+      ...(peakEvidence ? { peak: peakEvidence } : {}),
       ...(telemetry ? { telemetry: { refresh, samples: telemetrySamples, reconciliation } } : {}),
       ...(probe ? { profiling: { explain, ...profiles } } : {}),
     }));
@@ -618,7 +633,7 @@ async function scenario(cluster, name) {
       route.wrongPayload === 0 && route.unauthorizedSuccess === 0)),
     'A mixed route delivered an unexpected payload or authorized a denied request');
     if (telemetrySamples.some(sample => !sample.allObservationsCommitted)) process.exitCode = 2;
-    if (endurance && !enduranceEvidence.scheduleCompleted) process.exitCode = 2;
+    if (peakEvidence?.scheduleCompleted === false || (endurance && !enduranceEvidence.scheduleCompleted)) process.exitCode = 2;
     if (enduranceEvidence?.planWorkload && !enduranceEvidence.planWorkload.allIntervalsCompleted) process.exitCode = 2;
   } finally {
     if (listener) await close(listener);
