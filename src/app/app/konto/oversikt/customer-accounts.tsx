@@ -8,9 +8,11 @@ import type { CustomerVehiclePage } from "@/lib/customer-vehicles";
 import { CustomerProducts, type ProductSelection } from "./customer-products";
 import { CustomerOrdersPanel, type OrderSelection } from "./customer-orders";
 import { CustomerVehiclesPanel, type VehicleSelection } from "./customer-vehicles";
+import { CustomerSessionsPanel, type SessionSelection } from "./customer-sessions";
 
 const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const productsUnavailable = "Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.";
+const accessDenied = "Åtgärden nekades. Kontolistan har hämtats på nytt.";
 const expired = "Sessionen har löpt ut. Logga in igen.";
 const invalidCode = "Koden kunde inte bekräftas. Försök igen.";
 const emailCodeNotice = "Om adressen har ett konto och en kod kan skickas får du ett mejl.";
@@ -84,6 +86,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   const [products, setProducts] = useState<ProductSelection | null>(null);
   const [orders, setOrders] = useState<OrderSelection | null>(null);
   const [vehicles, setVehicles] = useState<VehicleSelection | null>(null);
+  const [sessions, setSessions] = useState<SessionSelection | null>(null);
   const [factors, setFactors] = useState<VerificationFactor[] | null>(null);
   const [emailStep, setEmailStep] = useState<EmailCodeStep | null>(null);
   const [emailRetryAt, setEmailRetryAt] = useState(0);
@@ -101,6 +104,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setProducts(null);
     setOrders(null);
     setVehicles(null);
+    setSessions(null);
     setSignedIn(false);
     setWorking(false);
     setMessage(reason);
@@ -132,7 +136,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     void clear(accountError("MFA_REQUIRED"));
   }, [clear]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (notice = "") => {
     const login = active.current;
     if (!login) return;
     operation.current?.abort();
@@ -142,6 +146,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setProducts(null);
     setOrders(null);
     setVehicles(null);
+    setSessions(null);
     setMessage("");
     setWorking(true);
     try {
@@ -160,8 +165,10 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
         void clear(accountError(result.error));
       } else {
         setSignedIn(true);
-        if (response.ok) setAccounts(result.items);
-        else setMessage(accountError(result.error));
+        if (response.ok) {
+          setAccounts(result.items);
+          setMessage(notice);
+        } else setMessage(accountError(result.error));
       }
     } catch {
       if (operation.current === request) {
@@ -212,6 +219,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setMessage("");
     setOrders(null);
     setVehicles(null);
+    setSessions(null);
     setProducts({ ...selection, status: "loading", sending: !!productKey });
     try {
       const path = `/api/kundkonto/${encodeURIComponent(account.id)}/produkter`;
@@ -254,6 +262,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setMessage("");
     setProducts(null);
     setVehicles(null);
+    setSessions(null);
     setOrders({ ...selection, status: "loading" });
     try {
       const response = await fetch(`/api/kundkonto/${encodeURIComponent(account.id)}/bestallningar`, accountRequest(login, request.signal));
@@ -286,6 +295,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setMessage("");
     setProducts(null);
     setOrders(null);
+    setSessions(null);
     setVehicles({ ...selection, status: "loading" });
     try {
       const query = previous?.nextCursor ? `?after=${encodeURIComponent(previous.nextCursor)}` : "";
@@ -306,6 +316,42 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       }
     } catch {
       if (operation.current === request) setVehicles({ ...selection, status: "error", message: unavailableVehicles });
+    } finally {
+      if (operation.current === request) operation.current = null;
+    }
+  }
+
+  async function showSessions(account: CustomerAccount, sessionId?: string) {
+    const login = active.current;
+    if (!login || working || account.role === "billing") return;
+    operation.current?.abort();
+    const request = new AbortController();
+    operation.current = request;
+    const selection = { accountId: account.id, accountName: account.name, sessionId };
+    const unavailableSessions = "Laddningarna kunde inte hämtas. Försök igen eller öppna kundportalen.";
+    setMessage("");
+    setProducts(null);
+    setOrders(null);
+    setVehicles(null);
+    setSessions({ ...selection, status: "loading" });
+    try {
+      const detail = sessionId ? `/${encodeURIComponent(sessionId)}` : "";
+      const response = await fetch(`/api/kundkonto/${encodeURIComponent(account.id)}/laddningar${detail}`, accountRequest(login, request.signal));
+      const result = await response.json();
+      if (operation.current !== request) return;
+      if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
+        void clear(accountError(result.error));
+      } else if (response.status === 403) {
+        void load(accessDenied);
+      } else if (response.ok) {
+        setSessions(sessionId ? { ...selection, status: "detail", session: result } : { ...selection, status: "list", items: result.items });
+      } else {
+        const message = response.status === 404 && result.error === "NOT_FOUND" ? "Laddningen är inte tillgänglig på det här kontot."
+          : response.status === 429 ? accountError(result.error) : unavailableSessions;
+        setSessions({ ...selection, status: "error", message });
+      }
+    } catch {
+      if (operation.current === request) setSessions({ ...selection, status: "error", message: unavailableSessions });
     } finally {
       if (operation.current === request) operation.current = null;
     }
@@ -494,6 +540,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   const selected = accounts?.find(account => account.id === products?.accountId);
   const orderAccount = accounts?.find(account => account.id === orders?.accountId && account.role !== "driver");
   const vehicleAccount = accounts?.find(account => account.id === vehicles?.accountId);
+  const sessionAccount = accounts?.find(account => account.id === sessions?.accountId && account.role !== "billing");
 
   return <section id="produkter" className="wizard-panel" style={{ maxWidth: 680, overflowWrap: "anywhere" }}>
     {signedIn ? <>
@@ -507,7 +554,9 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
           {account.role !== "driver" && <button type="button" className="button" aria-pressed={account.id === orders?.accountId}
             onClick={() => showOrders(account)}>Visa beställningar för {account.name}</button>}
           <button type="button" className="button" aria-pressed={account.id === vehicles?.accountId}
-            onClick={() => showVehicles(account)}>Visa fordon för {account.name}</button></div>
+            onClick={() => showVehicles(account)}>Visa fordon för {account.name}</button>
+          {account.role !== "billing" && <button type="button" className="button" aria-pressed={account.id === sessions?.accountId}
+            onClick={() => showSessions(account)}>Visa laddningar för {account.name}</button>}</div>
       </li>)}</ul>}
       {products && selected && <CustomerProducts account={selected} products={products}
         retry={() => void showProducts(selected)} requestAccess={key => void showProducts(selected, key)} />}
@@ -515,8 +564,9 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
         retry={() => void showOrders(orderAccount)} />}
       {vehicles && vehicleAccount && <CustomerVehiclesPanel selection={vehicles}
         retry={() => void showVehicles(vehicleAccount)} loadMore={page => void showVehicles(vehicleAccount, page)} />}
+      {sessions && sessionAccount && <CustomerSessionsPanel selection={sessions} open={id => void showSessions(sessionAccount, id)} />}
       <div className="actions">
-        <button type="button" className="button" onClick={load} disabled={working}>Uppdatera</button>
+        <button type="button" className="button" onClick={() => { void load(); }} disabled={working}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>
       </div>
     </> : factors ? <form className="wizard-form" method="post" onSubmit={confirmVerification} aria-busy={working}>

@@ -4,6 +4,7 @@ const destinations = {
   produkter: "/produkter",
   bestallningar: "/bestallningar",
   foretagsbestallningar: "/foretag/order",
+  laddhistorik: "/historik",
 } as const;
 
 type PortalEntry = keyof typeof destinations;

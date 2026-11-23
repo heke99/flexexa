@@ -117,15 +117,17 @@ try {
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
   const orderPaths = new Set([scenario.company, scenario.customer].map(id => `/v1/accounts/${id}/orders?limit=10`));
-  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, unexpectedRequests = 0, redirectUpstream = false;
+  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, sessionReads = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
     const accountList = request.url === '/v1/accounts';
     const productAccess = request.url === productPath;
     const orderList = orderPaths.has(request.url);
     const vehicleList = /^\/v1\/accounts\/([0-9a-f-]{36})\/vehicles\?limit=25(?:&after=[A-Za-z0-9_-]{1,512})?$/.exec(request.url);
     const knownVehicleAccount = vehicleList && [scenario.customer, scenario.other, scenario.company].includes(vehicleList[1]);
+    const sessionPath = /^\/v1\/accounts\/([0-9a-f-]{36})\/sessions(?:\?limit=10|\/[0-9a-f-]{36})$/.exec(request.url);
+    const knownSessionAccount = sessionPath && [scenario.customer, scenario.other, scenario.company].includes(sessionPath[1]);
     const write = productAccess && request.method === 'POST';
-    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList && !knownVehicleAccount))) || request.headers.cookie || request.headers.origin) {
+    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList && !knownVehicleAccount && !knownSessionAccount))) || request.headers.cookie || request.headers.origin) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
@@ -133,6 +135,7 @@ try {
     if (accountList) upstreamReads += 1;
     else if (orderList) orderReads += 1;
     else if (knownVehicleAccount) vehicleReads += 1;
+    else if (knownSessionAccount) sessionReads += 1;
     else if (write) productWrites += 1;
     else productReads += 1;
     if (redirectUpstream) {
@@ -270,6 +273,8 @@ try {
   assert.equal(orderReads, 5);
 
   const vehicleFixture = new Client({ connectionString: databaseUrl });
+  const visibleSession = randomUUID(), hiddenSession = randomUUID();
+  const sessionDate = '2026-11-22T10:01:00.000Z', sessionUpdate = '2026-11-22T10:05:00.000Z';
   await vehicleFixture.connect();
   try {
     await vehicleFixture.query(`INSERT INTO charging_subscription.vehicles(id,account_id,country,plate)
@@ -282,6 +287,11 @@ try {
     );
     await vehicleFixture.query(`INSERT INTO charging_subscription.memberships(account_id,principal_id,role) VALUES($1,$2,'driver')`, [scenario.customer, principal]);
     await vehicleFixture.query(`INSERT INTO charging_subscription.driver_grants(account_id,principal_id,subscription_id) VALUES($1,$2,$3)`, [scenario.customer, principal, subscription]);
+    await vehicleFixture.query(`INSERT INTO charging_subscription.sessions
+      (id,account_id,subscription_id,vehicle_id,evse_id,provider,provider_session_id,status,created_at,updated_at,requested_principal_id)
+      VALUES($1,$3,$4,$6,'fixture-evse-a','isolated-fixture','internal-session-a','completed',$7,$8,$9),
+        ($2,$3,$5,$6,'fixture-evse-b','isolated-fixture','internal-session-b','failed',$8,$8,$9)`,
+    [visibleSession, hiddenSession, scenario.customer, subscription, consumer.sub, scenario.car, sessionDate, sessionUpdate, principal]);
   } finally {
     await vehicleFixture.end();
   }
@@ -317,8 +327,38 @@ try {
   }
   assert.deepEqual(await vehicles(scenario.customer, recipient, 200), { items: firstPage.items, nextCursor: null });
   assert.equal(vehicleReads, 6);
+  const sessions = (accountId, token, status, path = '') => requestAccount(`/${accountId}/laddningar${path}`, token && `Bearer ${token}`, status);
+  assert.deepEqual(await sessions(scenario.customer, null, 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await sessions(scenario.customer, recipient, 400, '?limit=25'), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await sessions(scenario.customer, recipient, 400, '/bad-id'), { error: 'INVALID_INPUT' });
+  assert.equal(sessionReads, 0);
+  const visible = { id: visibleSession, status: 'completed', createdAt: sessionDate, updatedAt: sessionUpdate };
+  const hidden = { id: hiddenSession, status: 'failed', createdAt: sessionUpdate, updatedAt: sessionUpdate };
+  assert.deepEqual(await sessions(scenario.customer, recipient, 200), { items: [hidden, visible] });
+  assert.deepEqual(await sessions(scenario.customer, recipient, 200, `/${hiddenSession}`), hidden);
+  assert.deepEqual(await sessions(scenario.customer, outsider, 200), { items: [visible] });
+  assert.deepEqual(await sessions(scenario.customer, outsider, 200, `/${visibleSession}`), visible);
+  assert.deepEqual(await sessions(scenario.customer, outsider, 404, `/${hiddenSession}`), { error: 'NOT_FOUND' });
+  assert.deepEqual(await sessions(scenario.other, outsider, 404, `/${visibleSession}`), { error: 'NOT_FOUND' });
+  assert.deepEqual(await sessions(scenario.customer, billing, 403), { error: 'ACCESS_DENIED' });
+  assert.equal(sessionReads, 7);
+  const revokedMembership = new Client({ connectionString: databaseUrl });
+  await revokedMembership.connect();
+  try {
+    const removed = await revokedMembership.query(`DELETE FROM charging_subscription.memberships
+      WHERE account_id=$1 AND role='driver' AND principal_id=(
+        SELECT principal_id FROM charging_subscription.identities WHERE issuer=$2 AND subject=$3)`,
+    [scenario.customer, runtime.authOrigin + '/auth/v1', scenario.outsider.id]);
+    assert.equal(removed.rowCount, 1);
+  } finally {
+    await revokedMembership.end();
+  }
+  assert.deepEqual(await sessions(scenario.customer, outsider, 403), { error: 'ACCESS_DENIED' });
+  assert.deepEqual(await sessions(scenario.customer, outsider, 403, `/${visibleSession}`), { error: 'ACCESS_DENIED' });
+  assert.deepEqual(await sessions(scenario.other, outsider, 200), { items: [] });
+  assert.equal(sessionReads, 10);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next account, product, order and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
+  console.log('Verified Next account, product, order, sessions and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
 } finally {
   await stop(next);
   if (tls?.listening) {

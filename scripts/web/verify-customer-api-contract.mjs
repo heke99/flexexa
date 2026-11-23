@@ -15,6 +15,8 @@ const marker = 'private fixture upstream payload';
 const prefix = '/api/kundkonto';
 const orders = `${prefix}/${account}/bestallningar`;
 const products = `${prefix}/${account}/produkter`;
+const sessions = `${prefix}/${account}/laddningar`;
+const sessionId = '77777777-7777-4777-8777-777777777777';
 const vehicles = `${prefix}/${account}/fordon?after=YQ`;
 const tmp = await mkdtemp(join(tmpdir(), 'flexexa-customer-contract-'));
 const certificate = join(tmp, 'cert.pem');
@@ -122,6 +124,12 @@ try {
   await technical(next, products, 503, 'COMMERCE_INVALID_RESPONSE', 'products');
   reply.body = { items: [], requests: [] };
   await probe(next, products, 200, reply.body);
+  reply.body = { items: [{ id: sessionId, status: marker }] };
+  await technical(next, sessions, 503, 'COMMERCE_INVALID_RESPONSE', 'sessions');
+  reply.body = { id: account, status: 'completed', created_at: '2026-11-26T10:00:00Z', updated_at: '2026-11-26T10:05:00Z' };
+  await technical(next, `${sessions}/${sessionId}`, 503, 'COMMERCE_INVALID_RESPONSE', 'session-detail');
+  Object.assign(reply, { status: 404, body: { error: marker } });
+  await probe(next, `${sessions}/${sessionId}`, 404, { error: 'NOT_FOUND' });
   Object.assign(reply, { status: 302, headers: { Location: `https://${host}:${fixture.address().port}/unexpected` } });
   await technical(next, prefix, 503, 'COMMERCE_TRANSPORT', 'accounts');
   assert.ok(!calls.includes('/unexpected'));
@@ -129,7 +137,7 @@ try {
   await technical(next, prefix, 503, 'COMMERCE_TIMEOUT', 'accounts');
 
   const logs = next.logs() + invalid.logs();
-  assert.ok([account, authorization, marker].every(secret => !logs.includes(secret)));
+  assert.ok([account, sessionId, authorization, marker].every(secret => !logs.includes(secret)));
   const fields = logs.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
   assert.equal(fields.length, expected.length);
   for (const { requestId, route, name, status } of expected) {

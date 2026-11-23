@@ -41,3 +41,11 @@ Kundproxyn svarar med `Cache-Control: no-store` och ett nytt servergenererat `X-
 Ett ogiltigt produktbeslut eller en ogiltig orderrad gör hela läsningen tillfälligt otillgänglig. Äldre ordrar utan prisavtal kan fortfarande visa referens och status. Bara en betald eller återbetald order med ett verifierat SEK-belopp för en vara visar pris. Kund-ID:n använder vanliga UUID-varianter och avvisar nil- och maxvärden. Fordonssidor följer Commerce-markören. En sista sida med exakt 25 fordon har också `nextCursor: null`.
 
 Kör `node scripts/web/verify-customer-api-contract.mjs` efter `pnpm build` för att prova felklassning, tidsgräns, konfigurationsgrind och loggfält mot en lokal HTTPS-fixture.
+
+## Laddhistorik i skyddad förhandsvisning
+
+Kontovyn kan visa de tio senaste laddsessionerna och detaljer för en vald session. Commerce avgör vilka konton och sessioner den presenterade åtkomsttokenen får läsa. Next vidarebefordrar enbart referens, status och tidsstämplar. En nekad läsning rensar laddhistoriken och hämtar om kontolistan. Sessionssvaren har `no-store` och korrelations-ID. Saknad eller oåtkomlig sessionsdetalj som Commerce klassar som 404 visas som `NOT_FOUND`.
+
+En separat skyddad Vercel-preview behöver `FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW=true`, `FLEXEXA_CUSTOMER_AUTH_URL`, `FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY` och `FLEXEXA_CUSTOMER_API_URL` för samma sandboxmiljö vid både bygge och körning. Bygget lägger in enbart det avsedda Auth-ursprunget i webbläsarens `connect-src`. E-postkod styrs separat av `FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW`. Lösenordsprovet kräver varken e-postkod eller utskick.
+
+Det lokala Chromiumprovet bygger en produktionsapp med Auth-fixturens tilldelade port. Kör `node scripts/web/verify-customer-account.mjs` i en separat checkout. Provet kör både mobil och dator, inklusive kontobyte, sen sessionsdetalj, tom historik, borttagen behörighet och utloggning. Native-provet kopplar samma Next-rutter till verklig loopback Commerce och PostgreSQL. För värdbevis behövs behörig Vercel-inloggning i mobilprofil med betrodd TLS-kedja samt en förberedd disponibel sandboxidentitet med isolerade konton och sessioner. [Chromiumprov](../../scripts/web/verify-customer-account.mjs) · [Databasprov](../../scripts/web/verify-customer-account-native.mjs)

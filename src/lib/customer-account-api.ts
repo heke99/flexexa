@@ -7,7 +7,8 @@ import type { CustomerVehicleListPath } from "@/lib/customer-vehicles";
 
 const authErrors = ["MFA_REQUIRED", "RECOVERY_REQUIRED", "VERIFIED_EMAIL_REQUIRED"];
 type AccountApiPath = "/v1/accounts" | `/v1/accounts/${string}/product-access` |
-  `/v1/accounts/${string}/orders?limit=10` | CustomerVehicleListPath;
+  `/v1/accounts/${string}/orders?limit=10` | CustomerVehicleListPath |
+  `/v1/accounts/${string}/sessions?limit=10` | `/v1/accounts/${string}/sessions/${string}`;
 type TechnicalClass = "CONFIGURATION_INVALID" | "COMMERCE_TIMEOUT" | "COMMERCE_INVALID_RESPONSE" |
   "COMMERCE_REJECTED" | "COMMERCE_UNAVAILABLE" | "COMMERCE_TRANSPORT";
 
@@ -27,6 +28,7 @@ function customerRouteType(request: Request) {
     case "produkter": return detail ? "product-request" : "products";
     case "bestallningar": return "orders";
     case "fordon": return "vehicles";
+    case "laddningar": return detail ? "session-detail" : "sessions";
     default: return "accounts";
   }
 }
@@ -96,6 +98,7 @@ async function customerAccountApi(
       if (retry && /^\d{1,5}$/.test(retry) && Number(retry) <= 86400) response.headers.set("Retry-After", retry);
       return response;
     }
+    if (upstream.status === 404 && path.includes("/sessions/")) return send({ error: "NOT_FOUND" }, 404);
     if (upstream.status === 400 || upstream.status === 403) {
       const payload = await upstream.json().catch(() => {
         signal.throwIfAborted();

@@ -36,6 +36,8 @@ const userIds = { first: randomUUID(), second: randomUUID() };
 const productPath = ({ id }) => `/v1/accounts/${id}/product-access`;
 const privateOrder = '77777777-7777-4777-8777-777777777777';
 const companyOrder = '88888888-8888-4888-8888-888888888888';
+const personalSession = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+const companySession = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
 const vehicleCursor = 'eyJ4IjoxfQ';
 const grant = (product_key, enabled, status = 'active') => ({ product_key, status, version: 4, enabled, expires_at: null });
 const productAccess = new Map([
@@ -101,6 +103,8 @@ const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let heldOrderReply;
+let heldSessionReply;
+const accountsWithoutSessions = new Set();
 let startURL;
 let upstream;
 let secondHasTotp = false;
@@ -228,6 +232,21 @@ try {
           : { id: companyOrder, state: 'paid', quantity: 1, agreement: { amount_minor: 12345, currency: 'sek', email: 'fixture-only@example.test' } };
         return reply(200, { items: [{ ...order, created_at: '2026-11-21T10:00:00Z' }], nextCursor: null });
       }
+      const sessionPath = /^\/v1\/accounts\/([^/]+)\/sessions(?:\/([^/]+))?$/.exec(url.pathname);
+      if (sessionPath && req.method === 'GET') {
+        const [, accountId, sessionId] = sessionPath;
+        if (!accounts[actor].some(({ id, role }) => id === accountId && role !== 'billing')) return reply(403, { error: 'FORBIDDEN' });
+        const id = accountId === personal.id ? personalSession : companySession;
+        const session = { id, status: accountId === personal.id ? 'uncertain' : 'completed',
+          created_at: '2026-11-21T10:00:00Z', updated_at: '2026-11-21T11:00:00Z',
+          provider_session_id: 'never-show-fixture-provider-session' };
+        if (!sessionId && url.search === '?limit=10') {
+          return reply(200, { items: accountsWithoutSessions.has(accountId) ? [] : [session], nextCursor: null });
+        }
+        if (sessionId !== id || url.search) return reply(404, { error: 'NOT_FOUND' });
+        if (id === personalSession && heldSessionReply) await heldSessionReply;
+        return reply(200, session);
+      }
       const vehicleAccount = /^\/v1\/accounts\/([^/]+)\/vehicles$/.exec(url.pathname)?.[1];
       if (vehicleAccount && req.method === 'GET' && url.searchParams.get('limit') === '25') {
         if (!accounts[actor].some(({ id }) => id === vehicleAccount)) return reply(403, { error: 'FORBIDDEN' });
@@ -271,12 +290,17 @@ try {
   upstream = `https://${host}:${fixture.address().port}`;
   const [enabledPort, disabledPort, passwordOnlyPort, driverPort] = await Promise.all(Array.from({ length: 4 }, portAvailable));
   const nextBin = resolve('node_modules/next/dist/bin/next');
+  const previewEnv = (enabled, emailOtp) => ({
+    ...process.env, NODE_ENV: 'production', NODE_EXTRA_CA_CERTS: certificatePath,
+    FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW: String(enabled), FLEXEXA_CUSTOMER_AUTH_URL: upstream,
+    FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW: String(emailOtp), FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY: publishableKey,
+    FLEXEXA_CUSTOMER_API_URL: upstream,
+  });
+  // Next fixes the production CSP at build time, including the fixture's allocated Auth port.
+  execFileSync(process.execPath, [nextBin, 'build'], { env: previewEnv(true, true), stdio: 'inherit' });
   const launchNext = (port, enabled, emailOtp = false) => {
     const nextAlive = launch(process.execPath, [nextBin, 'start', '--hostname', host, '--port', String(port)], {
-      env: { ...process.env, NODE_ENV: 'production', NODE_EXTRA_CA_CERTS: certificatePath,
-        FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW: String(enabled), FLEXEXA_CUSTOMER_AUTH_URL: upstream,
-        FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW: String(emailOtp),
-        FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY: publishableKey, FLEXEXA_CUSTOMER_API_URL: upstream },
+      env: previewEnv(enabled, emailOtp),
     });
     const base = `http://${host}:${port}`;
     return pending(async () => {
@@ -290,6 +314,10 @@ try {
   };
   startURL = await launchNext(enabledPort, true, true);
   const enabledNext = childProcesses.at(-1);
+  const policyResponse = await request(startURL + overview);
+  const connectSources = policyResponse.headers.get('content-security-policy')?.split('; ').find(value => value.startsWith('connect-src '));
+  assert.equal(connectSources, `connect-src 'self' ${upstream}`);
+  await policyResponse.body?.cancel();
   const disabled = await launchNext(disabledPort, false);
   const passwordOnly = await launchNext(passwordOnlyPort, true);
   const passwordOnlyPage = await request(passwordOnly + overview);
@@ -305,7 +333,9 @@ try {
   assertPortalRedirect(enabled, overview);
   assertPortalRedirect(await request(startURL + '/app/produkter' + hostileQuery), `${overview}#produkter`);
   const productApi = `/api/kundkonto/${personal.id}/produkter`;
-  for (const [base, path, status] of [[startURL, '/api/kundkonto', 401], [startURL, productApi, 401], [disabled, productApi, 404]]) {
+  const sessionApi = `/api/kundkonto/${personal.id}/laddningar`;
+  for (const [base, path, status] of [[startURL, '/api/kundkonto', 401], [startURL, productApi, 401], [disabled, productApi, 404],
+    [startURL, sessionApi, 401], [disabled, sessionApi, 404], [disabled, `${sessionApi}/${personalSession}`, 404]]) {
     const unavailable = await request(base + path);
     assert.equal(unavailable.status, status);
     assert.match(unavailable.headers.get('cache-control') ?? '', /\bno-store\b/);
@@ -367,7 +397,7 @@ try {
   const assertNoStorage = async () => {
     const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
     for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode,
-      'first@example.test', 'second@example.test', ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
+      personalSession, companySession, 'first@example.test', 'second@example.test', ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
     assert.doesNotMatch(persisted, /sb-[^"\s]*-auth-token/);
@@ -481,6 +511,7 @@ try {
   const latestAccountRead = calls.findLastIndex(({ path }) => path === '/v1/accounts');
   assert.ok(calls.slice(0, latestAccountRead).some(({ path, assurance, actor }) => path === '/auth/v1/user' && assurance === 'aal2' && actor === 'second'));
   assert.match(await text(), /Konto Blå · Företag · Ekonomi/);
+  assert.doesNotMatch(await text(), /Visa laddningar för Konto Blå/);
   assert.doesNotMatch(await text(), /Konto Grön|Konto Guld/);
   assert.doesNotMatch(await productView(), /Konto Grön|Konto Guld|Laddabonnemang|Energioptimering/);
   nextProductReply.set(otherCompany.id, Promise.resolve(true));
@@ -530,6 +561,50 @@ try {
   await pending(async () => (await text()).includes(privateOrder));
   assert.match(await text(), /Väntar på betalning/);
   assert.doesNotMatch(await text(), new RegExp(`${companyOrder}|checkout\\.invalid`));
+  await clickButton(`Visa laddningar för ${personal.name}`, true);
+  await pending(async () => (await text()).includes(personalSession));
+  assert.match(await text(), /Status behöver stämmas av/);
+  const delayedSession = Promise.withResolvers();
+  heldSessionReply = delayedSession.promise;
+  try {
+    await clickButton('Visa laddning', true);
+    await pending(() => businessCalls().some(({ path }) => path.endsWith(`/sessions/${personalSession}`)));
+    await clickButton(`Visa laddningar för ${company.name}`);
+    await pending(async () => (await text()).includes(companySession));
+  } finally {
+    delayedSession.resolve();
+    heldSessionReply = null;
+  }
+  await clickButton('Visa laddning', true);
+  await pending(async () => /Laddningsdetaljer[\s\S]*Senast uppdaterad/.test(await text()));
+  assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Laddningsdetaljer');
+  assert.match(await text(), /Avslutad/);
+  assert.doesNotMatch(await text(), new RegExp(`${personalSession}|never-show-fixture-provider-session|Stoppa laddning`));
+  await clickButton('Tillbaka till senaste laddningar');
+  await pending(async () => /Senaste laddningar/.test(await text()) && (await text()).includes(companySession));
+  await assertNoStorage();
+  verified.push('account-scoped recent charging and details, keyboard access and stale cross-account replies discarded');
+  const membershipsBeforeDenial = accounts.first;
+  const accountReadCount = () => businessCalls().filter(({ path, actor }) => path === '/v1/accounts' && actor === 'first').length;
+  try {
+    accountsWithoutSessions.add(company.id);
+    await clickButton('Uppdatera laddningar', true);
+    await pending(async () => (await text()).includes('Det finns inga laddningar att visa på kontot.'));
+    assert.doesNotMatch(await text(), new RegExp(`${personalSession}|${companySession}`));
+    accountsWithoutSessions.delete(company.id);
+    await clickButton('Uppdatera laddningar', true);
+    await pending(async () => (await text()).includes(companySession));
+    const beforeSessionRoleRevoked = accountReadCount();
+    accounts.first = [personal];
+    await clickButton('Uppdatera laddningar', true);
+    await pending(async () => (await text()).includes('Kontolistan har hämtats på nytt.') && !(await text()).includes(company.name));
+    assert.equal(accountReadCount(), beforeSessionRoleRevoked + 1);
+    assert.doesNotMatch(await text(), new RegExp(`Senaste laddningar|Laddningsdetaljer|${personalSession}|${companySession}`));
+  } finally {
+    accountsWithoutSessions.delete(company.id);
+    accounts.first = membershipsBeforeDenial;
+  }
+  verified.push('mobile charging history empty state and immediate clearing after Commerce denies a removed membership');
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !(await text()).includes(personal.name));
   await assertNoStorage();
