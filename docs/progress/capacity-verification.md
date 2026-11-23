@@ -270,3 +270,5 @@ Omprovet med ett företag och 12 000 fordon gav 6 000 av 6 000 väntade HTTP-sva
 ### Omprov av periodstängning den 23 november
 
 Det isolerade PostgreSQL-provet på aktuell laddkandidat stängde och exporterade 124 000 syntetiska CDR för 2 000 fordon. Exporten omfattade 620 sidor. Det förseglade underlaget matchade det oberoende facit på 845 981 816 Wh och 213 490 180 öre. En sen post på 3 900 Wh och 75 öre stämdes av separat. Periodstängning med samtidig import tog 2 926 ms och exporten 1 567 ms. Omprovet med 12 000 fordon avbröts när den lokala testdisken blev full. Den disponibla databasen städades. Tidigare fullskalebevis med 744 000 poster avser tidigare revision.
+
+Senare samma dag passerade omprovet på laddrevision `45f8597` med 12 000 fordon och 744 000 syntetiska CDR. Alla 3 720 exportsidor stämdes av mot ett oberoende facit på 5 077 304 000 Wh och 1 281 416 000 öre. Samtidig import stämdes av separat med 3 900 Wh och 75 öre. Stängningen tog 20 766 ms med samtidig import och exporten 13 242 ms i disponibel lokal PostgreSQL 17. Ordinarie klienttrafik, verklig operatörsdata och fakturaleverans ingick inte.
