@@ -42,3 +42,5 @@ Laddrevision `252b40b` rättar en samtidighetskonflikt som reproducerades i Post
 Stripe-kontot Flexexa Ladda – Staging bekräftades vara i testläge. Skrivskyddad avläsning visade tidigare slutförda Checkout-sessioner och betalda testfakturor. Utfall vid en ny automatisk förnyelse i staging återstår.
 
 Laddrevision `d3d7689` passerade företagsprovet med tre produktkombinationer i ett separat PostgreSQL 18-kluster, inklusive referensklient, avgränsat mandat och återkallelse. Samma prov kan köras med `TEST_LIMITED_ROLLOUT_DATABASE_URL` riktad mot en tom lokal `charging_test`-databas. Ytterligare 13 prov passerade i separata kluster för kontokatalog, företagskostnader, historisk fordonsfördelning, migrationsparitet och fristående Gridex-flöde med simulerad betalning.
+
+Samma lokala PostgreSQL 18-körning kompletterades med 14 prov för integritetsgranskning, fysiskt laddbevis från syntetiska källor, stängning av operatörsmånad och lokal återställning av en förseglad period. Sammanlagt passerade 28 testfall i disponibla kluster den 23 november. Ingen hanterad backupövning ingick.
