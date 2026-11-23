@@ -205,3 +205,9 @@ Laddrevision `4057573` körde dessutom Stripe SDK:s faktiska skrivtransport mot 
 Laddrevision `2166d13` lade till ett separat Gridexprov i isolerad PostgreSQL med verklig HTTP-ingång, Gridex-adapter och Stripe-signaturverifiering mot syntetiska leverantörssvar. Förlorat offertsvar gav en enda offert och gammal avtalshash avvisades. Kombinerad order hölls utan betalning. En separat betalning skapade ett enda abonnemang trots upprepade signerade händelser. Ingen verklig Gridex-ansökan skickades. Den avsedda sandboxkonfigurationen och en verifierad väg för frigivning av betalningen vid ett auktoritativt Gridex-besked återstår.
 
 Sex lokala Rewards-prov passerade, inklusive styrkt mottagare och balanserad avräkning med syntetiska data. Inget externt program aktiverades eller reglerades.
+
+## Gridex offertbekräftelse och ansökningsprov
+
+Laddrevision `e382206` binder ansökningsavsikten till den aktuella sparade offerten, uttrycklig bekräftelse från verifierad kontoägare och juridiska dokument. Migrering 059, omspelning och lokal paketering passerade. Det lokala PostgreSQL-provet körde den ordinarie HTTP- och adapterkedjan mot fixturer. Vid förlorat svar skapade provleverantören en enda ansökan. När leverantören svarade `accepted` låg betalningsspärren kvar och inga Stripe-anrop gjordes för den kombinerade ordern.
+
+Utifrån Gridex kontrakt betyder den statusen mottagen ansökan. Kundportalens offertbekräftelse, aktiv sandboxintegration med rätt identitetsbevis, auktoritativ leveransstatus och godkänd prisbindning behöver finnas innan den kombinerade betalningen kan frigöras. Det lokala ansökningstestet har ingen publicerad körväg till Gridex.
