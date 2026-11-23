@@ -48,3 +48,5 @@ Spara anonymiserad kombination av modellvariant, marknad, konto och firmware, re
 **Nästa handling för integrationsägaren och pilotansvarig** är att välja en avtalad laddbox och mätpunkt för kWh-piloten. Kör testmiljöprovet med den valda adaptern. Utse och verifiera bilvarianter när separata bilfunktioner behövs.
 
 Skills för deluppdraget är repots `verification` och `investigation-mode` samt datautbytesprofilen. Inspelning av levande telemetri, databas och klientaktivering hör till respektive integrationsleverans.
+
+Vid omprov den 23 november passerade samtliga tre katalogtester mot fasta källsvar. Två försök att reproducera utdraget från EEA:s live-API gav HTTP 502, och direktanslutningen utan proxy misslyckades. Det sparade katalogutdraget behölls med tidigare verifierad proveniens. Någon ny kontroll mot livekällan kunde därför inte registreras.
