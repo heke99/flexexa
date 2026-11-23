@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -27,6 +27,9 @@ const launch = (command, args, options = {}) => run(command, args, {env: environ
 const working = await mkdtemp("/tmp/fx-r57-");
 const socket = join(working, "s");
 const data = join(working, "pgdata");
+const recoverySocket = join(working, "r");
+const recoveryData = join(working, "recovery-pgdata");
+const roles = join(working, "roles.sql");
 const archive = join(working, "recovery.dump");
 const username = "r57_admin";
 const port = 5432;
@@ -42,17 +45,25 @@ const provider = new SimulatedVehicleProvider({clock: () => simulatedNow});
 const metricMs = start => Math.round(performance.now() - start);
 const historyVehicles = 12000;
 const historySessions = 24000;
-let serverStarted = false;
+const runningClusters = [];
 const metrics = {};
 
-async function connect(database) {
-  const client = new pg.Client({...protocol, database});
+async function startCluster(directory, host, owner) {
+  await mkdir(host, {mode: 0o700});
+  await launch(postgresBin("initdb"), ["-D", directory, "-U", owner, "-A", "trust", "--no-locale"]);
+  await launch(postgresBin("pg_ctl"), ["-D", directory, "-l", join(directory, "postgres.log"), "-w", "-t", "15",
+    "-o", `-h '' -k '${host}' -p ${port} -c unix_socket_permissions=0700`, "start"]);
+  runningClusters.push(directory);
+}
+
+async function connect(database, host = socket) {
+  const client = new pg.Client({...protocol, host, database});
   await client.connect();
   shutdown.push(() => client.end());
   const {rows: [target]} = await client.query(`
     SELECT current_database() AS db, inet_server_addr() IS NULL AS local,
            current_setting('unix_socket_directories') AS socket, current_user AS actor`);
-  assert.deepEqual(target, {db: database, local: true, socket, actor: username});
+  assert.deepEqual(target, {db: database, local: true, socket: host, actor: username});
   return client;
 }
 
@@ -160,8 +171,8 @@ async function verifyRls(connection) {
   }
 }
 
-async function app(database, claim) {
-  const pool = new pg.Pool({...protocol, database, max: 4});
+async function app(database, claim, host = socket) {
+  const pool = new pg.Pool({...protocol, host, database, max: 4});
   shutdown.push(() => pool.end());
   const db = new Database(pool);
   const service = new Service(db, {clock: () => new Date(simulatedNow)});
@@ -195,16 +206,11 @@ async function app(database, claim) {
 }
 
 try {
-  await mkdir(socket, {mode: 0o700});
-  await launch(postgresBin("initdb"), ["-D", data, "-U", username, "-A", "trust", "--no-locale"]);
-  await launch(postgresBin("pg_ctl"), ["-D", data, "-l", join(working, "postgres.log"), "-w", "-t", "15",
-    "-o", `-h '' -k '${socket}' -p ${port} -c unix_socket_permissions=0700`, "start"]);
-  serverStarted = true;
+  await startCluster(data, socket, username);
+  await startCluster(recoveryData, recoverySocket, username);
   const admin = await connect("postgres");
   await admin.query("CREATE DATABASE r57_source");
-  await admin.query("CREATE DATABASE r57_restored");
   const source = await connect(sourceDatabase);
-  const restored = await connect(restoreDatabase);
   metrics.postgres = (await source.query("SHOW server_version")).rows[0].server_version;
 
   const legacy = join(working, "legacy");
@@ -263,7 +269,6 @@ try {
 
   const claim = {issuer: "https://r57-fixture.invalid", subject: "r57-owner", recent: true};
   const sourceApp = await app(sourceDatabase, claim);
-  const restoredApp = await app(restoreDatabase, claim);
   const account = (await sourceApp.service.createPersonal(claim, "R57 pilot")).id;
   const principal = (await source.query("SELECT personal_owner FROM charging_subscription.accounts WHERE id=$1", [account])).rows[0].personal_owner;
   await source.query("UPDATE charging_subscription.accounts SET kind='business',personal_owner=NULL WHERE id=$1", [account]);
@@ -291,13 +296,28 @@ try {
 
   const beforeDump = performance.now();
   const connectionArgs = ["--host", socket, "--port", String(port), "--username", username];
+  await launch(clientBin("pg_dumpall"), [...connectionArgs, "--roles-only", "--no-role-passwords", "--file", roles]);
+  const roleScript = await readFile(roles, "utf8");
+  const bootstrapRole = `CREATE ROLE ${username};\n`;
+  assert.equal(roleScript.split(bootstrapRole).length, 2);
+  await writeFile(roles, roleScript.replace(bootstrapRole, ""), {mode: 0o600});
   await launch(clientBin("pg_dump"), [...connectionArgs, "--format=custom", "--file", archive, sourceDatabase]);
   metrics.dump_ms = metricMs(beforeDump);
   metrics.dump_bytes = (await stat(archive)).size;
   const recoveryBegan = performance.now();
-  await launch(clientBin("pg_restore"), [...connectionArgs, "--single-transaction", "--exit-on-error",
+  const recoveryArgs = ["--host", recoverySocket, "--port", String(port)];
+  await launch(clientBin("psql"), [...recoveryArgs, "--username", username, "--dbname", "postgres",
+    "--no-psqlrc", "--set", "ON_ERROR_STOP=1", "--single-transaction", "--file", roles]);
+  const recovery = await connect("postgres", recoverySocket);
+  await recovery.query("CREATE DATABASE r57_restored");
+  metrics.roles_and_database_ms = metricMs(recoveryBegan);
+  const restoreBegan = performance.now();
+  await launch(clientBin("pg_restore"), [...recoveryArgs, "--username", username, "--single-transaction", "--exit-on-error",
     "--dbname", restoreDatabase, archive]);
-  metrics.restore_ms = metricMs(recoveryBegan);
+  metrics.restore_ms = metricMs(restoreBegan);
+  metrics.independent_recovery_cluster = true;
+  const restored = await connect(restoreDatabase, recoverySocket);
+  const restoredApp = await app(restoreDatabase, claim, recoverySocket);
   assert.deepEqual(await fingerprint(restored), before);
   assert.deepEqual((await restored.query("SELECT name,sha256 FROM charging_migrations.history ORDER BY name")).rows, journal);
   metrics.restored_api_rls = await verifyRls(restored);
@@ -337,7 +357,10 @@ try {
     for (const cleanup of shutdown.reverse()) await cleanup();
   } finally {
     try {
-      if (serverStarted) await launch(postgresBin("pg_ctl"), ["-D", data, "-w", "-t", "15", "-m", "fast", "stop"]);
+      const stopped = await Promise.allSettled(runningClusters.map(directory =>
+        launch(postgresBin("pg_ctl"), ["-D", directory, "-w", "-t", "15", "-m", "fast", "stop"])));
+      const failure = stopped.find(result => result.status === "rejected");
+      if (failure) throw failure.reason;
     } finally {
       await rm(working, {recursive: true, force: true});
     }
