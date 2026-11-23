@@ -211,3 +211,9 @@ Sex lokala Rewards-prov passerade, inklusive styrkt mottagare och balanserad avr
 Laddrevision `e382206` binder ansökningsavsikten till den aktuella sparade offerten, uttrycklig bekräftelse från verifierad kontoägare och juridiska dokument. Migrering 059, omspelning och lokal paketering passerade. Det lokala PostgreSQL-provet körde den ordinarie HTTP- och adapterkedjan mot fixturer. Vid förlorat svar skapade provleverantören en enda ansökan. När leverantören svarade `accepted` låg betalningsspärren kvar och inga Stripe-anrop gjordes för den kombinerade ordern.
 
 Utifrån Gridex kontrakt betyder den statusen mottagen ansökan. Kundportalens offertbekräftelse, aktiv sandboxintegration med rätt identitetsbevis, auktoritativ leveransstatus och godkänd prisbindning behöver finnas innan den kombinerade betalningen kan frigöras. Det lokala ansökningstestet har ingen publicerad körväg till Gridex.
+
+## Del 4 · driftstatus och säkerhetsstopp
+
+En skrivskyddad avläsning av `flexexa-energy-production` visade CloudFormation `UPDATE_COMPLETE`. CloudWatch rapporterade `OK` för API-tillgänglighet, arbetarantal, planålder och olöst kommandoålder. Ingen SNS-mottagare är konfigurerad och alla fyra larm hade noll larmåtgärder. Därför finns aktuellt bevis för larmstatus och ännu inget för leverans till mottagare.
+
+I det lokala PostgreSQL-provet på integrerad laddrevision `c0837a1` återkallade plattformsadmin energioptimering efter simulerad start med förlorad kvittens. Den köade skyddsåtgärden körde ett stopp trots att den tidigare projektionen visade noll effekt. Provet stämde av exakt 100 Wh och ett enda stopp vid återförsök. Det gamla startkommandot skickades inte igen.
