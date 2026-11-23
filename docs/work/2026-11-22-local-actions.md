@@ -159,3 +159,5 @@ Supabase-migrering `20261123082304` körde det separata auditbytet med en kontro
 ## Produktionslarm för energitjänsten
 
 Change set `flexexa-observability-20261123` lade endast till fyra CloudWatch-larm och två loggfilter i `flexexa-energy-production`. Stacken nådde UPDATE_COMPLETE. De två kömätserierna fick första datapunkten från arbetaren och båda visade noll sekunder. Larmen konfigurerades för CloudWatch-status. Ingen SNS-mottagare var konfigurerad, och larmleverans till mottagare är därför fortfarande oprövad. Den lokala mallen passerade CloudFormation-lint och fem relaterade runtimeprov.
+
+Efter larmens inledande utvärdering lästes alla fyra till OK. API-larmet hade tre datapunkter med två friska mål och arbetarlarmet tre med en körande uppgift. Båda kölarmen hade tagit emot faktiska nollvärden. Ingen befintlig Flexexa- eller driftmottagare hittades i SNS-regionen. En ny lokal PostgreSQL 17.6-körning verifierade också arbetarens köålderssignaler, återhämtning och fullständig städning av testdata.
