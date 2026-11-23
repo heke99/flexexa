@@ -171,7 +171,9 @@ export function telemetryFixture({ EnergyService, storeEnergyShadow, simulatedEn
         continue;
       }
       const { target } = event;
-      const next = reading(target, event.version, startedAt + Math.floor(event.offsetMs));
+      // Sub-millisecond timer rounding can release an event before its scheduled wall time.
+      const reportedAt = Math.min(Date.now(), startedAt + Math.floor(event.offsetMs));
+      const next = reading(target, event.version, reportedAt);
       const adapter = simulatedEnergyAdapter({ ...simulation, getAsset: async () => next });
       const previous = perVehicle.get(target.vehicleId) ?? Promise.resolve();
       const operation = previous.then(async () => {

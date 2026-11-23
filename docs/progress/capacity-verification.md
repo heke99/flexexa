@@ -260,3 +260,9 @@ För R51 jämförs normal- och topplast separat per rutt. Räkna oväntade fel o
 Den lokala kontrollen verifierar syntetisk testdatagenerering, profilens mål och HTTP-provet ovan. Sex regressionstester passerade med Node 24.19.0. Strömmande generering verifierade 8 760 000 sessionsrader för vardera full fördelning och 730 000 för snabbscenariot. Körbevis för komplett driftlik last, återhämtning, avtalade kvoter och fysisk styrning är öppna. Ansvar för uppföljningen och den integrerade revisionen följer [projektstatus](../PROJECT_STATE.md).
 
 Skill-routing i denna leverans. Repots `verification` och `observability` styr bevis och mätpunkter. Supabase- och PostgreSQL-färdigheterna tillämpas på autentiseringsadaptern, migreringsreplay och radbehörigheter i det lokala HTTP-provet. Webbläsar-, infrastruktur- och driftsättningsfärdigheterna tillämpas i motsvarande klient- och miljöprov.
+
+## Omprov av den koncentrerade fördelningen den 23 november
+
+Ett 60-sekundersprov på laddrevision `5fa53ec` med 51 migreringar hittade ett tidsfel i lastverktyget. En timer kunde släppa en observation före dess beräknade väggklockstid och då avvisade den ordinarie adaptern mätningen som framtida. Första körningen avvisade 2 828 av 13 800 observationer, samtidigt som processen avslutades med status 0. Testverktyget begränsar nu avläsningstiden till faktisk tid vid utskick och returnerar felkod när någon observation saknar beständig lagring.
+
+Omprovet med ett företag och 12 000 fordon gav 6 000 av 6 000 väntade HTTP-svar, alla 13 800 observationer beständigt sparade och alla sex rådgivande planjobb avstämda. Högsta p95 bland lyckade läsvägar var 49,6 ms. Telemetri-p95 var 2,4 ms. Testet kördes lokalt med syntetisk identitet, PostgreSQL 18.6, förseglad roamingekonomi och normalrater på 100 läsanrop respektive 230 observationer per sekund. Den produktionslika dygnskörningen återstår.

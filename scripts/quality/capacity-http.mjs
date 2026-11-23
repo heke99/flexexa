@@ -617,6 +617,7 @@ async function scenario(cluster, name) {
     assert.ok(!mixed || readSamples.every(sample => sample.routeSamples.every(route =>
       route.wrongPayload === 0 && route.unauthorizedSuccess === 0)),
     'A mixed route delivered an unexpected payload or authorized a denied request');
+    if (telemetrySamples.some(sample => !sample.allObservationsCommitted)) process.exitCode = 2;
     if (endurance && !enduranceEvidence.scheduleCompleted) process.exitCode = 2;
     if (enduranceEvidence?.planWorkload && !enduranceEvidence.planWorkload.allIntervalsCompleted) process.exitCode = 2;
   } finally {
