@@ -344,3 +344,5 @@ node scripts/quality/capacity-http.mjs \
   --endurance-plan-interval-seconds 60 --fixture-token-seconds 15 \
   --telemetry --metered-observations --mixed-routes --roaming-cost-routes --split-pools
 ```
+
+Den pågående dygnskörningen har en separat lokal bevakare i `/workspace/scratch/r51-integrated-split/verify-day-result.mjs`. Den påverkar inte provets databas eller trafik. När körningen avslutas skriver den `24h-verdict.json` med kontroller för körstatus, exakt revision och poolkonfiguration, 8 640 000 läsanrop, 19 872 000 telemetriobservationer, 1 440 planjobb, avstämd historik och borttagen testdatabas. Resultatkontrollen provades med syntetiska godkända och underkända utfall. Ett godkänt resultat gäller den lokala lasten.
