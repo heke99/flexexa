@@ -219,3 +219,7 @@ En skrivskyddad avläsning av `flexexa-energy-production` visade CloudFormation 
 I det lokala PostgreSQL-provet på integrerad laddrevision `c0837a1` återkallade plattformsadmin energioptimering efter simulerad start med förlorad kvittens. Den köade skyddsåtgärden körde ett stopp trots att den tidigare projektionen visade noll effekt. Provet stämde av exakt 100 Wh och ett enda stopp vid återförsök. Det gamla startkommandot skickades inte igen.
 
 Ett disponibelt larmprov i AWS `eu-north-1` bekräftade leverans från CloudWatch via en separat SNS-topic till en separat krypterad SQS-kö. Den matchade händelsen hade rätt larmnamn och nytt tillstånd `ALARM`. Provet satte tillståndet på testlarmet för att isolera leveransen från tröskelutvärdering och skickade inget till människor. Larm, prenumeration, topic och kö raderades. Efteråt verifierades att larmet, topicen och kön inte längre listades. Produktionslarmens mottagare och kvittering återstår.
+
+## Förberedd ordinarie larmmottagning
+
+SNS-topicen `flexexa-energy-operations` i `eu-north-1` har en e-postprenumeration med väntande mottagarbekräftelse. Topickonfigurationen tillåter CloudWatch att publicera från exakt de fyra befintliga produktionslarmen och det avgränsade leveransprovet. CloudFormation change set `flexexa-ops-alert-recipient-20261123` är skapat och verifierat. Diffen ändrar endast `AlarmActions` på de fyra larmen, utan ersättning. Aktivering och separat leveransprov väntar på att prenumerationen visas som bekräftad.
