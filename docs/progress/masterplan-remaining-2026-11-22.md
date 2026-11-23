@@ -23,7 +23,7 @@ ECS kör två friska API-instanser och en frisk arbetare på den verifierade bil
 
 | ID | Lokal verifiering | Underlag för att stänga fallet |
 | --- | --- | --- |
-| R42 | Hemmaersättning, sent tillägg och versionerad rättelse av verifierat elhandelspris. Samtidiga attester gav en beständig rättelse med exakt differens. | Pilotmånad, avtalad mottagare och bokning i betalningssandbox |
+| R42 | Hemmaersättning, sent tillägg och versionerad rättelse av verifierat elhandelspris. Samtidiga attester gav en beständig rättelse med exakt differens. Fakturaleveransen sparar nu kvittens per rad. Lokala PostgreSQL-prov täcker samtidiga arbetare, förlorat svar och avbruten lokal kvittens. | Pilotmånad, avtalad mottagare och bokning i betalningssandbox |
 | R43 | Kvarts-/månadspris, periodgräns och avslag för ändrat prisunderlag | Verifierad mätpunkt, avtalstariff och styrkt energi över pris- och abonnemangsgränser |
 | R44 | Separat CDR-kostnad och spårbart granskningsläge för oklar fordonskoppling | Fysisk metod för delad box, operatörens underlag och verifierad supportkorrigering |
 | R45 | Skilda produktlicenser, tvåföretagsmandat, kö och återkallelse. Den faktiska referensklienten passerade åtta lokala Chromiumprov över dator och mobil med signerad testidentitet, riktigt API och PostgreSQL | Verklig partnerapp och OAuth-klient, installerat klientbygge samt eventuell avtalad webhook |
