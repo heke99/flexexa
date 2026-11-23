@@ -281,3 +281,21 @@ Omprovet med ett företag och 12 000 fordon gav 6 000 av 6 000 väntade HTTP-sva
 Det isolerade PostgreSQL-provet på aktuell laddkandidat stängde och exporterade 124 000 syntetiska CDR för 2 000 fordon. Exporten omfattade 620 sidor. Det förseglade underlaget matchade det oberoende facit på 845 981 816 Wh och 213 490 180 öre. En sen post på 3 900 Wh och 75 öre stämdes av separat. Periodstängning med samtidig import tog 2 926 ms och exporten 1 567 ms. Omprovet med 12 000 fordon avbröts när den lokala testdisken blev full. Den disponibla databasen städades. Tidigare fullskalebevis med 744 000 poster avser tidigare revision.
 
 Senare samma dag passerade omprovet på laddrevision `45f8597` med 12 000 fordon och 744 000 syntetiska CDR. Alla 3 720 exportsidor stämdes av mot ett oberoende facit på 5 077 304 000 Wh och 1 281 416 000 öre. Samtidig import stämdes av separat med 3 900 Wh och 75 öre. Stängningen tog 20 766 ms med samtidig import och exporten 13 242 ms i disponibel lokal PostgreSQL 17. Ordinarie klienttrafik, verklig operatörsdata och fakturaleverans ingick inte.
+
+
+### Ny topplast med fordonssummering och telemetri
+
+På laddrevision `2166d13` kördes toppraten 300 HTTP-anrop och 600 simulatorobservationer per sekund med 12 000 fordon, förseglade roamingkostnader och mätarobservationer. Testverktyget `9a44acb` startade PostgreSQL 18.6 lokalt. Den koncentrerade fördelningen kördes i 600 sekunder med en gemensam pool på tio anslutningar. Av 180 000 schemalagda HTTP-anrop gav 178 953 väntade svar. Av 360 000 observationer lagrades 357 579. Lastgeneratorns tak på 400 pågående operationer gav 1 047 uteblivna HTTP-anrop och 2 421 uteblivna observationer. De anrop som skickades gav väntade statusar och nyttolaster. Samtliga 12 000 aktuella telemetrirader matchade facit för de observationer som lagrades.
+
+Högsta läs-p95 var 1 098,5 ms för partnerrutten. Första fordonssidan gav 747,4 ms och fordonssummeringen gav 811,6 ms mot den föreslagna gränsen på 500 ms. Telemetri-p95 var 368,5 ms för beständigt skrivna observationer. Provet avslutades med kod 2 på grund av utebliven telemetri. Utrymmesvakten löste inte ut och minsta uppmätta lediga utrymme var 3 565 MiB. Kögränsen visar var lastgeneratorn slutade skicka trafik. Provet mätte inte väntetid i databaspoolen eller orsaken till att kön växte.
+
+Två separata minutprov använde samma revisionspar, trafikmix och totalbudget med sex anslutningar för API och fyra för telemetri.
+
+| Fördelning | HTTP med väntat utfall | Beständiga observationer | Högsta läs-p95 | Telemetri-p95 |
+| --- | ---: | ---: | ---: | ---: |
+| Ett företag | 17 203 av 18 000 | 36 000 av 36 000 | 2 685 ms | 47,5 ms |
+| Tolv företag | 18 000 av 18 000 | 36 000 av 36 000 | 251,4 ms | 44,1 ms |
+
+I minutprovet med ett företag nådde 797 anrop lastgeneratorns kötak. De anrop som skickades gav väntade svar, men flera läsvägar låg över gränsen. Verktyget gav först kod 0 eftersom telemetrin och schemaläggningen slutfördes. Det returnerar nu kod 2 även när läsgränsen eller en nekandekontroll fallerar. Ett separat instrumenterat åttasekundersprov med delade pooler bekräftade kod 2 vid 531,3 ms p95 för partnerrutten. Där var API-poolens väntan 153,3 ms p95 och partnerns fordonsfråga 1,4 ms p95 inklusive databasrundtur. Telemetripoolens väntan var 90,9 ms p95. Det visar väntan före SQL i det korta provet. De längre proven saknade den instrumenteringen.
+
+P95 i tabellen räknas från schemalagd avsändning i den lokala lastgeneratorn, inklusive lokal kö och loopback. Driftens API-ingång, nätverk, ordinarie autentisering, samtidiga ekonomijobb och fysiska leverantörer ingick inte. Flottan fördelad över tolv företag klarade den provade minuten. Båda fördelningarna behöver full topptid med samma konfiguration för en jämförbar bedömning.
