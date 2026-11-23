@@ -12,6 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const host = '127.0.0.1';
 const portal = 'https://ladda.flexexa.com/';
 const overview = '/app/konto/oversikt';
+const loginHelp = '/app/konto/hjalp';
 const publishableKey = 'sb_publishable_local_browser_fixture';
 const password = 'fixture-only-customer-password';
 const incorrectCode = '135790';
@@ -311,6 +312,15 @@ try {
   const passwordOnlyHtml = await passwordOnlyPage.text();
   assert.match(passwordOnlyHtml, /Lösenord/);
   assert.doesNotMatch(passwordOnlyHtml, /Logga in med e-postkod/);
+  for (const base of [passwordOnly, disabled]) {
+    const help = await request(base + loginHelp + '?next=https%3A%2F%2Foutside.invalid');
+    assert.equal(help.status, 200);
+    const html = await help.text();
+    assert.match(html, /Kontaktuppgifter/);
+    assert.doesNotMatch(html, /Logga in med e-postkod|href="https:\/\/outside\.invalid/);
+  }
+  const unavailableEmailMode = await request(passwordOnly + overview + '?inloggning=epostkod');
+  assert.match(await unavailableEmailMode.text(), /Lösenord/);
   const hostileQuery = '?next=https%3A%2F%2Foutside.invalid&code=ignored-fixture';
   assertPortalRedirect(await request(disabled + '/app/konto' + hostileQuery), portal);
   assertPortalRedirect(await request(disabled + overview + hostileQuery), portal);
@@ -368,6 +378,11 @@ try {
     if (keyboard) await browserCommand(`/element/${element[elementKey]}/value`, { text: '\uE007' });
     else await browserCommand(`/element/${element[elementKey]}/click`, {});
   };
+  const clickHelpLink = async label => {
+    const element = await execute('return [...document.querySelectorAll("main a")].find(link => link.textContent.trim() === arguments[0]);', label);
+    assert.ok(element?.[elementKey], `Missing help link ${label}`);
+    await browserCommand(`/element/${element[elementKey]}/value`, { text: '\uE007' });
+  };
   const assertFallback = async () => {
     const fallback = await execute('return [...document.links].find(link => link.innerText.trim() === "Öppna kundportalen")?.href;');
     assert.equal(fallback, portal, 'The account overview must expose the fixed portal fallback');
@@ -419,6 +434,18 @@ try {
   await clickButton('Endast nödvändiga');
   await pending(async () => /Logga in/.test(await text()));
   await assertFallback();
+  await clickHelpLink('Hjälp med inloggning');
+  await pending(async () => await browserCommand('/url') === startURL + loginHelp);
+  assert.equal(await execute('return document.querySelector("main h1").textContent.trim();'), 'Hjälp med inloggning');
+  assert.deepEqual(await execute('return [...document.querySelectorAll("main a")].map(link => link.getAttribute("href"));'),
+    [`${overview}?inloggning=epostkod`, '/kontakt', overview]);
+  await clickHelpLink('Logga in med e-postkod');
+  await pending(async () => (await text()).includes('Skicka kod'));
+  assert.equal(await execute('return document.querySelector("#account-otp-email").value;'), '');
+  assert.equal(otpRequests, 0, 'Opening account help and choosing email code must not send a code');
+  await clickButton('Avbryt');
+  await pending(async () => (await text()).includes('Lösenord'));
+  verified.push('keyboard account help keeps the same environment, with OTP off and on and no automatic credential request');
   await login('first');
   await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
   assert.match(await text(), /Konto Grön · Privat · Ägare/);
@@ -452,11 +479,14 @@ try {
 
   await viewport(390, 844, true);
   await login('second');
-  await pending(async () => (await text()).includes('Fortsätt i kundportalen för att bekräfta din inloggning.'));
+  await pending(async () => (await text()).includes('Inloggningen behöver bekräftas. Se Hjälp med inloggning för dina alternativ.'));
   assert.doesNotMatch(await text(), /Konto Grön|Konto Blå/);
   await assertFallback();
   await assertNoStorage();
   assert.ok(!calls.some(({ path }) => path.startsWith('/auth/v1/factors/')), 'Unsupported MFA never creates a challenge');
+  await clickHelpLink('Hjälp med inloggning');
+  await pending(async () => await browserCommand('/url') === startURL + loginHelp);
+  assert.equal(await execute('return [...document.querySelectorAll("main a")].find(link => link.textContent.trim() === "Kontaktuppgifter")?.getAttribute("href");'), '/kontakt');
   secondHasTotp = true;
   await browserCommand('/url', { url: startURL + overview });
   await pending(async () => /Logga in/.test(await text()));

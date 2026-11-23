@@ -19,5 +19,5 @@ export function customerAccountConfig() {
   const publishableKey = process.env.FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY;
   if (!authUrl || !apiUrl || !publishableKey || !/^sb_publishable_[A-Za-z0-9_-]+$/.test(publishableKey)) return null;
 
-  return { authUrl, apiUrl, publishableKey };
+  return { authUrl, apiUrl, publishableKey, emailOtpEnabled: process.env.FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW === "true" };
 }

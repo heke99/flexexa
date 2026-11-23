@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { accountRoleLabels, type CustomerAccount } from "@/lib/customer-accounts";
 import type { RequestedProductKey } from "@/lib/customer-product-access";
@@ -53,7 +54,7 @@ function accountError(code: string) {
   switch (code) {
     case "MFA_REQUIRED":
     case "RECOVERY_REQUIRED":
-      return "Fortsätt i kundportalen för att bekräfta din inloggning.";
+      return "Inloggningen behöver bekräftas. Se Hjälp med inloggning för dina alternativ.";
     case "VERIFIED_EMAIL_REQUIRED":
       return "Bekräfta din e-postadress och logga in igen.";
     case "UNAUTHENTICATED":
@@ -67,8 +68,8 @@ function accountError(code: string) {
   }
 }
 
-export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
-  authUrl: string; publishableKey: string; emailOtpEnabled: boolean;
+export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, startEmailCode }: {
+  authUrl: string; publishableKey: string; emailOtpEnabled: boolean; startEmailCode: boolean;
 }) {
   const active = useRef<CustomerLogin | null>(null);
   const pending = useRef<{ login: CustomerLogin; factors: VerificationFactor[] } | null>(null);
@@ -89,7 +90,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   const [orders, setOrders] = useState<OrderSelection | null>(null);
   const [vehicles, setVehicles] = useState<VehicleSelection | null>(null);
   const [factors, setFactors] = useState<VerificationFactor[] | null>(null);
-  const [emailStep, setEmailStep] = useState<EmailCodeStep | null>(null);
+  const [emailStep, setEmailStep] = useState<EmailCodeStep | null>(emailOtpEnabled && startEmailCode ? "address" : null);
   const [emailRetryAt, setEmailRetryAt] = useState(0);
 
   const clear = useCallback((reason = "") => {
@@ -622,5 +623,6 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       }}>Logga in med e-postkod</button>}
     </form>}
     {message && <p className="fine" role="status">{message}</p>}
+    {!signedIn && <p><Link className="text-link" href="/app/konto/hjalp" prefetch={false}>Hjälp med inloggning</Link></p>}
   </section>;
 }
