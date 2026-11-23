@@ -223,3 +223,5 @@ Ett disponibelt larmprov i AWS `eu-north-1` bekräftade leverans från CloudWatc
 ## Förberedd ordinarie larmmottagning
 
 SNS-topicen `flexexa-energy-operations` i `eu-north-1` har en e-postprenumeration med väntande mottagarbekräftelse. Topickonfigurationen tillåter CloudWatch att publicera från exakt de fyra befintliga produktionslarmen och det avgränsade leveransprovet. CloudFormation change set `flexexa-ops-alert-recipient-20261123` är skapat och verifierat. Diffen ändrar endast `AlarmActions` på de fyra larmen, utan ersättning. Aktivering och separat leveransprov väntar på att prenumerationen visas som bekräftad.
+
+SNS-prenumerationen bekräftades och CloudFormation-change set aktiverades. Stacken nådde `UPDATE_COMPLETE` och CloudWatch bekräftade att exakt fyra produktionslarm pekar på topicen. Ett separat testlarm utlöstes och CloudWatchs åtgärdshistorik visade att publiceringen till SNS lyckades kl. 16.50 svensk tid. Testlarmet raderades och verifierades borta. Mottagarens bekräftelse av det faktiska testmejlet återstår.

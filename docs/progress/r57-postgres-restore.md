@@ -46,3 +46,5 @@ Ett kompletterande processprov på laddrevision `a9d267a` avslutade både arbeta
 Den 23 november rapporterade CloudFormation `UPDATE_COMPLETE`, ECS två av två API-instanser och en av en arbetare. Båda tjänsternas digestbundna bilder fanns i ECR. ECS-definitionerna visar att API och arbetare inväntar lyckad initiering av den monterade databasanslutningen. Båda initcontainrarnas referenser kunde kontrolleras mot aktiva Secrets Manager-poster via metadata. Inga hemliga värden lästes och inga tjänster startades om.
 
 Detta verifierar tillgängligheten för de artefakter och konfigurationsreferenser en återställning behöver. Själva återställningen från en hanterad databasbackup och avstämning av verkliga externa effekter återstår. Produktionsstacken saknade också fortsatt konfigurerad SNS-mottagare.
+
+Körbok för nästa steg finns i [Återställning från hanterad Supabase-backup](r57-managed-restore.md).
