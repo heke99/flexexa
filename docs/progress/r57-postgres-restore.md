@@ -40,3 +40,9 @@ Skill-routing följer repots `verification` och `observability` och byggstandard
 Laddrevision `2166d13` återställdes efter att källklustret stoppats och en ny anslutning till dess privata socket verifierats otillgänglig. Det oberoende PostgreSQL 18.6-klustret återställde 53 migreringsposter, 12 000 fordonsprofiler och 24 000 sessioner. API-rollen såg 6 000 egna och noll främmande profiler. En tidigare simulerad effekt stämdes av till 1 000 Wh utan omdispatch. Lokalt uppmätt tid från påbörjad avstängning till avstämning var 1 645 ms, varav 833 ms var själva databasåterläsningen. Mätningen använder redan provisionerade, isolerade kluster och simulerad effekt.
 
 Ett kompletterande processprov på laddrevision `a9d267a` avslutade både arbetaren och en separat simulerad leverantörsprocess efter att den senare hade sparat effekten beständigt. Under leverantörsbortfallet låg utfallet kvar som osäkert. En ny leverantörsprocess läste samma journal. Nästa arbetare stämde av exakt en tidigare effekt med 1 000 Wh och 0 kW samt utan omdispatch. Databasen var igång under processprovet. Det separata återläsningsprovet ovan omfattar databasbortfallet.
+
+### Skrivskyddad kontroll av produktionsberoenden
+
+Den 23 november rapporterade CloudFormation `UPDATE_COMPLETE`, ECS två av två API-instanser och en av en arbetare. Båda tjänsternas digestbundna bilder fanns i ECR. ECS-definitionerna visar att API och arbetare inväntar lyckad initiering av den monterade databasanslutningen. Båda initcontainrarnas referenser kunde kontrolleras mot aktiva Secrets Manager-poster via metadata. Inga hemliga värden lästes och inga tjänster startades om.
+
+Detta verifierar tillgängligheten för de artefakter och konfigurationsreferenser en återställning behöver. Själva återställningen från en hanterad databasbackup och avstämning av verkliga externa effekter återstår. Produktionsstacken saknade också fortsatt konfigurerad SNS-mottagare.
