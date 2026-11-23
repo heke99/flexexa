@@ -12,6 +12,7 @@ import { CustomerVehiclesPanel, type VehicleSelection } from "./customer-vehicle
 const unavailable = "Kontona kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const productsUnavailable = "Produkterna kunde inte hämtas. Försök igen eller öppna kundportalen.";
 const expired = "Sessionen har löpt ut. Logga in igen.";
+const accessDenied = "Åtgärden nekades. Kontolistan har hämtats på nytt.";
 const invalidCode = "Koden kunde inte bekräftas. Försök igen.";
 const emailCodeNotice = "Om adressen har ett konto och en kod kan skickas får du ett mejl.";
 const emailCodeCooldownMs = 60_000;
@@ -73,6 +74,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   const pending = useRef<{ login: CustomerLogin; factors: VerificationFactor[] } | null>(null);
   const operation = useRef<AbortController | null>(null);
   const expiration = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const accountHeading = useRef<HTMLHeadingElement | null>(null);
   const email = useRef<HTMLInputElement | null>(null);
   const password = useRef<HTMLInputElement | null>(null);
   const code = useRef<HTMLInputElement | null>(null);
@@ -132,12 +134,13 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     void clear(accountError("MFA_REQUIRED"));
   }, [clear]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (notice = "") => {
     const login = active.current;
     if (!login) return;
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
+    if (notice) accountHeading.current?.focus();
     setAccounts(null);
     setProducts(null);
     setOrders(null);
@@ -160,8 +163,10 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
         void clear(accountError(result.error));
       } else {
         setSignedIn(true);
-        if (response.ok) setAccounts(result.items);
-        else setMessage(accountError(result.error));
+        if (response.ok) {
+          setAccounts(result.items);
+          setMessage(notice);
+        } else setMessage(accountError(result.error));
       }
     } catch {
       if (operation.current === request) {
@@ -223,12 +228,8 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       if (operation.current !== request) return;
       if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
         void clear(accountError(result.error));
-      } else if (response.status === 403 && response === submission) {
-        setProducts({ ...selection, status: "error", message: "Din inloggning har inte rätt att begära åtkomst till produkten. Uppdatera kontona om din roll har ändrats." });
       } else if (response.status === 403) {
-        setProducts(null);
-        setAccounts(current => current?.filter(item => item.id !== account.id) ?? null);
-        setMessage("Du saknar åtkomst till kontot. Uppdatera för att hämta aktuella konton.");
+        void load(accessDenied);
       } else if (response.ok) {
         setProducts({ ...selection, status: "ready", access: result });
       } else {
@@ -261,11 +262,12 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       if (operation.current !== request) return;
       if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
         void clear(accountError(result.error));
+      } else if (response.status === 403) {
+        void load(accessDenied);
       } else if (response.ok) {
         setOrders({ ...selection, status: "ready", orders: result });
       } else {
-        const message = response.status === 403 ? "Du saknar behörighet att se beställningar för kontot."
-          : response.status === 429 ? accountError(result.error) : unavailableOrders;
+        const message = response.status === 429 ? accountError(result.error) : unavailableOrders;
         setOrders({ ...selection, status: "error", message });
       }
     } catch {
@@ -294,14 +296,15 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       if (operation.current !== request) return;
       if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
         void clear(accountError(result.error));
+      } else if (response.status === 403) {
+        void load(accessDenied);
       } else if (response.ok) {
         const page: CustomerVehiclePage = result;
         setVehicles({ ...selection, status: "ready", vehicles: {
           items: [...(previous?.items ?? []), ...page.items], nextCursor: page.nextCursor,
         } });
       } else {
-        const message = response.status === 403 ? "Du saknar behörighet att se fordon för kontot."
-          : response.status === 429 ? accountError(result.error) : unavailableVehicles;
+        const message = response.status === 429 ? accountError(result.error) : unavailableVehicles;
         setVehicles({ ...selection, status: "error", message });
       }
     } catch {
@@ -497,7 +500,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
 
   return <section id="produkter" className="wizard-panel" style={{ maxWidth: 680, overflowWrap: "anywhere" }}>
     {signedIn ? <>
-      <h2>Mina konton</h2>
+      <h2 ref={accountHeading} tabIndex={-1}>Mina konton</h2>
       {working && <p role="status">Hämtar dina konton …</p>}
       {accounts?.length === 0 && <p>Du har inga konton att visa ännu.</p>}
       {!!accounts?.length && <ul>{accounts.map(account => <li key={account.id}>
@@ -516,7 +519,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       {vehicles && vehicleAccount && <CustomerVehiclesPanel selection={vehicles}
         retry={() => void showVehicles(vehicleAccount)} loadMore={page => void showVehicles(vehicleAccount, page)} />}
       <div className="actions">
-        <button type="button" className="button" onClick={load} disabled={working}>Uppdatera</button>
+        <button type="button" className="button" onClick={() => { void load(); }} disabled={working}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>
       </div>
     </> : factors ? <form className="wizard-form" method="post" onSubmit={confirmVerification} aria-busy={working}>

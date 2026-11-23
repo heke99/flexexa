@@ -530,6 +530,26 @@ try {
   await pending(async () => (await text()).includes(privateOrder));
   assert.match(await text(), /Väntar på betalning/);
   assert.doesNotMatch(await text(), new RegExp(`${companyOrder}|checkout\\.invalid`));
+  const membershipsBeforeDenial = accounts.first;
+  const accountReadCount = () => businessCalls().filter(({ path, actor }) => path === '/v1/accounts' && actor === 'first').length;
+  try {
+    const beforeRoleChange = accountReadCount();
+    accounts.first = [personal, { ...company, role: 'driver' }];
+    await clickButton(`Visa beställningar för ${company.name}`);
+    await pending(async () => (await text()).includes(`${company.name} · Företag · Förare`));
+    assert.equal(accountReadCount(), beforeRoleChange + 1);
+    assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Mina konton');
+    assert.doesNotMatch(await text(), new RegExp(`Visa beställningar för ${company.name}|${privateOrder}|${companyOrder}`));
+    const beforeRemoval = accountReadCount();
+    accounts.first = [personal];
+    await clickButton(`Visa fordon för ${company.name}`);
+    await pending(async () => (await text()).includes('Kontolistan har hämtats på nytt.') && !(await text()).includes(company.name));
+    assert.equal(accountReadCount(), beforeRemoval + 1);
+    assert.doesNotMatch(await text(), /FLE 123|FLE 246/);
+  } finally {
+    accounts.first = membershipsBeforeDenial;
+  }
+  verified.push('denied account reads immediately revalidate role and membership');
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !(await text()).includes(personal.name));
   await assertNoStorage();
