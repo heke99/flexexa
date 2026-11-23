@@ -155,3 +155,7 @@ Testsessionen loggades ut och inkorgen togs bort. Rensningen verifierade att tes
 Den kanoniska katalogen hade noll simulerade profiler och skuggvärden. ECS körde energi-API och arbetare med taskdefinition 3. Rådgivningsgatewayen saknar simulatorregistrering. Commerce-API och commerce-arbetare hade båda den dokumenterade kodhashen från `132170d`. Den revisionens Lambda monterar ingen simulator.
 
 Supabase-migrering `20261123082304` körde det separata auditbytet med en kontroll under lås att inga simulerade profiler eller skuggvärden fanns. Det kanoniska API:t saknar därefter effektiv INSERT-rätt till skuggvärden och den gamla policyn är borta. Arbetaren har kvar rätt till historikfunktionen. Ett rollbackprov efter ändringen skrev första mätningen via arbetarens roll och verifierade att konto och telemetri saknades efteråt. Produktions- och sandbox-API:erna svarade HTTP 200 på readiness. Sandboxens skrivrätt och de fysiska styrvägarna omfattades inte.
+
+## Produktionslarm för energitjänsten
+
+Change set `flexexa-observability-20261123` lade endast till fyra CloudWatch-larm och två loggfilter i `flexexa-energy-production`. Stacken nådde UPDATE_COMPLETE. De två kömätserierna fick första datapunkten från arbetaren och båda visade noll sekunder. Larmen konfigurerades för CloudWatch-status. Ingen SNS-mottagare var konfigurerad, och larmleverans till mottagare är därför fortfarande oprövad. Den lokala mallen passerade CloudFormation-lint och fem relaterade runtimeprov.
