@@ -304,6 +304,13 @@ try {
   await launch(clientBin("pg_dump"), [...connectionArgs, "--format=custom", "--file", archive, sourceDatabase]);
   metrics.dump_ms = metricMs(beforeDump);
   metrics.dump_bytes = (await stat(archive)).size;
+  const outageBegan = performance.now();
+  while (shutdown.length) await shutdown.pop()();
+  await launch(postgresBin("pg_ctl"), ["-D", data, "-w", "-t", "15", "-m", "fast", "stop"]);
+  runningClusters.splice(runningClusters.indexOf(data), 1);
+  const offline = new pg.Client({...protocol, database: sourceDatabase});
+  await assert.rejects(offline.connect(), {code: "ENOENT"});
+  metrics.source_offline_before_restore = true;
   const recoveryBegan = performance.now();
   const recoveryArgs = ["--host", recoverySocket, "--port", String(port)];
   await launch(clientBin("psql"), [...recoveryArgs, "--username", username, "--dbname", "postgres",
@@ -345,6 +352,7 @@ try {
   assert.equal(executeAttempts, 1);
   assert.equal(provider.effects.size, 1);
   metrics.restore_to_reconciled_ms = metricMs(recoveryBegan);
+  metrics.source_shutdown_to_reconciled_ms = metricMs(outageBegan);
   const {stdout} = await launch("git", ["rev-parse", "HEAD"], {cwd: backend});
   const {stdout: status} = await launch("git", ["status", "--porcelain", "--",
     "database", "src", "scripts/migrate.mjs", "package.json", "package-lock.json", "workers/fleet-planner"], {cwd: backend});
@@ -354,7 +362,7 @@ try {
     simulated_effects: provider.effects.size, restored_meter_wh: 1000, ...metrics}));
 } finally {
   try {
-    for (const cleanup of shutdown.reverse()) await cleanup();
+    while (shutdown.length) await shutdown.pop()();
   } finally {
     try {
       const stopped = await Promise.allSettled(runningClusters.map(directory =>
