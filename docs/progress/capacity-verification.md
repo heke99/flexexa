@@ -324,3 +324,5 @@ node scripts/quality/capacity-http.mjs \
   --scratch-dir /path/to/scratch --scenario concentrated --phase peak --peak-seconds 600 \
   --telemetry --metered-observations --mixed-routes --roaming-cost-routes
 ```
+
+På den integrerade laddrevisionen `bc67c7f` kördes ett 20-sekunders omprov med samma koncentrerade topp och 12 000 fordon. Det gav 6 000 väntade läsutfall, 12 000 sparade observationer och noll tapp. Lastverktyget redovisar nu kötakstapp per schemalagd minut separat för läsningar och telemetri. Kortprovet verifierade rapportformatet och det integrerade flödet. Det ersätter inte den underkända tiominuterskörningen.
