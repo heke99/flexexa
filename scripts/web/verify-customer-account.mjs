@@ -101,6 +101,7 @@ const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let heldOrderReply;
+let privateOrderState = 'pending';
 let startURL;
 let upstream;
 let secondHasTotp = false;
@@ -224,7 +225,7 @@ try {
         if (!accounts[actor].some(({ id, role }) => id === orderAccount && role !== 'driver')) return reply(403, { error: 'FORBIDDEN' });
         if (orderAccount === personal.id && heldOrderReply) await heldOrderReply;
         const order = orderAccount === personal.id
-          ? { id: privateOrder, state: 'pending', checkout_url: 'https://checkout.invalid/private-only' }
+          ? { id: privateOrder, state: privateOrderState, checkout_url: 'https://checkout.invalid/private-only' }
           : { id: companyOrder, state: 'paid', quantity: 1, agreement: { amount_minor: 12345, currency: 'sek', email: 'fixture-only@example.test' } };
         return reply(200, { items: [{ ...order, created_at: '2026-11-21T10:00:00Z' }], nextCursor: null });
       }
@@ -366,7 +367,7 @@ try {
   };
   const assertNoStorage = async () => {
     const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
-    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode,
+    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode, privateOrder, companyOrder,
       'first@example.test', 'second@example.test', ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
@@ -526,10 +527,32 @@ try {
   await pending(async () => (await text()).includes(companyOrder));
   assert.match(await text(), /Betald.*123,45/);
   assert.doesNotMatch(await text(), /FLE 123|checkout\.invalid|fixture-only@example\.test/);
+  const orderContinuation = () => execute(`const link = [...document.querySelectorAll('#account-orders a')]
+    .find(element => element.textContent.trim() === 'Öppna beställningen i kundportalen');
+    return link ? { href: link.href, referrerPolicy: link.referrerPolicy,
+      reference: document.getElementById(link.getAttribute('aria-describedby'))?.textContent } : null;`);
+  assert.equal(await orderContinuation(), null);
   await clickButton(`Visa beställningar för ${personal.name}`);
   await pending(async () => (await text()).includes(privateOrder));
   assert.match(await text(), /Väntar på betalning/);
   assert.doesNotMatch(await text(), new RegExp(`${companyOrder}|checkout\\.invalid`));
+  assert.deepEqual(await orderContinuation(), { href: `${portal}bestallningar?order=${privateOrder}`,
+    referrerPolicy: 'no-referrer', reference: `Referens ${privateOrder}` });
+  const delayedRefresh = Promise.withResolvers();
+  heldOrderReply = delayedRefresh.promise;
+  try {
+    privateOrderState = 'paid';
+    await clickButton('Uppdatera beställningar', true);
+    await pending(async () => (await text()).includes('Hämtar beställningar'));
+    assert.equal(await orderContinuation(), null);
+    assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Uppdatera beställningar');
+  } finally {
+    delayedRefresh.resolve();
+    heldOrderReply = null;
+  }
+  await pending(async () => /Betald[\s\S]*Referens 77777777/.test(await text()));
+  assert.equal(await orderContinuation(), null);
+  verified.push('private order continuation and keyboard refresh of backend-confirmed payment status');
   const membershipsBeforeDenial = accounts.first;
   const accountReadCount = () => businessCalls().filter(({ path, actor }) => path === '/v1/accounts' && actor === 'first').length;
   try {

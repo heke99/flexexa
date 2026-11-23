@@ -515,7 +515,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
       {products && selected && <CustomerProducts account={selected} products={products}
         retry={() => void showProducts(selected)} requestAccess={key => void showProducts(selected, key)} />}
       {orders && orderAccount && <CustomerOrdersPanel selection={orders} business={orderAccount.kind === "business"}
-        retry={() => void showOrders(orderAccount)} />}
+        refresh={() => void showOrders(orderAccount)} />}
       {vehicles && vehicleAccount && <CustomerVehiclesPanel selection={vehicles}
         retry={() => void showVehicles(vehicleAccount)} loadMore={page => void showVehicles(vehicleAccount, page)} />}
       <div className="actions">

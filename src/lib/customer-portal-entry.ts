@@ -1,3 +1,5 @@
+import { isCustomerResourceId } from "./customer-accounts";
+
 const portalOrigin = "https://ladda.flexexa.com";
 const destinations = {
   konto: "/",
@@ -14,6 +16,13 @@ export function customerPortalEntry(entry: PortalEntry) {
 
 export function customerPortalUrl(entry: PortalEntry) {
   return new URL(destinations[entry], portalOrigin).href;
+}
+
+export function customerPortalOrderUrl(orderId: string) {
+  if (!isCustomerResourceId(orderId)) return null;
+  const url = new URL(customerPortalUrl("bestallningar"));
+  url.searchParams.set("order", orderId.toLowerCase());
+  return url.href;
 }
 
 export function redirectToCustomerPortal(entry: PortalEntry) {
