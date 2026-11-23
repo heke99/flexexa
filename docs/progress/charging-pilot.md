@@ -79,3 +79,9 @@ I laddkandidat `8c43e48` begränsar köns sluttid all simulerad laddning med pos
 ### Lokal driftsättningsrepetition
 
 Laddrevision `45f8597` paketerades lokalt med produktionsmanifest. Dockerbild `sha256:47d921808ab33816f5bb1db448001e30bb8e63424f52ae90b1483e85a7ac0ded` passerade produktionskontrollen av icke-root, bibliotek, borttagna systempaket och verklig Pythonplanering. API och arbetare startades från samma bild mot disponibel PostgreSQL över verifierad TLS, var för sig med begränsad databasroll. API gav 200 för readiness, 401 för oinloggad kontoläsning och 404 för styrvägen. Arbetaren skrev heartbeat och kövärden. Båda stängdes ned kontrollerat. Sandbox- och produktionsmallarna passerade cfn-lint och 6 respektive 7 Guard-regler. Hela backendkörningen gav 405 godkända och ett förutsättningsstyrt hopp. Den hoppade processavbrottskontrollen passerade med disponibel PostgreSQL. Webbens 129 tester, syntaxkontroll och produktionsbygge passerade. Ingen bild publicerades och inget externt system driftsattes i denna körning.
+
+### Jämförelse med BMW ConnectedDrive vid hemmaladdning
+
+Vid nästa vanliga hemmaladdning kan föraren anteckna start- och sluttid och spara den laddhistorik som ConnectedDrive visar, exempelvis batteriprocent och energi om de finns för bilen. Registrera vilken enhet och mätkälla appen anger. Om historiken saknar mätkälla eller bara visar batteriprocent används den som jämförelse av tidslinjen. Pilotens sessionsenergi stäms av mot en separat avläsning vid laddpunkten. Styrprovet kräver identifierad laddbox och en godkänd styrväg.
+
+Laddrevision `7260080` verifierade att en köad laddstart spärras när mätaren byts före dispatch. Först efter ny avläsning, uttrycklig baslinjeändring och ny plan går laddningen att starta. Samkörningen med laddpilot, leverantörsformat och kommandoåterhämtning gav 15 godkända lokala testfall.
