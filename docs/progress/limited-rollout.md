@@ -1,0 +1,14 @@
+# Begränsad utrullning
+
+Första omgången omfattar högst ett godkänt företag per produktkombination och en verklig partnerapp. Börja i avsedd testmiljö. Registrera godkänt företag, verifierad ägare, miljö, kodrevision, produktkombination, tidsfönster och kontakt för eventuellt stopp. Första provet omfattar laddabonnemang, energioptimering och kombinationen av båda. Håll effektstyrning, marknadsleverans och kunddebitering utanför detta åtkomstprov.
+
+1. Läs behörighetsstatus via `GET /v1/platform/product-access/status`. Om företagskontot saknas kan plattformsadministratören skapa det för den verifierade ägaren via `POST /v1/platform/product-access/companies`. Spara konto-ID och läs dess befintliga rättigheter innan tilldelning.
+2. Tilldela endast pilotens produktnycklar genom `POST /v1/platform/product-access/accounts/{accountId}`. Kontrollera den faktiska ägarens svar på `GET /v1/accounts/{accountId}/product-access` och motsvarande portalvy. Verifiera att övriga produktvägar stängs och att en användare i ett annat företag nekas åtkomst.
+3. Anslut en registrerad partners verkliga OAuth-klient till pilotkontot. Verifiera att ett uttryckligt mandat via `/v1/accounts/{accountId}/partner-consents` begränsar partnern till valda fordon och scopes. Kontrollera ett tillåtet anrop, ett anrop mot fel företag och ett försök utanför beviljat scope. Referensklienten finns i laddbackendens `examples/partner-client.mjs`.
+4. Återkalla pilotmandatet och verifiera att nya partneranrop nekas och att tidigare köat arbete inte får ny effekt. Vid fel, återkalla de produkttilldelningar pilotprovet skapade och kontrollera att övriga rättigheter fortfarande fungerar. Spara tid, utfall och korrelations-ID utan token eller personuppgifter.
+
+R57:s hanterade återställningsövning är senarelagd för den begränsade utrullningen. Det pågående dygnsprovet med 12 000 fordon hör till underlaget för breddlansering. Enode och den fysiska laddpiloten är senarelagda. [Beslut](../DECISIONS.md) · [Byggordning](../FLEXEXA_REVISED_BUILD_ORDER_2026-11-22.md)
+
+## Lokal verifiering 2026-11-23
+
+Laddbackend `a9d267a` klarade samtliga tio testfall i `product-access.test.mjs`, `energy-partner.test.mjs` och `energy-partner-contract.test.mjs` med lokal testdatabas och OR-Tools 9.15.6755. Testerna täcker bland annat företagsprovisionering, oberoende produktbehörigheter, delegering mellan företag, OAuth-anspråk, köbearbetning och återkallelse. Verkliga pilotkonton och partnerns OAuth-klient återstår att verifiera i testmiljön.

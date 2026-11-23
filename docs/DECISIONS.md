@@ -1,5 +1,9 @@
 # Beslut
 
+## Beslut 2026-11-23 — begränsad utrullning och hanterad återställning
+
+Ägaren har senarelagt återställningsövningen från hanterad Supabase-backup som villkor för att gå vidare med förberedelserna och den begränsade utrullningen. Den lokala återställningen är verifierad. Den hanterade övningen står kvar som öppen i R57 och befintliga backupinställningar berörs inte av beslutet. För breddlansering gäller masterplanens krav. [R57](progress/r57-managed-restore.md) · [Utrullningsprotokoll](progress/limited-rollout.md)
+
 ## Beslut 2026-11-22 — leverantörsval för laddpiloten
 
 Enode är senarelagt. Första piloten kan genomföras med en avtalad laddbox eller annan vald styrväg som klarar R46 och R58. En laddbox med verifierad effekt och sessionsenergi räcker för kWh-piloten. Fordonstelemetri provas separat med den leverantör och exakt fordonsvariant som väljs.
