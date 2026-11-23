@@ -195,3 +195,9 @@ Detta är lokal acceptans för den syntetiska månaden. En verklig operatörsfil
 På laddrevision `6b45483` registrerar migration 058 testavsikt och leverantörskvittens för en godkänd negativ hemprisrättelse. Det nya arbetarkommandot är begränsat till en kvalificerad originalfaktura och rätt kund i testmiljön. Originalfakturan ändras inte. Samma nyckel följer omförsök och kvittensen kontrolleras innan den sparas.
 
 Nio integrerade PostgreSQL-prov passerade. Den godkända krediten på 3 000 öre gav exakt en saldohändelse trots simulerade svarsförluster och samtidiga återförsök. Migrationsjournalen var ren efter applicering och omspelning. CLI:t avvisade live före anslutning. Flexexa Ladda – Staging identifierades som Stripe-testkonto. Saldohändelsen kördes mot en lokal Stripe-fixture. Anslutningen exponerade ingen idempotensheader för skrivverktyget, så ingen extern händelse skapades.
+
+## Kreditprov i riktiga sandboxdatabasen
+
+Migrationerna 057 och 058 spelades upp i laddsandboxens schema i en enda transaktion tillsammans med ett disponibelt konto, fordon, abonnemang och fakturaunderlag. Arbetarrollen fick spara en negativ kreditavsikt och bekräfta den en gång. Radpolicyn nekade positiv rättelse, behörighetskontrollen verifierade att API-rollen saknar läsrätt och en bekräftad transaktionsreferens förblev oförändrad vid nytt försök. Efter rollback verifierades att både nya relationer och alla tre disponibla grundposter saknades. Ingen permanent migrering genomfördes.
+
+Laddrevision `4057573` körde dessutom Stripe SDK:s faktiska skrivtransport mot en isolerad HTTP-fixture. Två POST-anrop efter simulerat förlorat svar bar exakt samma idempotensheader och belopp. En enda saldohändelse registrerades. Nio PostgreSQL-prov passerade. Detta verifierar format och omförsök lokalt. Avdrag på en faktisk nästa Stripe-testfaktura ingick inte.
