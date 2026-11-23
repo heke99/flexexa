@@ -35,3 +35,13 @@ Service workern ger en svensk reservvy för fem publika sidor efter ett nätfel.
 Inloggade kunder utan eget privatkonto kan skapa ett från Next. Ladd-API:t kan återge resultatet efter ett förlorat svar och skiljer kontoägarskap från förarbehörighet på ett annat privatkonto. Kontovyn läser om medlemskapet innan den visar ett bekräftat ägarskap. Nio Chromium-scenarier, ett kopplat Next- och PostgreSQL-prov samt 109 riktade ladd-API-prov passerade lokalt.
 
 Vercel byggde `f6c585c` som skyddad förhandsvisning med grenbundna sandboxvärden. Sandboxens commerce-Lambda kör kontofixen från `d338fee`. Den rapporterade paketets lokala kodhash och readiness gav HTTP 200. En riktig sandboxidentitet fick HTTP 201 för skapande och omförsök med samma konto. Kontolistan visade exakt en ägarrelation. Inloggad Chromium nådde verklig Auth och sandbox-API från lokalt körd Next. Vercels skydd var aktivt på den driftsatta adressen och dess inloggade flöde är oprövat. Testkontot, Auth-identiteten, kopplingen och medlemskapet verifierades borta. [Skyddad förhandsvisning](https://flexexa-n9so76j9p-div3rsa.vercel.app/app/konto/oversikt)
+
+## Driftacceptans för integritetsärenden
+
+Publicerad kontaktväg för dataskydd är `info@flexexa.com`. Trafexa Nordic AB behöver bekräfta vilken funktion som bevakar ärenden, vem som ersätter vid frånvaro och vilka regler som styr utlämnande, gallring och lagstadgad bevaring för själva tjänsten.
+
+- Behörig handläggare läser ärendekön med laddrepots `src/run-privacy-request-review.mjs`. Använd befintlig godkänd arbetsroll och lokala anslutningsfiler enligt API-dokumentationen. Börja med `{}` för första sidan och följ sidmarkören till sista sidan. Ärendereferensen används för spårbarhet i handläggningen.
+- Registrera mottagning och ansvarig handläggare i godkänt ärendesystem. Identifiera personen via etablerad kundkanal. Sammanställ enbart personens egna uppgifter eller pröva radering mot godkända undantag och lagstadgad bevaring. Använd en godkänd säker leveranskanal och dokumentera beslutet.
+- Före kundaktivering övar utsedd handläggare både tillgång och radering med disponibla sandboxuppgifter. Kontrollera att båda ärendena upptäcks, att ansvar och svar kan följas, att radering respekterar beslutade undantag och att alla testuppgifter städas efteråt.
+
+Ärendemottagning och behörig läsning har körbevis i sandbox och lokala tester. Handläggningsövningen behöver kvitteras av Trafexa före produktionsaktivering.
