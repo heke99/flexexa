@@ -326,3 +326,21 @@ node scripts/quality/capacity-http.mjs \
 ```
 
 På den integrerade laddrevisionen `bc67c7f` kördes ett 20-sekunders omprov med samma koncentrerade topp och 12 000 fordon. Det gav 6 000 väntade läsutfall, 12 000 sparade observationer och noll tapp. Lastverktyget redovisar nu kötakstapp per schemalagd minut separat för läsningar och telemetri. Kortprovet verifierade rapportformatet och det integrerade flödet. Det ersätter inte den underkända tiominuterskörningen.
+
+Den efterföljande tiominuterstoppen på `bc67c7f` med testverktyget `f1b9152` använde `--split-pools`, med sex anslutningar för API:t och fyra för telemetrin. Lokal PostgreSQL 18.6 körde 54 migrationer. Alla 180 000 HTTP-anrop gav väntat utfall och alla 360 000 simulatorobservationer sparades. Inget tapp registrerades under någon av de tio minuterna. Lastgeneratorn hade som mest 307 HTTP-anrop och 160 observationer pågående, under respektive tak på 400. Alla 12 000 aktuella fordonsrader stämdes av, inklusive 3 000 mätarfordon.
+
+Högsta läs-p95 var 81,7 ms för fordonssökningen. Första fordonslistan gav 36,8 ms, partnerrutten 54,0 ms och den förseglade fordonssummeringen 52,9 ms. Telemetri-p95 var 6,0 ms. Vid 9 minuter och 39 sekunder tog PostgreSQL:s datakatalog 513 MiB, varav 353 MiB var WAL och 160 MiB var `base`. Minsta lediga utrymme var 7 594 MiB. Provet gav exitkod 0. Det tidigare provet med gemensam pool redovisas ovan och gäller en annan revisionskombination. Poolindelningens enskilda effekt återstår att mäta i jämförbara upprepade prov.
+
+### Start av lokalt dygnsprov
+
+Den 23 november 2026 kl. 15:07:46 UTC startade ett lokalt test med 86 400 sekunders planerad blandlast från samma revisionspar och poolindelning. Schemat erbjuder 100 HTTP-anrop och 230 observationer per sekund med förseglad roamingekonomi och syntetiska identiteter. Ett rådgivande planjobb per minut ger 1 440 schemalagda jobb om hela provet genomförs. Testtoken har 15 sekunders giltighet för att prova förnyelse.
+
+Vid start fanns 8 257 MiB ledigt. Förkontrollens uppskattade 6 933 MiB för telemetrirelation och stoppreserv lämnade 1 324 MiB till WAL, andra relationer och temporära filer. Provet kontrollerar utrymmet löpande och stannar före schemaläggning när det understiger 512 MiB. Efter stopp eller full tid inväntar det pågående operationer, stämmer av data och tar bort den disponibla databasen. Slutrapporten omfattar lokalt schemalagda anrop, simulatortelemetri och rådgivande planjobb. Separat verifiering återstår för driftsatta klienter, riktig leverantörstrafik, fakturajobb och webhookåterspelning under 24 timmar.
+
+```sh
+node scripts/quality/capacity-http.mjs \
+  --charging /path/to/charging-subscription --python /path/to/fleet-venv/bin/python \
+  --scratch-dir /path/to/scratch --scenario concentrated --phase endurance --endurance-seconds 86400 \
+  --endurance-plan-interval-seconds 60 --fixture-token-seconds 15 \
+  --telemetry --metered-observations --mixed-routes --roaming-cost-routes --split-pools
+```
