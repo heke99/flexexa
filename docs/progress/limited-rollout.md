@@ -44,3 +44,11 @@ Stripe-kontot Flexexa Ladda – Staging bekräftades vara i testläge. Skrivskyd
 Laddrevision `d3d7689` passerade företagsprovet med tre produktkombinationer i ett separat PostgreSQL 18-kluster, inklusive referensklient, avgränsat mandat och återkallelse. Samma prov kan köras med `TEST_LIMITED_ROLLOUT_DATABASE_URL` riktad mot en tom lokal `charging_test`-databas. Ytterligare 13 prov passerade i separata kluster för kontokatalog, företagskostnader, historisk fordonsfördelning, migrationsparitet och fristående Gridex-flöde med simulerad betalning.
 
 Samma lokala PostgreSQL 18-körning kompletterades med 14 prov för integritetsgranskning, fysiskt laddbevis från syntetiska källor, stängning av operatörsmånad och lokal återställning av en förseglad period. Sammanlagt passerade 28 testfall i disponibla kluster den 23 november. Ingen hanterad backupövning ingick.
+
+### Avräkningsarbetarens releasekontroll
+
+Laddarbetaren i `charging-subscription-sandbox` kör paketet från `c03c2a7`, verifierat med Lambda-arkivets hash. Arbetarens skrivskyddade runtime- och leverantörsprov passerade med sandboxens databasroll, verifierad TLS och Stripe i testläge. Avräkningens särskilda testläge är avstängt i den funktionen. Sandboxen hade noll fakturabindningar, radkvittensposter och radavsikter vid avläsning.
+
+Den integrerade kandidaten innehåller den nya kvittensvägen från 057. Den hostade äldre vägen har redan konfliktsäker radkvittens i sitt separata register och har även skydd för betalningsåterställning och delade fakturor. Ett byte av hela Lambda-paketet skulle byta ut dessa betalningsvägar. De måste förenas och testas innan stagedrift. Den byggda kandidaten publicerades därför inte till den befintliga arbetaren.
+
+Källjämförelsen hittade även ett tappat skydd i laddstoppets API och arbetare. `6649026` återför leverantörsspecifik återläsning, säkra sluttillstånd, idempotent återspelning av stopp och stagingens hantering av förnyelsejobb. Portat databasprov täcker bekräftelse, fel leverantörssession, avslag, timeout och upprepade stopp. Den lokala backendkörningen gav 412 godkända testfall och ett inställningsstyrt hopp för det tidigare separat godkända PostgreSQL-omstartsprovet.
