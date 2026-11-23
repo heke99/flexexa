@@ -75,12 +75,14 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
   const operation = useRef<AbortController | null>(null);
   const expiration = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const accountHeading = useRef<HTMLHeadingElement | null>(null);
+  const personalName = useRef<HTMLInputElement | null>(null);
   const email = useRef<HTMLInputElement | null>(null);
   const password = useRef<HTMLInputElement | null>(null);
   const code = useRef<HTMLInputElement | null>(null);
   const factor = useRef<HTMLSelectElement | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [working, setWorking] = useState(false);
+  const [creatingPersonal, setCreatingPersonal] = useState(false);
   const [message, setMessage] = useState("");
   const [accounts, setAccounts] = useState<CustomerAccount[] | null>(null);
   const [products, setProducts] = useState<ProductSelection | null>(null);
@@ -105,6 +107,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setVehicles(null);
     setSignedIn(false);
     setWorking(false);
+    setCreatingPersonal(false);
     setMessage(reason);
     return releaseCustomerAuth(client);
   }, []);
@@ -134,7 +137,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     void clear(accountError("MFA_REQUIRED"));
   }, [clear]);
 
-  const load = useCallback(async (notice = "") => {
+  const load = useCallback(async (notice = "", createdAccount?: string) => {
     const login = active.current;
     if (!login) return;
     operation.current?.abort();
@@ -147,6 +150,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     setVehicles(null);
     setMessage("");
     setWorking(true);
+    setCreatingPersonal(false);
     try {
       const response = await fetch("/api/kundkonto", {
         headers: { Authorization: `Bearer ${login.session.access_token}` },
@@ -165,7 +169,9 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
         setSignedIn(true);
         if (response.ok) {
           setAccounts(result.items);
-          setMessage(notice);
+          const available = !createdAccount || result.items.some((account: CustomerAccount) => account.id === createdAccount &&
+            account.kind === "personal" && account.role === "owner");
+          setMessage(available ? notice : "Privatkontot kunde inte bekräftas i kontolistan.");
         } else setMessage(accountError(result.error));
       }
     } catch {
@@ -207,9 +213,51 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
     return () => clearTimeout(timer);
   }, [emailRetryAt]);
 
+  async function createPersonal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const login = active.current;
+    if (!login || operation.current || !accounts || accounts.some(account => account.kind === "personal" && account.role === "owner")) return;
+    const name = personalName.current?.value.trim() ?? "";
+    if (!name || name.length > 160) {
+      setMessage("Ange ett namn på privatkontot.");
+      return;
+    }
+
+    const request = new AbortController();
+    operation.current = request;
+    setCreatingPersonal(true);
+    setMessage("");
+    const uncertain = "Privatkontot kunde inte bekräftas. Försök igen eller uppdatera kontolistan.";
+    try {
+      const options = accountRequest(login, request.signal);
+      const response = await fetch("/api/kundkonto", { ...options, method: "POST",
+        headers: { ...options.headers, "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+      const result = await response.json();
+      if (operation.current !== request) return;
+      if (response.status === 201) {
+        void load("Ditt privatkonto är klart.", result.id);
+      } else if (response.status === 401 || (response.status === 403 && result.error !== "ACCESS_DENIED")) {
+        void clear(accountError(result.error));
+      } else if (response.status === 403) {
+        void load(accessDenied);
+      } else if (response.status === 409) {
+        setMessage("Privatkontot är inte tillgängligt för den här inloggningen. Kontakta kundsupport.");
+      } else {
+        setMessage(response.status === 429 ? accountError(result.error) : uncertain);
+      }
+    } catch {
+      if (operation.current === request) setMessage(uncertain);
+    } finally {
+      if (operation.current === request) {
+        operation.current = null;
+        setCreatingPersonal(false);
+      }
+    }
+  }
+
   async function showProducts(account: CustomerAccount, productKey?: RequestedProductKey) {
     const login = active.current;
-    if (!login || working) return;
+    if (!login || working || creatingPersonal) return;
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
@@ -246,7 +294,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
 
   async function showOrders(account: CustomerAccount) {
     const login = active.current;
-    if (!login || working || account.role === "driver") return;
+    if (!login || working || creatingPersonal || account.role === "driver") return;
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
@@ -279,7 +327,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
 
   async function showVehicles(account: CustomerAccount, previous?: CustomerVehiclePage) {
     const login = active.current;
-    if (!login || working) return;
+    if (!login || working || creatingPersonal) return;
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
@@ -518,8 +566,16 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled }: {
         refresh={() => void showOrders(orderAccount)} />}
       {vehicles && vehicleAccount && <CustomerVehiclesPanel selection={vehicles}
         retry={() => void showVehicles(vehicleAccount)} loadMore={page => void showVehicles(vehicleAccount, page)} />}
+      {accounts && !accounts.some(account => account.kind === "personal" && account.role === "owner") &&
+        <form className="wizard-form" method="post" onSubmit={createPersonal} aria-busy={creatingPersonal}>
+          <h3>Skapa privatkonto</h3>
+          <label>Kontonamn<input ref={personalName} maxLength={160} required disabled={creatingPersonal} /></label>
+          <button type="submit" className="button primary" disabled={creatingPersonal}>
+            {creatingPersonal ? "Skapar privatkonto …" : "Skapa privatkonto"}
+          </button>
+        </form>}
       <div className="actions">
-        <button type="button" className="button" onClick={() => { void load(); }} disabled={working}>Uppdatera</button>
+        <button type="button" className="button" onClick={() => { void load(); }} disabled={working || creatingPersonal}>Uppdatera</button>
         <button type="button" className="button" onClick={signOut}>Logga ut</button>
       </div>
     </> : factors ? <form className="wizard-form" method="post" onSubmit={confirmVerification} aria-busy={working}>

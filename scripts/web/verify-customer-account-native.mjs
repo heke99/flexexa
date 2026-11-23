@@ -103,8 +103,8 @@ try {
     assert.equal(response.status, 200);
     return (await response.json()).access_token;
   };
-  const [recipient, outsider, billing, owner] = await Promise.all([
-    scenario.recipient, scenario.outsider, scenario.billing, scenario.owner,
+  const [recipient, outsider, billing, owner, fresh] = await Promise.all([
+    scenario.recipient, scenario.outsider, scenario.billing, scenario.owner, scenario.fresh,
   ].map(tokenFor));
   const productPath = `/v1/accounts/${scenario.company}/product-access`;
   const requested = await fetchLocal(`${stackApi}${productPath}`, {
@@ -117,20 +117,22 @@ try {
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
   const orderPaths = new Set([scenario.company, scenario.customer].map(id => `/v1/accounts/${id}/orders?limit=10`));
-  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, unexpectedRequests = 0, redirectUpstream = false;
+  let upstreamReads = 0, accountWrites = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
     const accountList = request.url === '/v1/accounts';
     const productAccess = request.url === productPath;
     const orderList = orderPaths.has(request.url);
     const vehicleList = /^\/v1\/accounts\/([0-9a-f-]{36})\/vehicles\?limit=25(?:&after=[A-Za-z0-9_-]{1,512})?$/.exec(request.url);
     const knownVehicleAccount = vehicleList && [scenario.customer, scenario.other, scenario.company].includes(vehicleList[1]);
-    const write = productAccess && request.method === 'POST';
+    const accountWrite = accountList && request.method === 'POST';
+    const write = accountWrite || (productAccess && request.method === 'POST');
     if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList && !knownVehicleAccount))) || request.headers.cookie || request.headers.origin) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
     }
-    if (accountList) upstreamReads += 1;
+    if (accountWrite) accountWrites += 1;
+    else if (accountList) upstreamReads += 1;
     else if (orderList) orderReads += 1;
     else if (knownVehicleAccount) vehicleReads += 1;
     else if (write) productWrites += 1;
@@ -143,7 +145,8 @@ try {
       const chunks = [];
       if (write) for await (const chunk of request) chunks.push(chunk);
       const body = write ? Buffer.concat(chunks).toString() : undefined;
-      if (write) assert.equal(body, '{"productKey":"energy_optimization"}');
+      if (accountWrite) assert.deepEqual(JSON.parse(body), { name: 'Mitt nya privatkonto' });
+      else if (write) assert.equal(body, '{"productKey":"energy_optimization"}');
       const result = await fetchLocal(`${stackApi}${request.url}`, {
         method: request.method,
         headers: { Authorization: request.headers.authorization ?? '', ...(write ? { 'Content-Type': 'application/json' } : {}) },
@@ -170,7 +173,8 @@ try {
     const response = await fetchLocal(`${nextOrigin}/api/kundkonto${path}`, {
       method: options.method,
       headers: { Cookie: 'flexexa_admin=fixture-must-stay-local', ...(authorization ? { Authorization: authorization } : {}),
-        ...(options.origin ? { Origin: options.origin } : {}) },
+        ...(options.origin ? { Origin: options.origin } : {}), ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: options.body ? JSON.stringify(options.body) : undefined,
     });
     assert.equal(response.status, status);
     assert.match(response.headers.get('cache-control') ?? '', /\bno-store\b/);
@@ -306,8 +310,23 @@ try {
   assert.deepEqual(await vehicles(scenario.company, outsider, 403), { error: 'ACCESS_DENIED' });
   assert.deepEqual(await vehicles(scenario.customer, outsider, 200), { items: [firstPage.items[1]], nextCursor: null });
   assert.equal(vehicleReads, 5);
+  assert.deepEqual(await account(fresh, 200), { items: [] });
+  const create = (token, status, origin, body = { name: '  Mitt nya privatkonto  ' }) => requestAccount(
+    '', token && `Bearer ${token}`, status, { method: 'POST', origin, body },
+  );
+  assert.deepEqual(await create(null, 401, nextOrigin), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await create(fresh, 403, 'https://outside.invalid'), { error: 'ACCESS_DENIED' });
+  assert.deepEqual(await create(fresh, 400, nextOrigin, { name: 'Förfalskad', role: 'owner' }), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await create(fresh, 413, nextOrigin, { name: ' '.repeat(2048) }), { error: 'BODY_TOO_LARGE' });
+  assert.equal(accountWrites, 0);
+  const [created, replayedAccount] = await Promise.all([create(fresh, 201, nextOrigin), create(fresh, 201, nextOrigin)]);
+  assert.match(created.id, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(created, { id: created.id, kind: 'personal', name: 'Mitt nya privatkonto' });
+  assert.deepEqual(replayedAccount, created);
+  assert.deepEqual(await account(fresh, 200), { items: [{ ...created, role: 'owner' }] });
+  assert.equal(accountWrites, 2);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next account, product, order and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
+  console.log('Verified Next account creation, product, order and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
 } finally {
   await stop(next);
   if (tls?.listening) {

@@ -28,6 +28,7 @@ const verifyPath = `/auth/v1/factors/${verifiedFactor.id}/verify`;
 const personal = { id: '11111111-1111-4111-8111-111111111111', kind: 'personal', name: 'Konto Grön', role: 'owner' };
 const company = { id: '33333333-3333-4333-8333-333333333333', kind: 'business', name: 'Konto Guld', role: 'owner' };
 const otherCompany = { id: '22222222-2222-4222-8222-222222222222', kind: 'business', name: 'Konto Blå', role: 'billing' };
+const createdPersonalId = '99999999-9999-4999-8999-111111111111';
 const accounts = {
   first: [personal, company],
   second: [otherCompany],
@@ -101,6 +102,7 @@ const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let heldOrderReply;
+let loseAccountCreationReply = false;
 let privateOrderState = 'pending';
 let startURL;
 let upstream;
@@ -219,6 +221,17 @@ try {
       }
       if (url.pathname === '/v1/accounts' && req.method === 'GET' && !url.search) {
         return reply(200, { items: accounts[actor] });
+      }
+      if (url.pathname === '/v1/accounts' && req.method === 'POST' && !url.search) {
+        const { name, ...extra } = await requestBody(req);
+        if (actor !== 'second' || name !== 'Mitt nya privatkonto' || Object.keys(extra).length || req.headers.origin || req.headers.cookie) {
+          return reply(400, { error: 'INVALID_INPUT' });
+        }
+        const existing = accounts.second.find(item => item.kind === 'personal');
+        const created = existing ?? { id: createdPersonalId, name, kind: 'personal', role: 'owner' };
+        if (!existing) accounts.second = [created, ...accounts.second];
+        if (loseAccountCreationReply) { loseAccountCreationReply = false; return reply(503, { error: 'UNAVAILABLE' }); }
+        return reply(201, { id: created.id, kind: created.kind, name: created.name });
       }
       const orderAccount = /^\/v1\/accounts\/([^/]+)\/orders$/.exec(url.pathname)?.[1];
       if (orderAccount && req.method === 'GET' && url.search === '?limit=10') {
@@ -409,6 +422,7 @@ try {
   await login('first');
   await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
   assert.match(await text(), /Konto Grön · Privat · Ägare/);
+  assert.doesNotMatch(await text(), /Skapa privatkonto/);
   assert.doesNotMatch(await text(), /Konto Blå/);
   assert.equal(await execute('return document.querySelector("main h2")?.textContent?.trim();'), 'Mina konton');
   const delayedProduct = Promise.withResolvers();
@@ -737,6 +751,23 @@ try {
   assert.deepEqual(await cacheNames(), []);
   await assertNoStorage();
   verified.push('public offline fallback, no stored or queued account traffic, and a fresh identity after reconnect');
+
+  await pending(async () => (await text()).includes('Skapa privatkonto'));
+  const writesBeforeCreation = businessCalls().filter(({ method }) => method === 'POST').length;
+  loseAccountCreationReply = true;
+  await enter('Kontonamn', 'Mitt nya privatkonto');
+  await clickButton('Skapa privatkonto', true);
+  await pending(async () => (await text()).includes('Privatkontot kunde inte bekräftas.'));
+  assert.doesNotMatch(await text(), /Ditt privatkonto är klart\./);
+  await clickButton('Skapa privatkonto', true);
+  await pending(async () => (await text()).includes('Ditt privatkonto är klart.'));
+  assert.match(await text(), /Mitt nya privatkonto · Privat · Ägare/);
+  assert.match(await text(), /Konto Blå · Företag · Ekonomi/);
+  assert.doesNotMatch(await text(), /Skapa privatkonto|Konto Grön|Konto Guld/);
+  assert.equal(businessCalls().filter(({ method }) => method === 'POST').length, writesBeforeCreation + 2);
+  assert.equal(accounts.second.filter(item => item.id === createdPersonalId).length, 1);
+  await assertNoStorage();
+  verified.push('keyboard personal account setup, safe retry after a lost reply, and confirmed membership');
   console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
 } finally {
   if (session) {
