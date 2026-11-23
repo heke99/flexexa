@@ -38,6 +38,8 @@ const userIds = { first: randomUUID(), second: randomUUID() };
 const productPath = ({ id }) => `/v1/accounts/${id}/product-access`;
 const privateOrder = '77777777-7777-4777-8777-777777777777';
 const companyOrder = '88888888-8888-4888-8888-888888888888';
+const personalSession = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+const companySession = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
 const vehicleCursor = 'eyJ4IjoxfQ';
 const grant = (product_key, enabled, status = 'active') => ({ product_key, status, version: 4, enabled, expires_at: null });
 const productAccess = new Map([
@@ -103,6 +105,7 @@ const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let heldOrderReply;
+let heldSessionReply;
 let loseAccountCreationReply = false;
 let privateOrderState = 'pending';
 let startURL;
@@ -242,6 +245,19 @@ try {
           ? { id: privateOrder, state: privateOrderState, checkout_url: 'https://checkout.invalid/private-only' }
           : { id: companyOrder, state: 'paid', quantity: 1, agreement: { amount_minor: 12345, currency: 'sek', email: 'fixture-only@example.test' } };
         return reply(200, { items: [{ ...order, created_at: '2026-11-21T10:00:00Z' }], nextCursor: null });
+      }
+      const sessionPath = /^\/v1\/accounts\/([^/]+)\/sessions(?:\/([^/]+))?$/.exec(url.pathname);
+      if (sessionPath && req.method === 'GET') {
+        const [, accountId, sessionId] = sessionPath;
+        if (!accounts[actor].some(({ id }) => id === accountId)) return reply(403, { error: 'FORBIDDEN' });
+        const id = accountId === personal.id ? personalSession : companySession;
+        const session = { id, status: accountId === personal.id ? 'uncertain' : 'completed',
+          created_at: '2026-11-21T10:00:00Z', updated_at: '2026-11-21T11:00:00Z',
+          provider_session_id: 'never-show-fixture-provider-session' };
+        if (!sessionId && url.search === '?limit=10') return reply(200, { items: [session], nextCursor: null });
+        if (sessionId !== id || url.search) return reply(404, { error: 'NOT_FOUND' });
+        if (id === personalSession && heldSessionReply) await heldSessionReply;
+        return reply(200, session);
       }
       const vehicleAccount = /^\/v1\/accounts\/([^/]+)\/vehicles$/.exec(url.pathname)?.[1];
       if (vehicleAccount && req.method === 'GET' && url.searchParams.get('limit') === '25') {
@@ -396,6 +412,7 @@ try {
   const assertNoStorage = async () => {
     const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
     for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode, privateOrder, companyOrder,
+      personalSession, companySession,
       'first@example.test', 'second@example.test', ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
@@ -617,6 +634,31 @@ try {
     accounts.first = membershipsBeforeDenial;
   }
   verified.push('denied account reads immediately revalidate role and membership');
+  await clickButton('Uppdatera');
+  await pending(async () => (await text()).includes(company.name));
+  await clickButton(`Visa laddningar för ${personal.name}`, true);
+  await pending(async () => (await text()).includes(personalSession));
+  assert.match(await text(), /Status behöver stämmas av/);
+  const delayedSession = Promise.withResolvers();
+  heldSessionReply = delayedSession.promise;
+  try {
+    await clickButton('Visa laddning', true);
+    await pending(() => businessCalls().some(({ path }) => path.endsWith(`/sessions/${personalSession}`)));
+    await clickButton(`Visa laddningar för ${company.name}`);
+    await pending(async () => (await text()).includes(companySession));
+  } finally {
+    delayedSession.resolve();
+    heldSessionReply = null;
+  }
+  await clickButton('Visa laddning', true);
+  await pending(async () => /Laddningsdetaljer[\s\S]*Senast uppdaterad/.test(await text()));
+  assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Laddningsdetaljer');
+  assert.match(await text(), /Avslutad/);
+  assert.doesNotMatch(await text(), new RegExp(`${personalSession}|never-show-fixture-provider-session|Stoppa laddning`));
+  await clickButton('Tillbaka till senaste laddningar');
+  await pending(async () => /Senaste laddningar/.test(await text()) && (await text()).includes(companySession));
+  await assertNoStorage();
+  verified.push('account-scoped recent charging and details, keyboard access and stale cross-account replies discarded');
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !(await text()).includes(personal.name));
   await assertNoStorage();

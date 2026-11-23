@@ -7,7 +7,8 @@ import type { CustomerVehicleListPath } from "@/lib/customer-vehicles";
 
 const authErrors = ["MFA_REQUIRED", "RECOVERY_REQUIRED", "VERIFIED_EMAIL_REQUIRED"];
 type AccountApiPath = "/v1/accounts" | `/v1/accounts/${string}/product-access` |
-  `/v1/accounts/${string}/orders?limit=10` | CustomerVehicleListPath;
+  `/v1/accounts/${string}/orders?limit=10` | CustomerVehicleListPath |
+  `/v1/accounts/${string}/sessions?limit=10` | `/v1/accounts/${string}/sessions/${string}`;
 type AccountWrite = { status: 201 | 202; body: () => object | Response | Promise<object | Response> };
 
 function respond(body: object, status = 200) {
@@ -108,6 +109,7 @@ async function customerAccountApi(
     });
     if (upstream.status === 401) return respond({ error: "UNAUTHENTICATED" }, 401);
     if (upstream.status === 429) return respond({ error: "RATE_LIMITED" }, 429);
+    if (upstream.status === 404 && path.includes("/sessions/")) return respond({ error: "NOT_FOUND" }, 404);
     if (upstream.status === 400 && (await upstream.json().catch(() => null))?.error === "INVALID_CURSOR") {
       return respond({ error: "INVALID_CURSOR" }, 400);
     }
