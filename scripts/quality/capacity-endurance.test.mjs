@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { enduranceStorageGuard, projectEnduranceStorage } from './capacity-endurance.mjs';
 import { capacityIdentity } from './capacity-identity.mjs';
-import { measureMixedReads } from './capacity-mixed-routes.mjs';
+import { httpSamplesMeetThresholds, measureMixedReads } from './capacity-mixed-routes.mjs';
 import { capacityTimings } from './capacity-timings.mjs';
 
 const unpack = token => JSON.parse(Buffer.from(token.split('.')[1], 'base64url'));
@@ -78,4 +78,16 @@ test('24-hour storage preflight reserves space beyond the measured telemetry rel
   assert.equal(short.fitsRelationAndGuard, false);
   assert.equal(projectEnduranceStorage(sample, short.minimumRequiredMiB * mib).fitsRelationAndGuard, true);
   assert.throws(() => projectEnduranceStorage({ ...sample, phase: 'peak' }, 10_000 * mib), /completed native endurance/);
+});
+
+
+test('a read threshold or required denial failure rejects a completed capacity sample', () => {
+  const passed = { withinProposedThresholds: true };
+  const exceeded = { withinProposedThresholds: false };
+  const denied = { accessChecksPassed: true };
+  const unexpectedDenial = { accessChecksPassed: false };
+  assert.equal(httpSamplesMeetThresholds([passed, { routeSamples: [passed, denied] }]), true);
+  assert.equal(httpSamplesMeetThresholds([exceeded]), false);
+  assert.equal(httpSamplesMeetThresholds([{ routeSamples: [exceeded, denied] }]), false);
+  assert.equal(httpSamplesMeetThresholds([{ routeSamples: [passed, unexpectedDenial] }]), false);
 });

@@ -14,7 +14,7 @@ import { enduranceStorageGuard } from './capacity-endurance.mjs';
 import { measureEndurancePlans } from './capacity-endurance-plans.mjs';
 import { capacityHttpProbe } from './capacity-http-profile.mjs';
 import { capacityIdentity } from './capacity-identity.mjs';
-import { grantMixedPartnerScope, measureMixedReads, seedMixedRoutes } from './capacity-mixed-routes.mjs';
+import { grantMixedPartnerScope, httpSamplesMeetThresholds, measureMixedReads, seedMixedRoutes } from './capacity-mixed-routes.mjs';
 import { profile, vehicleRows } from './capacity-profile.mjs';
 import { seedRoamingCosts } from './capacity-roaming-routes.mjs';
 import { percentile } from './capacity-timings.mjs';
@@ -613,6 +613,7 @@ async function scenario(cluster, name) {
       enduranceEvidence.telemetryRelationBytes = footprint.telemetry_bytes === null ? null : Number(footprint.telemetry_bytes);
     }
     assert.deepEqual(poolErrors, []);
+    const readThresholdsPassed = httpSamplesMeetThresholds(readSamples);
     console.log(JSON.stringify({
       scope: 'local_loopback_native_postgres', scenario: name, phase: values.phase,
       revision, implementationSha256, numpyVersion, ortoolsVersion,
@@ -620,7 +621,7 @@ async function scenario(cluster, name) {
       connectionPools: telemetryPool ? { api: pool.options.max, telemetry: telemetryPool.options.max }
         : { shared: pool.options.max },
       finishedAtUtc: new Date().toISOString(), fixtureVehicles: vehicles.length, controlVehicles: 2,
-      vehicleAccess: { ...access, ...driverRevocation }, readSamples, planner,
+      vehicleAccess: { ...access, ...driverRevocation }, readSamples, readThresholdsPassed, planner,
       ...(mixed ? { mixedRoutes: { privateAccounts: mixed.privateCustomers.length,
         privateFixtureVehicles: mixed.privateCustomers.length * 2,
         ...(mixed.roamingCosts ? { roamingCosts: mixed.roamingCosts } : {}) } } : {}),
@@ -632,7 +633,7 @@ async function scenario(cluster, name) {
     assert.ok(!mixed || readSamples.every(sample => sample.routeSamples.every(route =>
       route.wrongPayload === 0 && route.unauthorizedSuccess === 0)),
     'A mixed route delivered an unexpected payload or authorized a denied request');
-    if (telemetrySamples.some(sample => !sample.allObservationsCommitted)) process.exitCode = 2;
+    if (!readThresholdsPassed || telemetrySamples.some(sample => !sample.allObservationsCommitted)) process.exitCode = 2;
     if (peakEvidence?.scheduleCompleted === false || (endurance && !enduranceEvidence.scheduleCompleted)) process.exitCode = 2;
     if (enduranceEvidence?.planWorkload && !enduranceEvidence.planWorkload.allIntervalsCompleted) process.exitCode = 2;
   } finally {

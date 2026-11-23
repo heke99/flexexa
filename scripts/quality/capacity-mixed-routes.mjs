@@ -143,6 +143,11 @@ const routes = {
     build: () => ({ resource: '/v1/platform/product-access/accounts' }) },
 };
 
+export function httpSamplesMeetThresholds(samples) {
+  return samples.every(sample => sample.routeSamples?.every(route =>
+    route.accessChecksPassed ?? route.withinProposedThresholds) ?? sample.withinProposedThresholds);
+}
+
 export async function measureMixedReads(request, fixtures, rate, duration, { bounded = false, signal } = {}) {
   const selectedRoutes = fixtures.roamingCosts ? { ...routes, ...roamingRoutes } : routes;
   const routeCycle = Object.keys(selectedRoutes).flatMap(key => Array(selectedRoutes[key].weight).fill(key));
