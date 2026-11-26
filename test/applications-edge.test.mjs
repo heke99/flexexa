@@ -53,3 +53,17 @@ test('public totals remain service scoped and access-token context is ignored', 
  assert.equal(response.headers.get('Cache-Control'),'no-store');
  assert.deepEqual(await response.json(),{count:93,remaining:907});
 });
+
+test('gateway preserves retry seconds on 429 without exposing the upstream response', async t=>{
+ let retry = '25';
+ t.mock.method(globalThis,'fetch',async()=>Response.json({internal:'fixture'}, {
+  status:429, headers:{'Retry-After':retry},
+ }));
+ const response=await handleApplications(request('stats'));
+ assert.equal(response.status,429);
+ assert.equal(response.headers.get('Cache-Control'),'no-store');
+ assert.equal(response.headers.get('Retry-After'),'25');
+ assert.deepEqual(await response.json(),{error:'RATE_LIMITED'});
+ retry='99999';
+ assert.equal((await handleApplications(request('stats'))).headers.get('Retry-After'),null);
+});

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     console.info(JSON.stringify({ event: "applications.cron.completed", processed }));
     return NextResponse.json({ processed }, { headers });
   } catch (error) {
-    const { failure, requestId } = reportApplicationFailure("cron", error);
-    return NextResponse.json({ error: "Kön kräver nytt försök", requestId }, { status: failure.status, headers });
+    const { failure, requestId, headers: failureHeaders } = reportApplicationFailure("cron", error);
+    return NextResponse.json({ error: "Kön kräver nytt försök", requestId }, { status: failure.status, headers: failureHeaders });
   }
 }

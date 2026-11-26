@@ -8,6 +8,13 @@ function error(code: string, status: number) {
  return Response.json({ error: code }, { status, headers: noStore });
 }
 
+function rateLimited(upstream: Response) {
+ const retry = upstream.headers.get("retry-after");
+ const headers = new Headers(noStore);
+ if (retry !== null && /^\d{1,5}$/.test(retry) && Number(retry) <= 86400) headers.set("Retry-After", retry);
+ return Response.json({ error: "RATE_LIMITED" }, { status: 429, headers });
+}
+
 export async function handleApplications(request: Request) {
  if (request.method !== "POST") return error("METHOD_NOT_ALLOWED", 405);
  if (Number(request.headers.get("content-length")) > 16384) return error("INVALID_INPUT", 413);
@@ -43,7 +50,7 @@ export async function handleApplications(request: Request) {
     redirect: "error", signal: AbortSignal.timeout(5000),
    });
    if (auth.status === 401 || auth.status === 403) return error("UNAUTHENTICATED", 401);
-   if (auth.status === 429) return error("RATE_LIMITED", 429);
+   if (auth.status === 429) return rateLimited(auth);
    if (!auth.ok) return error("AUTH_UNAVAILABLE", 503);
    const user = await auth.json().catch(() => null);
    if (typeof user?.id !== "string" || !actorPattern.test(user.id)) {
@@ -58,7 +65,7 @@ export async function handleApplications(request: Request) {
    body: JSON.stringify({ p_action: input.action, p_secret: input.secret, p_data: input.data, ...(admin && { p_actor: actor }) }),
    redirect: "error", signal: AbortSignal.timeout(6000),
   });
-  if (result.status === 429) return error("RATE_LIMITED", 429);
+  if (result.status === 429) return rateLimited(result);
   if (admin && result.status === 403) return error("ACCESS_DENIED", 403);
   if (!result.ok) return error("DATABASE_UNAVAILABLE", 503);
   try {

@@ -8,12 +8,20 @@ type AdminAction = "owner_login" | "admin_list";
 export class ApplicationError extends Error {
  readonly code: string;
  readonly status: number;
+ readonly retryAfter: string | undefined;
 
- constructor(code: string, status: number) {
+ constructor(code: string, status: number, retryAfter?: string) {
   super(code);
   this.code = code;
   this.status = status;
+  this.retryAfter = retryAfter;
  }
+}
+
+export function limitedApplicationResponse(response: Response) {
+ const retry = response.headers.get("retry-after");
+ const seconds = retry !== null && /^\d{1,5}$/.test(retry) ? Number(retry) : undefined;
+ return new ApplicationError("RATE_LIMITED", 429, seconds !== undefined && seconds <= 86400 ? String(seconds) : undefined);
 }
 
 async function callRpc<T>(action: ServerAction | AdminAction, data: Record<string, unknown>, token?: string): Promise<T> {
@@ -34,7 +42,8 @@ async function callRpc<T>(action: ServerAction | AdminAction, data: Record<strin
  }
  if (token && response.status === 401) throw new ApplicationError("UNAUTHENTICATED", 401);
  if (token && response.status === 403) throw new ApplicationError("ACCESS_DENIED", 403);
- if (response.status === 429) throw new ApplicationError("RATE_LIMITED", 429);
+ if (response.status === 429) throw limitedApplicationResponse(response);
+ if (response.status === 502) throw new ApplicationError("INVALID_GATEWAY_RESPONSE", 502);
  if (response.status === 504) throw new ApplicationError("UPSTREAM_TIMEOUT", 504);
  if (!response.ok) throw new ApplicationError("DATABASE_UNAVAILABLE", 503);
  try { return await response.json(); }
@@ -56,7 +65,9 @@ export function reportApplicationFailure(action: string, error: unknown) {
  const failure = error instanceof ApplicationError ? error : new ApplicationError("APPLICATION_FAILURE", 503);
  const requestId = crypto.randomUUID();
  console.error(JSON.stringify({ event: "applications.failure", action, code: failure.code, requestId }));
- return { failure, requestId };
+ const headers = new Headers({ "Cache-Control": "no-store" });
+ if (failure.retryAfter !== undefined) headers.set("Retry-After", failure.retryAfter);
+ return { failure, requestId, headers };
 }
 
 export function networkHash(request: Request) {

@@ -3,7 +3,7 @@ import {registerHooks} from 'node:module';
 import assert from 'node:assert/strict';
 
 const hooks=registerHooks({resolve(specifier,context,next){return specifier==='server-only'?{shortCircuit:true,url:'data:text/javascript,export%20{}'}:next(specifier,context);}});
-const {sendPendingEmails,rpc,adminRpc,networkHash}=await import('../src/domains/applications/server.ts');
+const {sendPendingEmails,rpc,adminRpc,networkHash,reportApplicationFailure}=await import('../src/domains/applications/server.ts');
 hooks.deregister();
 
 function setup(t,statuses){
@@ -59,12 +59,20 @@ test('local input rejects malformed tokens and the gateway preserves authenticat
  let hits = 0;
  t.mock.method(globalThis, 'fetch', async (_url, options) => {
   hits++;
-  return Response.json({}, { status: options.headers.Authorization ? 401 : 429 });
+  return options.headers.Authorization ? Response.json({}, { status: 401 }) :
+    Response.json({}, { status: 429, headers: { 'Retry-After': '30' } });
  });
  await assert.rejects(adminRpc('admin_list', 'bad token'), { code: 'UNAUTHENTICATED', status: 401 });
  assert.equal(hits, 0);
  await assert.rejects(adminRpc('admin_list', 'header.payload.signature'), { code: 'UNAUTHENTICATED', status: 401 });
- await assert.rejects(rpc('stats'), { code: 'RATE_LIMITED', status: 429 });
+ await assert.rejects(rpc('stats'), error => {
+  assert.equal(error.code, 'RATE_LIMITED');
+  assert.equal(error.status, 429);
+  const { headers } = reportApplicationFailure('stats', error);
+  assert.equal(headers.get('Cache-Control'), 'no-store');
+  assert.equal(headers.get('Retry-After'), '30');
+  return true;
+ });
 });
 
 test('network budget ignores generic forwarding headers and uses only a single trusted IP', t => {

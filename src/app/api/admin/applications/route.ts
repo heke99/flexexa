@@ -25,11 +25,12 @@ export async function GET(request: Request) {
     if (next !== null && nextCursor === null) throw new ApplicationError("INVALID_ADMIN_PAGE", 502);
     return NextResponse.json({ ...result, nextCursor }, { headers: privateHeaders });
   } catch (error) {
-    const { failure, requestId } = reportApplicationFailure("admin_list", error);
+    const { failure, requestId, headers } = reportApplicationFailure("admin_list", error);
+    for (const [name, value] of Object.entries(privateHeaders)) headers.set(name, value);
     const status = failure.status;
     const message = status === 401 || status === 403
       ? "Behörighet saknas eller sessionen har gått ut."
       : "Listan kunde inte hämtas.";
-    return NextResponse.json({ error: message, requestId }, { status, headers: privateHeaders });
+    return NextResponse.json({ error: message, requestId }, { status, headers });
   }
 }
