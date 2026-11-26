@@ -21,7 +21,7 @@ function setup(t,statuses){
   const input=JSON.parse(body);
   if(input.action==='claim_email')return Response.json(claimed<statuses.length?{id:String(++claimed),claim_token:'claim-'+claimed,payload:{}}:null);
   assert.equal(input.action,'finish_email');outcomes.push(input.data.outcome);
-  return Response.json({});
+  return Response.json({updated:1});
  });
  return outcomes;
 }
@@ -37,6 +37,63 @@ test('retryable email failure stops the current batch rather than retrying in a 
  assert.equal(await sendPendingEmails(2),0);
  assert.deepEqual(outcomes,['retry']);
 });
+
+test('an accepted email whose response was lost is reconciled with the same provider key', async t => {
+ setup(t, []);
+ const completions = [];
+ const accepted = new Map();
+ let attempt = 0;
+ t.mock.method(globalThis, 'fetch', async (url, options) => {
+  if (url === 'https://api.resend.com/emails') {
+   const key = options.headers['Idempotency-Key'];
+   assert.equal(key, 'flexexa-application-job-1');
+   if (!accepted.has(key)) {
+    accepted.set(key, { id: 'provider-1', body: options.body });
+    throw new Error('fixture dropped response after provider acceptance');
+   }
+   assert.equal(options.body, accepted.get(key).body);
+   return Response.json({ id: accepted.get(key).id });
+  }
+  const { action, data } = JSON.parse(options.body);
+  if (action === 'claim_email') {
+   attempt++;
+   return Response.json({ id: 'job-1', claim_token: `claim-${attempt}`, payload: { to: ['queue@example.invalid'] } });
+  }
+  assert.equal(action, 'finish_email');
+  completions.push(data);
+  return Response.json({ updated: 1 });
+ });
+ assert.equal(await sendPendingEmails(1), 0);
+ assert.equal(await sendPendingEmails(1), 1);
+ assert.equal(accepted.size, 1);
+ assert.deepEqual(completions, [
+  { id: 'job-1', claim_token: 'claim-1', outcome: 'retry', error: 'TRANSPORT_UNCERTAIN' },
+  { id: 'job-1', claim_token: 'claim-2', outcome: 'sent', error: '', provider_id: 'provider-1' },
+ ]);
+});
+
+test('empty provider receipts and stale or invalid database confirmations cannot count as sent', async t => {
+ setup(t, []);
+ const completions = [];
+ let receipt = { id: '' };
+ let confirmation = { updated: 1 };
+ t.mock.method(globalThis, 'fetch', async (url, options) => {
+  if (url === 'https://api.resend.com/emails') return Response.json(receipt);
+  const { action, data } = JSON.parse(options.body);
+  if (action === 'claim_email') return Response.json({ id: 'job-1', claim_token: 'claim-1', payload: {} });
+  assert.equal(action, 'finish_email');
+  completions.push(data);
+  return Response.json(confirmation);
+ });
+ assert.equal(await sendPendingEmails(1), 0);
+ assert.deepEqual(completions[0], { id: 'job-1', claim_token: 'claim-1', outcome: 'retry', error: 'INVALID_EMAIL_RECEIPT' });
+ receipt = { id: 'provider-1' };
+ confirmation = { updated: 0 };
+ assert.equal(await sendPendingEmails(1), 0);
+ confirmation = {};
+ await assert.rejects(sendPendingEmails(1), { code: 'INVALID_EMAIL_COMPLETION', status: 502 });
+});
+
 test('application requests use the scoped gateway and only admin calls forward a user token', async t => {
  setup(t, []);
  const userToken = 'header.payload.signature';

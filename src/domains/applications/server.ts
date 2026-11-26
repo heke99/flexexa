@@ -78,16 +78,59 @@ export function networkHash(request: Request) {
  return createHmac("sha256", settings().secret).update("applications-network:" + identity).digest("hex");
 }
 export function validOrigin(request:Request){return request.headers.get("origin")===new URL(request.url).origin;}
-export async function sendPendingEmails(max=5){let sent=0;for(let i=0;i<max;i++){
- const job=await rpc<{id:string;claim_token:string;payload:unknown}|null>("claim_email");if(!job)break;
- let outcome="retry",error="TRANSPORT_UNCERTAIN",provider_id:string|undefined;
- try{const key=process.env.RESEND_API_KEY;if(!key)throw new ApplicationError("EMAIL_NOT_CONFIGURED", 503);const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json","Idempotency-Key":`flexexa-application-${job.id}`},body:JSON.stringify(job.payload),signal:AbortSignal.timeout(12000)});
- if(response.ok){const result=await response.json();if(typeof result.id!=="string")throw new ApplicationError("INVALID_EMAIL_RECEIPT", 502);provider_id=result.id;outcome="sent";error="";sent++;}else{outcome=response.status===429||response.status>=500?"retry":"permanent";error=`EMAIL_HTTP_${response.status}`;}
- }catch(cause){
-  // A timeout is uncertain; preserve the same idempotency key for a bounded retry.
-  const {failure} = reportApplicationFailure("send_email", cause instanceof ApplicationError ? cause : new ApplicationError("TRANSPORT_UNCERTAIN", 503));
-  error = failure.code;
+export async function sendPendingEmails(max = 5) {
+ let sent = 0;
+ for (let i = 0; i < max; i++) {
+  const job = await rpc<{ id: string; claim_token: string; payload: unknown } | null>("claim_email");
+  if (!job) break;
+
+  let outcome = "retry";
+  let error = "TRANSPORT_UNCERTAIN";
+  let providerId: string | undefined;
+  try {
+   const key = process.env.RESEND_API_KEY;
+   if (!key) throw new ApplicationError("EMAIL_NOT_CONFIGURED", 503);
+   const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+     Authorization: `Bearer ${key}`,
+     "Content-Type": "application/json",
+     "Idempotency-Key": `flexexa-application-${job.id}`,
+    },
+    body: JSON.stringify(job.payload),
+    redirect: "error",
+    signal: AbortSignal.timeout(12000),
+   });
+   if (response.ok) {
+    const result = await response.json();
+    if (typeof result?.id !== "string" || !/^[\w-]{1,100}$/.test(result.id)) {
+     throw new ApplicationError("INVALID_EMAIL_RECEIPT", 502);
+    }
+    providerId = result.id;
+    outcome = "sent";
+    error = "";
+   } else {
+    outcome = response.status === 429 || response.status >= 500 ? "retry" : "permanent";
+    error = `EMAIL_HTTP_${response.status}`;
+   }
+  } catch (cause) {
+   // A timeout is uncertain. Preserve the same idempotency key for a bounded retry.
+   const { failure } = reportApplicationFailure("send_email", cause instanceof ApplicationError ? cause : new ApplicationError("TRANSPORT_UNCERTAIN", 503));
+   error = failure.code;
+  }
+
+  const completion = await rpc<{ updated: number } | null>("finish_email", {
+   id: job.id,
+   claim_token: job.claim_token,
+   outcome,
+   error,
+   ...(providerId && { provider_id: providerId }),
+  });
+  if (completion?.updated !== 0 && completion?.updated !== 1) {
+   throw new ApplicationError("INVALID_EMAIL_COMPLETION", 502);
+  }
+  if (completion.updated === 1 && outcome === "sent") sent++;
+  if (outcome === "retry") break;
  }
- await rpc("finish_email",{id:job.id,claim_token:job.claim_token,outcome,error,...(provider_id?{provider_id}:{})});
- if(outcome==="retry")break;
- }return sent;}
+ return sent;
+}
