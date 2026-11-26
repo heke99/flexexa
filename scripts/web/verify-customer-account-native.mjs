@@ -305,7 +305,18 @@ try {
   assert.deepEqual(await vehicles(scenario.other, outsider, 400, cursorQuery), { error: 'INVALID_CURSOR' });
   assert.deepEqual(await vehicles(scenario.company, outsider, 403), { error: 'ACCESS_DENIED' });
   assert.deepEqual(await vehicles(scenario.customer, outsider, 200), { items: [firstPage.items[1]], nextCursor: null });
-  assert.equal(vehicleReads, 5);
+  const exactPageFixture = new Client({ connectionString: databaseUrl });
+  await exactPageFixture.connect();
+  try {
+    const deleted = await exactPageFixture.query(
+      "DELETE FROM charging_subscription.vehicles WHERE account_id=$1 AND plate='ZZX00024'", [scenario.customer],
+    );
+    assert.equal(deleted.rowCount, 1);
+  } finally {
+    await exactPageFixture.end();
+  }
+  assert.deepEqual(await vehicles(scenario.customer, recipient, 200), { items: firstPage.items, nextCursor: null });
+  assert.equal(vehicleReads, 6);
   assert.equal(unexpectedRequests, 0);
   console.log('Verified Next account, product, order and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
 } finally {

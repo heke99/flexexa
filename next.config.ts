@@ -1,13 +1,13 @@
 import type { NextConfig } from "next";
-import { httpsOrigin } from "./src/lib/https-origin.ts";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
+import { inspectCustomerPreview } from "./src/lib/customer-preview-settings.ts";
 import { baseContentSecurityPolicy, siteContentSecurityPolicy } from "./src/lib/site-content-security-policy.ts";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
-    const authOrigin = process.env.FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW === "true"
-      ? httpsOrigin(process.env.FLEXEXA_CUSTOMER_AUTH_URL)
-      : null;
+    const preview = inspectCustomerPreview(process.env);
+    const authOrigin = preview.state === "enabled" ? preview.config.authUrl : null;
     const policy = process.env.NODE_ENV === "production" ? siteContentSecurityPolicy(authOrigin) : baseContentSecurityPolicy;
     return [{ source: "/(.*)", headers: [
       { key: "X-Content-Type-Options", value: "nosniff" },
@@ -21,4 +21,12 @@ const nextConfig: NextConfig = {
     }];
   },
 };
-export default nextConfig;
+export default function config(phase: string) {
+  if (phase === PHASE_PRODUCTION_BUILD) {
+    const preview = inspectCustomerPreview(process.env);
+    if (preview.state === "invalid") {
+      throw new Error(`CUSTOMER_PREVIEW_CONFIGURATION_INVALID ${preview.issues.join(",")}`);
+    }
+  }
+  return nextConfig;
+}

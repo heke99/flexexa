@@ -15,7 +15,7 @@ export default function AccountOverviewPage() {
   return <main id="main" className="wrap section">
     <h1>Mitt konto</h1>
     <CustomerAccounts authUrl={config.authUrl} publishableKey={config.publishableKey}
-      emailOtpEnabled={process.env.FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW === "true"} />
+      emailOtpEnabled={config.emailOtpEnabled} />
     <p><a className="text-link" href={portal}>Öppna kundportalen</a> för abonnemang, beställningar och kontoinställningar.</p>
   </main>;
 }

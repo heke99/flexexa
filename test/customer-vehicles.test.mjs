@@ -14,6 +14,16 @@ test('vehicle list restricts forwarded query to a single bounded cursor', () => 
     assert.equal(listPath(query), null, query);
   }
   assert.equal(customerVehicleListPath('../other', new URLSearchParams()), null);
+  for (const reserved of ['00000000-0000-0000-0000-000000000000', 'ffffffff-ffff-ffff-ffff-ffffffffffff']) {
+    assert.equal(customerVehicleListPath(reserved, new URLSearchParams()), null);
+  }
+});
+
+test('exactly 25 final cars keep a null cursor, and a continuation requires a full page', () => {
+  const items = Array.from({ length: 25 }, (_, index) => ({ ...vehicle, id: `febdb492-ed0c-4f9d-9ce9-${String(index).padStart(12, '0')}` }));
+  assert.deepEqual(normalizeCustomerVehicles({ items, nextCursor: null }), { items, nextCursor: null });
+  assert.deepEqual(normalizeCustomerVehicles({ items, nextCursor: 'valid_page_cursor' }), { items, nextCursor: 'valid_page_cursor' });
+  assert.equal(normalizeCustomerVehicles({ items: items.slice(0, -1), nextCursor: 'valid_page_cursor' }), null);
 });
 
 test('vehicle list normalizes only the four public fields on a valid page', () => {
