@@ -1,4 +1,4 @@
-const publicPages = new Set(['/', '/ladda', '/energi', '/elbilsabonnemang', '/energioptimering']);
+const publicPages = new Set(['/', '/ladda', '/energi', '/elbilsabonnemang', '/energioptimering', '/energy-wizard', '/energy-wizard/planering']);
 const offlinePage = `<!doctype html>
 <html lang="sv">
 <meta charset="utf-8">

@@ -667,6 +667,11 @@ try {
     await assertNoStorage();
     await assert.rejects(browserCommand('/url', { url: startURL + overview }));
     await assert.rejects(browserCommand('/url', { url: startURL + '/energi?offline-probe=1' }));
+    await assert.rejects(browserCommand('/url', { url: startURL + '/energy-wizard?partner=fixture' }));
+    for (const publicPath of ['/energy-wizard', '/energy-wizard/planering']) {
+      await browserCommand('/url', { url: startURL + publicPath });
+      assert.equal(await execute('return document.querySelector("h1")?.textContent;'), 'Du är offline');
+    }
     await browserCommand('/url', { url: startURL + '/ladda' });
     assert.equal(await execute('return document.querySelector("h1")?.textContent;'), 'Du är offline');
     assert.doesNotMatch(await text(), /Mina konton|Konto Grön|Konto Guld|Konto Blå/);
