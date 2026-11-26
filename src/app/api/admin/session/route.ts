@@ -1,6 +1,7 @@
 import {cookies} from "next/headers";
 import {NextResponse} from "next/server";
 import {randomUUID} from "node:crypto";
+import {JsonRequestError,readBoundedJson} from "@/lib/bounded-json-request";
 import {settings,adminRpc,validOrigin,ApplicationError,reportApplicationFailure,limitedApplicationResponse} from "@/domains/applications/server";
 export const maxDuration=60;
 
@@ -15,24 +16,46 @@ async function requestAdminDependency(url: string, init: RequestInit, dependency
  }
 }
 
+const loginHeaders = { "Cache-Control": "private, no-store" };
+type LoginInput = {mode:"token"; tokenHash:string} | {mode:"password"; email:string; password:string} | {mode:"link"; email:string};
+
+function loginInput(body: unknown): LoginInput | null {
+ if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+ const {email, password, token_hash: token} = body as Record<string, unknown>;
+ if (password != null && (typeof password !== "string" || password.length > 128)) return null;
+ if (token != null && token !== "") {
+  if (password || typeof token !== "string" || !/^[a-f0-9]{40,128}$/i.test(token)) return null;
+  return {mode:"token",tokenHash:token};
+ }
+ if (typeof email !== "string") return null;
+ const normalized = email.trim().toLowerCase();
+ if (normalized.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(normalized)) return null;
+ return password ? {mode:"password",email:normalized,password} : {mode:"link",email:normalized};
+}
+
 export async function POST(request:Request){
- if(!validOrigin(request))return NextResponse.json({error:"Nekad åtkomst"},{status:403});
+ if(!validOrigin(request))return NextResponse.json({error:"Nekad åtkomst"},{status:403,headers:loginHeaders});
+ if(request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()!=="application/json")
+  return NextResponse.json({error:"JSON krävs."},{status:415,headers:loginHeaders});
  try{
-  const body=await request.json(),c=settings();
-  if(body.token_hash||body.password){
-   if(!body.password&&typeof body.token_hash!=="string"||(!body.password&&!/^[a-f0-9]{40,128}$/i.test(body.token_hash)))throw new ApplicationError("INVALID_LOGIN_INPUT",400);
-   const verified=await requestAdminDependency(c.url+(body.password?"/auth/v1/token?grant_type=password":"/auth/v1/verify"),{method:"POST",headers:{apikey:c.key,"Content-Type":"application/json"},body:JSON.stringify(body.password?{email:String(body.email||"").trim().toLowerCase(),password:body.password}:{token_hash:body.token_hash,type:"email"}),cache:"no-store",signal:AbortSignal.timeout(15000)}, "AUTH");
+  const input=loginInput(await readBoundedJson(request,8192));
+  if(!input)return NextResponse.json({error:"Ogiltiga inloggningsuppgifter."},{status:400,headers:loginHeaders});
+  const c=settings();
+  if(input.mode!=="link"){
+   const path=input.mode==="password"?"/auth/v1/token?grant_type=password":"/auth/v1/verify";
+   const credentials=input.mode==="password"?{email:input.email,password:input.password}:{token_hash:input.tokenHash,type:"email"};
+   const verified=await requestAdminDependency(c.url+path,{method:"POST",headers:{apikey:c.key,"Content-Type":"application/json"},body:JSON.stringify(credentials),cache:"no-store",signal:AbortSignal.timeout(15000)}, "AUTH");
    if(verified.status===429)throw limitedApplicationResponse(verified);
    if(!verified.ok)throw new ApplicationError(verified.status>=500?"AUTH_UNAVAILABLE":"UNAUTHENTICATED",verified.status>=500?503:401);
    const session=await verified.json();
    if(typeof session.access_token!=="string")throw new ApplicationError("INVALID_AUTH_RESPONSE",502);
    await adminRpc("owner_login",session.access_token);await adminRpc("admin_list",session.access_token,{page:0});
-   const response=NextResponse.json({ok:true});response.cookies.set("flexexa_admin",session.access_token,{httpOnly:true,secure:true,sameSite:"strict",path:"/api/admin",maxAge:Math.min(session.expires_in||3600,3600)});return response;
+   const response=NextResponse.json({ok:true},{headers:loginHeaders});response.cookies.set("flexexa_admin",session.access_token,{httpOnly:true,secure:true,sameSite:"strict",path:"/api/admin",maxAge:Math.min(session.expires_in||3600,3600)});return response;
   }
-  const email=String(body.email||"").trim().toLowerCase();
+  const {email}=input;
   const configuredEmail=process.env.FLEXEXA_ADMIN_EMAIL?.trim().toLowerCase();
   if(!configuredEmail)throw new ApplicationError("ADMIN_EMAIL_NOT_CONFIGURED",503);
-  if(email!==configuredEmail)return NextResponse.json({message:"Om adressen är behörig skickas en inloggningslänk."});
+  if(email!==configuredEmail)return NextResponse.json({message:"Om adressen är behörig skickas en inloggningslänk."},{headers:loginHeaders});
   const mailKey=process.env.RESEND_API_KEY;
   const configuredOrigin=process.env.FLEXEXA_ADMIN_ORIGIN;
   if(!mailKey || !configuredOrigin)throw new ApplicationError("ADMIN_EMAIL_NOT_CONFIGURED",503);
@@ -48,8 +71,9 @@ export async function POST(request:Request){
   const sent=await requestAdminDependency("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${mailKey}`,"Content-Type":"application/json","Idempotency-Key":`flexexa-owner-${randomUUID()}`},body:JSON.stringify({from:"Flexexa via Trafexa Nordic <info@trafexa.com>",to:[email],reply_to:"info@flexexa.com",subject:"Logga in som superadmin på Flexexa",text:`Öppna länken och välj Bekräfta inloggning:\n\n${returnUrl.href}\n\nLänken är personlig, gäller en gång och slutar gälla efter en timme. Dela den inte. Begär en ny länk om den har gått ut.\n\nFlexexa / Trafexa Nordic AB`}),signal:AbortSignal.timeout(15000)}, "EMAIL_PROVIDER");
   if(sent.status===429)throw limitedApplicationResponse(sent);
   if(!sent.ok)throw new ApplicationError("EMAIL_PROVIDER_ERROR",503);
-  return NextResponse.json({message:"En inloggningslänk har skickats. Kontrollera även skräpposten."});
+  return NextResponse.json({message:"En inloggningslänk har skickats. Kontrollera även skräpposten."},{headers:loginHeaders});
  }catch(error){
+  if(error instanceof JsonRequestError)return NextResponse.json({error:error.message},{status:error.status,headers:loginHeaders});
   const safe=error instanceof ApplicationError?error:new ApplicationError("ADMIN_LOGIN_FAILED",503);
   const {requestId,headers}=reportApplicationFailure("admin_login",safe);
   const message = safe.status === 429 ? "För många inloggningsförsök. Försök igen senare."
