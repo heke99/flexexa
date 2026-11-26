@@ -11,12 +11,13 @@ if (!backend) throw new Error("Usage: node scripts/web/verify-admin-logout.mjs C
 const { chromium } = createRequire(join(resolve(backend),"package.json"))("playwright");
 const token = "fixture.admin.session";
 const applicant = {
- id:"fixture-admin-logout", first_name:"Syntetisk", last_name:"Sökande", email:"logout-fixture@example.invalid",
+ id:"af471b5f-e100-4cfd-a799-a960e46aaf30", first_name:"Syntetisk", last_name:"Sökande", email:"logout-fixture@example.invalid",
  annual_miles:1_500, car:"Testbil", position:94, offer_group:"first_1000", marketing_consent:false,
  privacy_version:"applications-2026-11-02-v1", created_at:"2026-11-01T00:00:00Z", is_test:false,
- email_state:"pending", provider_id:null, last_error:null, attempts:0,
+ email_state:null, provider_id:null, last_error:null, attempts:null,
 };
 const listing = {count:94,base:93,new:1,applications:[applicant],next:null};
+let dependencyPage = listing;
 
 async function listen(server) {
  server.listen(0,"127.0.0.1");
@@ -28,7 +29,7 @@ const dependency = createServer((request,response)=>{
  const authorized = request.method === "POST" && request.url === "/functions/v1/flexexa-applications" &&
   request.headers.authorization === "Bearer " + token;
  request.resume();
- response.writeHead(authorized?200:401,{"Content-Type":"application/json"}).end(JSON.stringify(authorized?listing:{}));
+ response.writeHead(authorized?200:401,{"Content-Type":"application/json"}).end(JSON.stringify(authorized?dependencyPage:{}));
 });
 const dependencyPort = await listen(dependency);
 const probe = createServer();
@@ -103,6 +104,21 @@ try {
   await page.goto(base+"/admin/ansokningar",{waitUntil:"networkidle"});
   const applicantLink = page.getByRole("link",{name:applicant.email});
   await applicantLink.waitFor({state:"visible"});
+  await page.getByText("Mejlstatus saknas",{exact:true}).waitFor();
+  dependencyPage = { ...listing, applications:null };
+  const invalid = page.waitForResponse(response=>response.url()===base+"/api/admin/applications");
+  await page.getByRole("button",{name:"Uppdatera"}).click();
+  const rejected = await invalid;
+  assert.equal(rejected.status(),502);
+  assert.equal(rejected.headers()["cache-control"],"private, no-store");
+  const rejectedHttp = await context.request.get(base+"/api/admin/applications");
+  assert.equal(rejectedHttp.status(),502);
+  assert.match((await rejectedHttp.json()).requestId,/^[0-9a-f-]{36}$/);
+  await applicantLink.waitFor({state:"hidden"});
+  dependencyPage = listing;
+  await page.getByRole("button",{name:"Försök hämta listan igen"}).click();
+  await applicantLink.waitFor({state:"visible"});
+
   holdRefresh = true;
   await page.getByRole("button",{name:"Uppdatera"}).click();
   await lateStarted.promise;
@@ -126,7 +142,7 @@ try {
   assert.equal((await context.cookies()).some(cookie=>cookie.name==="flexexa_admin"),false);
   assert.equal((await context.request.get(base+"/api/admin/applications")).status(),401);
   assert.deepEqual(errors,[]);
-  console.log(`${label}: failed sign-out hides private data; retry clears cookie; delayed list ignored.`);
+  console.log(`${label}: legacy no-mail row displayed; malformed page rejected and retried; logout hides data and ignores delayed results.`);
   await context.close();
  }
 } finally {

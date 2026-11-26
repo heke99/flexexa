@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { decodeApplicationCursor, encodeApplicationCursor } from "@/domains/applications/cursor";
+import { parseAdminApplicationPage } from "@/domains/applications/admin-page";
+import { decodeApplicationCursor } from "@/domains/applications/cursor";
 import { adminRpc, ApplicationError, reportApplicationFailure } from "@/domains/applications/server";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +21,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { next, ...result } = await adminRpc("admin_list", token, after ? { after } : { page });
-    const nextCursor = encodeApplicationCursor(next);
-    if (next !== null && nextCursor === null) throw new ApplicationError("INVALID_ADMIN_PAGE", 502);
-    return NextResponse.json({ ...result, nextCursor }, { headers: privateHeaders });
+    const result = parseAdminApplicationPage(await adminRpc<unknown>("admin_list", token, after ? { after } : { page }));
+    if (!result) throw new ApplicationError("INVALID_ADMIN_PAGE", 502);
+    return NextResponse.json(result, { headers: privateHeaders });
   } catch (error) {
     const { failure, requestId, headers } = reportApplicationFailure("admin_list", error);
     for (const [name, value] of Object.entries(privateHeaders)) headers.set(name, value);
