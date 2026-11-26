@@ -1,5 +1,35 @@
-import {cookies} from "next/headers";
-import {NextResponse} from "next/server";
-import {adminRpc,reportApplicationFailure} from "@/domains/applications/server";
-export const dynamic="force-dynamic";
-export async function GET(request:Request){const token=(await cookies()).get("flexexa_admin")?.value;if(!token)return NextResponse.json({error:"Logga in som superadmin."},{status:401});const page=Number(new URL(request.url).searchParams.get("page")||0);if(!Number.isInteger(page)||page<0||page>100)return NextResponse.json({error:"Ogiltig sida"},{status:400});try{return NextResponse.json(await adminRpc("admin_list",token,{page}),{headers:{"Cache-Control":"private, no-store","Vary":"Cookie"}});}catch(error){const {failure,requestId}=reportApplicationFailure("admin_list",error);const status=failure.status;return NextResponse.json({error:status===401||status===403?"Behörighet saknas eller sessionen har gått ut.":"Listan kunde inte hämtas.",requestId},{status,headers:{"Cache-Control":"private, no-store"}});}}
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { decodeApplicationCursor, encodeApplicationCursor } from "@/domains/applications/cursor";
+import { adminRpc, ApplicationError, reportApplicationFailure } from "@/domains/applications/server";
+
+export const dynamic = "force-dynamic";
+const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
+
+export async function GET(request: Request) {
+  const token = (await cookies()).get("flexexa_admin")?.value;
+  if (!token) return NextResponse.json({ error: "Logga in som superadmin." }, { status: 401, headers: privateHeaders });
+
+  const params = new URL(request.url).searchParams;
+  const page = Number(params.get("page") ?? 0);
+  const cursor = params.get("cursor");
+  const after = cursor === null ? null : decodeApplicationCursor(cursor);
+  if (!Number.isInteger(page) || page < 0 || page > 100 ||
+    (cursor !== null && (!after || params.has("page") || params.getAll("cursor").length !== 1))) {
+    return NextResponse.json({ error: "Ogiltig sida." }, { status: 400, headers: privateHeaders });
+  }
+
+  try {
+    const { next, ...result } = await adminRpc("admin_list", token, after ? { after } : { page });
+    const nextCursor = encodeApplicationCursor(next);
+    if (next !== null && nextCursor === null) throw new ApplicationError("INVALID_ADMIN_PAGE", 502);
+    return NextResponse.json({ ...result, nextCursor }, { headers: privateHeaders });
+  } catch (error) {
+    const { failure, requestId } = reportApplicationFailure("admin_list", error);
+    const status = failure.status;
+    const message = status === 401 || status === 403
+      ? "Behörighet saknas eller sessionen har gått ut."
+      : "Listan kunde inte hämtas.";
+    return NextResponse.json({ error: message, requestId }, { status, headers: privateHeaders });
+  }
+}
