@@ -1,15 +1,82 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 export function settings(){const url=process.env.FLEXEXA_SUPABASE_URL;const key=process.env.FLEXEXA_SUPABASE_KEY;const secret=process.env.FLEXEXA_WAITLIST_SECRET;if(!url||!key||!secret)throw Error("APPLICATIONS_NOT_CONFIGURED");return {url,key,secret};}
-export async function rpc<T=Record<string,unknown>>(action:string,data:Record<string,unknown>={},token?:string):Promise<T>{const c=settings();const response=await fetch(c.url+"/rest/v1/rpc/flexexa_applications",{method:"POST",headers:{apikey:c.key,"Content-Type":"application/json",...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify({p_action:action,p_secret:c.secret,p_data:data}),cache:"no-store",signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error(response.status===403||response.status===401?"ACCESS_DENIED":"DATABASE_UNAVAILABLE");return response.json();}
-export function networkHash(value:string){return createHash("sha256").update(settings().secret+new Date().toISOString().slice(0,10)+value).digest("hex");}
+type ServerAction = "stats" | "submit" | "claim_email" | "finish_email" | "cleanup";
+type AdminAction = "owner_login" | "admin_list";
+
+export class ApplicationError extends Error {
+ readonly code: string;
+ readonly status: number;
+
+ constructor(code: string, status: number) {
+  super(code);
+  this.code = code;
+  this.status = status;
+ }
+}
+
+async function callRpc<T>(action: ServerAction | AdminAction, data: Record<string, unknown>, token?: string): Promise<T> {
+ const { url, key, secret } = settings();
+ let response: Response;
+ try {
+  response = await fetch(url + "/functions/v1/flexexa-applications", {
+   method: "POST",
+   headers: { apikey: key, ...(token && { Authorization: `Bearer ${token}` }), "Content-Type": "application/json" },
+   body: JSON.stringify({ action, secret, data }),
+   cache: "no-store", redirect: "error", signal: AbortSignal.timeout(15000),
+  });
+ } catch (error) {
+  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+   throw new ApplicationError("UPSTREAM_TIMEOUT", 504);
+  }
+  throw new ApplicationError("UPSTREAM_UNAVAILABLE", 503);
+ }
+ if (token && response.status === 401) throw new ApplicationError("UNAUTHENTICATED", 401);
+ if (token && response.status === 403) throw new ApplicationError("ACCESS_DENIED", 403);
+ if (response.status === 429) throw new ApplicationError("RATE_LIMITED", 429);
+ if (response.status === 504) throw new ApplicationError("UPSTREAM_TIMEOUT", 504);
+ if (!response.ok) throw new ApplicationError("DATABASE_UNAVAILABLE", 503);
+ try { return await response.json(); }
+ catch { throw new ApplicationError("INVALID_DATABASE_RESPONSE", 502); }
+}
+
+export function rpc<T = Record<string, unknown>>(action: ServerAction, data: Record<string, unknown> = {}): Promise<T> {
+ return callRpc<T>(action, data);
+}
+
+export async function adminRpc<T = Record<string, unknown>>(action: AdminAction, token: string, data: Record<string, unknown> = {}): Promise<T> {
+ if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(token) || token.length > 16384) {
+  throw new ApplicationError("UNAUTHENTICATED", 401);
+ }
+ return callRpc<T>(action, data, token);
+}
+
+export function reportApplicationFailure(action: string, error: unknown) {
+ const failure = error instanceof ApplicationError ? error : new ApplicationError("APPLICATION_FAILURE", 503);
+ const requestId = crypto.randomUUID();
+ console.error(JSON.stringify({ event: "applications.failure", action, code: failure.code, requestId }));
+ return { failure, requestId };
+}
+
+export function networkHash(request: Request) {
+ // Vercel owns this header at its ingress. Every other environment shares a
+ // conservative bucket until it has an explicitly configured trusted source.
+ const address = process.env.VERCEL === "1" ? request.headers.get("x-vercel-forwarded-for")?.trim() : undefined;
+ const identity = address && isIP(address) ? address : "unknown";
+ return createHmac("sha256", settings().secret).update("applications-network:" + identity).digest("hex");
+}
 export function validOrigin(request:Request){return request.headers.get("origin")===new URL(request.url).origin;}
 export async function sendPendingEmails(max=5){let sent=0;for(let i=0;i<max;i++){
  const job=await rpc<{id:string;claim_token:string;payload:unknown}|null>("claim_email");if(!job)break;
  let outcome="retry",error="TRANSPORT_UNCERTAIN",provider_id:string|undefined;
- try{const key=process.env.RESEND_API_KEY;if(!key)throw Error("EMAIL_NOT_CONFIGURED");const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json","Idempotency-Key":`flexexa-application-${job.id}`},body:JSON.stringify(job.payload),signal:AbortSignal.timeout(12000)});
- if(response.ok){const result=await response.json();if(typeof result.id!=="string")throw Error("INVALID_EMAIL_RECEIPT");provider_id=result.id;outcome="sent";error="";sent++;}else{outcome=response.status===429||response.status>=500?"retry":"permanent";error=`EMAIL_HTTP_${response.status}`;}
- }catch{/* A timeout is uncertain; preserve the same idempotency key for a bounded retry. */}
+ try{const key=process.env.RESEND_API_KEY;if(!key)throw new ApplicationError("EMAIL_NOT_CONFIGURED", 503);const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json","Idempotency-Key":`flexexa-application-${job.id}`},body:JSON.stringify(job.payload),signal:AbortSignal.timeout(12000)});
+ if(response.ok){const result=await response.json();if(typeof result.id!=="string")throw new ApplicationError("INVALID_EMAIL_RECEIPT", 502);provider_id=result.id;outcome="sent";error="";sent++;}else{outcome=response.status===429||response.status>=500?"retry":"permanent";error=`EMAIL_HTTP_${response.status}`;}
+ }catch(cause){
+  // A timeout is uncertain; preserve the same idempotency key for a bounded retry.
+  const {failure} = reportApplicationFailure("send_email", cause instanceof ApplicationError ? cause : new ApplicationError("TRANSPORT_UNCERTAIN", 503));
+  error = failure.code;
+ }
  await rpc("finish_email",{id:job.id,claim_token:job.claim_token,outcome,error,...(provider_id?{provider_id}:{})});
  if(outcome==="retry")break;
  }return sent;}

@@ -25,19 +25,30 @@ begin
  perform public.flexexa_applications('claim_email',current_setting('flexexa.test_secret'));
  if not exists(select 1 from flexexa_acquisition.email_jobs where id=(job->>'id')::uuid and state='review') then raise exception 'expired idempotency retry';end if;
  insert into auth.users(id,email,email_confirmed_at) values(q,'hekmat.h@div3rsa.com',now());
- perform set_config('request.jwt.claim.sub',q::text,true);
- perform public.flexexa_applications('owner_login',current_setting('flexexa.test_secret'));
- r=public.flexexa_applications('admin_list',current_setting('flexexa.test_secret'),'{"page":0}');
+ perform set_config('flexexa.test_owner',q::text,true);
+ perform public.flexexa_applications_admin('owner_login',current_setting('flexexa.test_secret'),q);
+ r=public.flexexa_applications_admin('admin_list',current_setting('flexexa.test_secret'),q,'{"page":0}');
  if jsonb_array_length(r->'applications')<2 then raise exception 'admin listing failed';end if;
  update public.platform_memberships set status='suspended' where user_id=q;
- begin perform public.flexexa_applications('admin_list',current_setting('flexexa.test_secret'),'{"page":0}');raise exception 'suspended allowed';exception when insufficient_privilege then null;end;
+ begin perform public.flexexa_applications_admin('admin_list',current_setting('flexexa.test_secret'),q,'{"page":0}');raise exception 'suspended allowed';exception when insufficient_privilege then null;end;
 end;$test$;
 set local role anon;
 do $test$ begin
  begin perform count(*) from flexexa_acquisition.applications;raise exception 'anon table access';exception when insufficient_privilege then null;end;
- perform public.flexexa_applications('stats',current_setting('flexexa.test_secret'));
+ begin perform public.flexexa_applications('stats',current_setting('flexexa.test_secret'));raise exception 'anon stats RPC allowed';exception when insufficient_privilege then null;end;
  perform set_config('request.jwt.claim.sub','',true);
  begin perform public.flexexa_applications('admin_list',current_setting('flexexa.test_secret'),'{"page":0}');raise exception 'anon admin allowed';exception when insufficient_privilege then null;end;
+end;$test$;
+reset role;
+set local role authenticated;
+do $test$ begin
+ begin perform public.flexexa_applications_admin('admin_list',current_setting('flexexa.test_secret'),current_setting('flexexa.test_owner')::uuid);raise exception 'authenticated admin RPC allowed';exception when insufficient_privilege then null;end;
+end;$test$;
+reset role;
+set local role service_role;
+do $test$ begin
+ if (public.flexexa_applications('stats',current_setting('flexexa.test_secret'))->>'count')::integer<>1001 then raise exception 'service stats failed';end if;
+ begin perform public.flexexa_applications_admin('admin_list',current_setting('flexexa.test_secret'),gen_random_uuid());raise exception 'non-admin actor allowed';exception when insufficient_privilege then null;end;
 end;$test$;
 reset role;
 rollback;
