@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Flexexa Partner Offer API",
-    "version": "1.1.0",
-    "description": "Public advertising catalogue and customer handoff. Current catalogue: flexexa-partner-offers-2026-11-13-v2. No customer data, SSO, purchase, automatic discount or trusted commission attribution. Re-check current availability and price in Flexexa before customer acceptance. New v5 offer metadata includes two-month renewal binding, calendar timezone and the immutable terms URL; existing accepted customer contracts are unchanged."
+    "version": "1.1.1",
+    "description": "Public advertising catalogue and customer handoff. The version in each response identifies the approved Commerce offer release. No customer data, SSO, purchase, automatic discount or trusted commission attribution. Re-check current availability and price in Flexexa before customer acceptance. The referenced Commerce terms and existing accepted contracts retain their original versions."
   },
   "servers": [
     {
@@ -67,6 +67,33 @@
                     "error": {
                       "type": "string",
                       "const": "PARTNER_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The approved offer release could not be verified. Offer data is temporarily unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "OFFER_CATALOG_UNAVAILABLE"
                     }
                   }
                 }

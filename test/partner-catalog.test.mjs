@@ -41,3 +41,61 @@ test('published OpenAPI parses and describes the current catalogue and immutable
   assert.equal(new URL(offer.terms_url).pathname,'/terms/'+offer.terms_version+'.pdf');
  }
 });
+
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {partnerLinks} from '../src/domains/partner-offers/catalog.ts';
+import {approvedPublication,readPublicOffers,validatePublicOfferRelease} from '../src/domains/partner-offers/publication.ts';
+import release from '../src/domains/partner-offers/releases/flexexa-partner-offers-2026-11-13-v2.json' with {type:'json'};
+
+test('public offers require an approved, current Commerce release and retain approved purchase closure',()=>{
+ const before=new Date('2026-11-12T22:59:59Z'),effective=new Date('2026-11-12T23:00:00Z');
+ assert.equal(readPublicOffers(before),null);
+ assert.equal(partnerCatalog('gridex',before),null);
+ assert.equal(readPublicOffers(effective).initialMinimumMinor,332000);
+ assert.equal(readPublicOffers(effective).gridexAmountMinor,157000);
+ assert.equal(readPublicOffers(effective).purchaseAvailable,false);
+ assert.equal(validatePublicOfferRelease({...release,standardAmountMinor:166001},approvedPublication,effective),null);
+ const matchingPointer=value=>({version:value.version,sha256:createHash('sha256').update(JSON.stringify(value)).digest('hex')});
+ for(const changes of [
+  {standardAmountMinor:-1},{gridexDiscountMinor:166000},{gridexDiscountMinor:0},{vatIncluded:false},{currency:'EUR'},
+  {purchaseAvailable:true},{termsVersion:'../../other'},{effectiveFrom:'2026-02-31'},{availabilityReason:''},
+  {gridexDiscountCondition:'always'},{initialBindingMonths:0},{commerceRevision:'latest'},{interval:'year'},
+ ]){
+  const value={...release,...changes};
+  assert.equal(validatePublicOfferRelease(value,matchingPointer(value),effective),null,JSON.stringify(changes));
+ }
+ assert.equal(validatePublicOfferRelease(release,{...approvedPublication,version:'different-release'},effective),null);
+ assert.equal(validatePublicOfferRelease(release,approvedPublication,new Date(NaN)),null);
+});
+
+test('validated partner links retain their origin, path and only the known query value',()=>{
+ assert.deepEqual(partnerLinks('gridex'),{
+  landing:'https://flexexa.com/partner/gridex',
+  energyWizard:'https://flexexa.com/energy-wizard?partner=gridex',
+  orders:'https://ladda.flexexa.com/bestallningar?partner=gridex',
+  standalone:'https://ladda.flexexa.com/elbilsabonnemang/flexexa/orderoversikt?partner=gridex',
+  gridex:'https://ladda.flexexa.com/elbilsabonnemang/flexexa-gridex?partner=gridex',
+ });
+ for(const invalid of ['gridex%26source=other','gridex#stripe','GRIDEX','https://evil.test','gridex/../other']){
+  assert.equal(partnerLinks(invalid),null);
+ }
+});
+
+test('approved publication agrees with pinned Commerce terms and policy', {skip:!process.env.COMMERCE_OFFER_SOURCE_DIR},()=>{
+ const source=process.env.COMMERCE_OFFER_SOURCE_DIR;
+ const read=path=>execFileSync('git',['-C',source,'show',release.commerceRevision+':'+path],{encoding:'utf8'});
+ const terms=read('docs/web/private-terms-2026-11-13-v5-sv.md');
+ const policy=JSON.parse(read('docs/web/private-contract-policy-v5.json'));
+ assert.equal(release.termsVersion,policy.version);
+ assert.equal(release.initialBindingMonths,policy.initial_binding_months);
+ assert.equal(release.renewalBindingMonths,policy.renewal_months);
+ assert.equal(release.noticeMonths,policy.notice_months);
+ assert.equal(release.purchaseAvailable,policy.purchase_enabled);
+ assert.equal(release.calendarTimezone,policy.energy_surcharge.time_zone);
+ const prices=/Ordinarie månadspris är ([\d ]+) kr inklusive moms\. Rabatt .* är ([\d ]+) kr per månad, vilket ger ([\d ]+) kr inklusive moms\./.exec(terms);
+ assert.ok(prices);
+ const amounts=prices.slice(1).map(value=>Number(value.replaceAll(' ',''))*100);
+ assert.deepEqual(amounts,[release.standardAmountMinor,release.gridexDiscountMinor,release.standardAmountMinor-release.gridexDiscountMinor]);
+ assert.match(terms,/Rabatten gäller endast medan sådan elleverans är aktiv/);
+});

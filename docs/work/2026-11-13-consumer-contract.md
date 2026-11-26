@@ -50,3 +50,11 @@ Visuell kontroll här är Chromium mot det identiska lokala produktionsbygget;
 publik efterkontroll är TLS-verifierad HTTP/API/asset-kontroll, ingen påstådd
 ny inloggad kundsession. Ingen delningslänk, skyddsförsvagning eller kundskrivning
 behövdes för publiceringen.
+
+## Versionerad publicering av erbjudanden
+
+Webbens prisjämförelse och partner-API läser samma release i `src/domains/partner-offers/releases/`. V2 återger Commerce-villkoren v5 från `d509b1907b2771c6cc185dc9a1925440919dcee7`. Giltighetsdagen avser svensk tid. Ordinarie pris och Gridexrabatt lagras i ören. Det villkorade priset och minsta fasta kostnad för första bindningstiden beräknas från releasen.
+
+En ny godkänd prisversion läggs i en ny fil med en giltighetsdag och en referens till det granskade Commerce-underlaget. Välj den sedan uttryckligen i `publication.ts` med versionsnummer och SHA-256 för JSON-objektet. Tidigare releasefiler och villkorslänkar bevaras. Partner-API:t ger 503 utan cache om den valda releasen saknas som giltigt underlag. Bygg och verifiera en ny webbversion när den ska börja visas.
+
+Katalogen visar tillgänglighet för aktuell publicering. Commerce avgör om köp är tillåtna och sparar pris, villkor och policy på varje order. Kör `COMMERCE_OFFER_SOURCE_DIR=/sökväg/till/charging-subscription node --test test/partner-catalog.test.mjs` för att stämma av releasebelopp och avtalsfält mot den fastnålade Commerce-revisionen.

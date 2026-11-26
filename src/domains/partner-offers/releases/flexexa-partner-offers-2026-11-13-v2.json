@@ -1,0 +1,18 @@
+{
+  "version": "flexexa-partner-offers-2026-11-13-v2",
+  "effectiveFrom": "2026-11-13",
+  "commerceRevision": "d509b1907b2771c6cc185dc9a1925440919dcee7",
+  "termsVersion": "privat-2026-11-13-v5",
+  "standardAmountMinor": 166000,
+  "gridexDiscountMinor": 9000,
+  "gridexDiscountCondition": "confirmed_active_qualifying_supply",
+  "currency": "SEK",
+  "vatIncluded": true,
+  "interval": "month",
+  "initialBindingMonths": 2,
+  "renewalBindingMonths": 2,
+  "noticeMonths": 1,
+  "calendarTimezone": "Europe/Stockholm",
+  "purchaseAvailable": false,
+  "availabilityReason": "Nya köp är inte öppna ännu."
+}
