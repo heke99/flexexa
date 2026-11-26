@@ -4,14 +4,24 @@ import {rpc,networkHash,sendPendingEmails,validOrigin,reportApplicationFailure,A
 import {validateApplication} from "@/domains/applications/validation";
 export const maxDuration=120;
 export const revalidate=0;
-const publicStats = () => unstable_cache(async () => {
+async function fetchPublicStats() {
  const {count,remaining}=await rpc("stats");
  if(typeof count!=="number"||!Number.isSafeInteger(count)||count<0||
     typeof remaining!=="number"||!Number.isSafeInteger(remaining)||remaining<0) {
   throw new ApplicationError("INVALID_STATS_RESPONSE",502);
  }
  return {count,remaining};
-},["flexexa-application-totals",settings().url],{revalidate:15})();
+}
+
+let pendingStats: ReturnType<typeof fetchPublicStats> | undefined;
+function refreshPublicStats() {
+ pendingStats ??= fetchPublicStats().finally(() => { pendingStats = undefined; });
+ return pendingStats;
+}
+
+const publicStats = () => unstable_cache(
+ refreshPublicStats, ["flexexa-application-totals", settings().url], { revalidate: 15 },
+)();
 
 export async function GET() {
  try {
