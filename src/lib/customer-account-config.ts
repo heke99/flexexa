@@ -1,15 +1,6 @@
 import "server-only";
 
-function httpsOrigin(value: string | undefined) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password &&
-      (value === url.origin || value === `${url.origin}/`) ? url.origin : null;
-  } catch {
-    return null;
-  }
-}
+import { httpsOrigin } from "./https-origin";
 
 export function customerAccountConfig() {
   if (process.env.FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW !== "true") return null;
