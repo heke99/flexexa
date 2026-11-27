@@ -19,6 +19,8 @@ const invalidCode = "Koden kunde inte bekräftas. Försök igen.";
 const emailCodeNotice = "Om adressen har ett konto och en kod kan skickas får du ett mejl.";
 const emailCodeCooldownMs = 60_000;
 type CustomerLogin = { client: SupabaseClient; session: Session };
+type ProductRequest = { request: AbortController; revalidate: boolean };
+type ProductConfirmation = { account: CustomerAccount; selection: ProductSelection; mutation: ProductRequest };
 function accountRequest(login: CustomerLogin, signal: AbortSignal) {
   return { headers: { Authorization: `Bearer ${login.session.access_token}` },
     credentials: "omit", cache: "no-store", redirect: "error", signal } as const;
@@ -76,6 +78,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
   const pending = useRef<{ login: CustomerLogin; factors: VerificationFactor[] } | null>(null);
   const operation = useRef<AbortController | null>(null);
   const personalAccountCreation = useRef<AbortController | null>(null);
+  const productRequest = useRef<ProductRequest | null>(null);
   const expiration = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const accountHeading = useRef<HTMLHeadingElement | null>(null);
   const personalName = useRef<HTMLInputElement | null>(null);
@@ -101,6 +104,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
     operation.current?.abort();
     operation.current = null;
     personalAccountCreation.current = null;
+    productRequest.current = null;
     clearTimeout(expiration.current);
     active.current = null;
     pending.current = null;
@@ -143,13 +147,14 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
     void clear(accountError("MFA_REQUIRED"));
   }, [clear]);
 
-  const load = useCallback(async (notice = "", createdAccount?: string) => {
+  const load = useCallback(async (notice = "", createdAccount?: string, productConfirmation?: ProductConfirmation) => {
     const login = active.current;
     if (!login) return;
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
-    if (notice) accountHeading.current?.focus();
+    if (productConfirmation) productConfirmation.mutation.request = request;
+    if (notice || (productConfirmation && document.activeElement?.id === "account-products-title")) accountHeading.current?.focus();
     setAccounts(null);
     setProducts(null);
     setOrders(null);
@@ -175,10 +180,17 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
       } else {
         setSignedIn(true);
         if (response.ok) {
-          setAccounts(result.items);
-          const available = !createdAccount || result.items.some((account: CustomerAccount) => account.id === createdAccount &&
+          const items: CustomerAccount[] = result.items;
+          setAccounts(items);
+          const available = !createdAccount || items.some(account => account.id === createdAccount &&
             account.kind === "personal" && account.role === "owner");
           setMessage(available ? notice : "Privatkontot kunde inte bekräftas i kontolistan.");
+          if (productConfirmation) {
+            const { account, selection } = productConfirmation;
+            const current = items.find(item => item.id === account.id && item.kind === account.kind && item.role === account.role);
+            if (current) setProducts({ ...selection, accountName: current.name });
+            else setMessage("Din åtkomst till kontot har ändrats. Kontolistan har hämtats på nytt.");
+          }
         } else setMessage(accountError(result.error));
       }
     } catch {
@@ -196,7 +208,13 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
 
   useEffect(() => {
     const revalidate = () => {
-      if (document.visibilityState === "visible" && !personalAccountCreation.current) void load();
+      if (document.visibilityState !== "visible" || personalAccountCreation.current) return;
+      const pendingProduct = productRequest.current;
+      if (pendingProduct && operation.current === pendingProduct.request) {
+        pendingProduct.revalidate = true;
+        return;
+      }
+      void load();
     };
     const leave = () => { void clear(); };
     window.addEventListener("pagehide", leave);
@@ -206,6 +224,7 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
       operation.current?.abort();
       operation.current = null;
       personalAccountCreation.current = null;
+      productRequest.current = null;
       clearTimeout(expiration.current);
       active.current = null;
       pending.current = null;
@@ -271,7 +290,10 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
     operation.current?.abort();
     const request = new AbortController();
     operation.current = request;
+    const mutation: ProductRequest | null = productKey ? { request, revalidate: false } : null;
+    if (mutation) productRequest.current = mutation;
     const selection = { accountId: account.id, accountName: account.name };
+    let outcome: ProductSelection | null = null;
     setMessage("");
     setOrders(null);
     setVehicles(null);
@@ -290,16 +312,24 @@ export function CustomerAccounts({ authUrl, publishableKey, emailOtpEnabled, sta
       } else if (response.status === 403) {
         void load(accessDenied);
       } else if (response.ok) {
-        setProducts({ ...selection, status: "ready", access: result });
+        outcome = { ...selection, status: "ready", access: result };
       } else {
-        setProducts({ ...selection, status: "error", message: response.status === 429 ? accountError(result.error) :
-          productKey ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable });
+        outcome = { ...selection, status: "error", message: response.status === 429 ? accountError(result.error) :
+          productKey ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable };
       }
     } catch {
-      if (operation.current === request) setProducts({ ...selection, status: "error", message: productKey
-        ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable });
+      outcome = { ...selection, status: "error", message: productKey
+        ? "Begäran kunde inte bekräftas. Läs om produkterna för att se om den registrerades." : productsUnavailable };
     } finally {
-      if (operation.current === request) operation.current = null;
+      if (operation.current === request) {
+        if (mutation?.revalidate && outcome) {
+          await load("", undefined, { account, selection: outcome, mutation });
+        } else {
+          operation.current = null;
+          if (outcome) setProducts(outcome);
+        }
+      }
+      if (productRequest.current === mutation) productRequest.current = null;
     }
   }
 

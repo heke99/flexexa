@@ -105,6 +105,7 @@ const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let heldOrderReply;
+let heldProductWrite;
 let heldSessionReply;
 const accountsWithoutSessions = new Set();
 let loseAccountCreationReply = false;
@@ -287,6 +288,7 @@ try {
         if (!requests.some(({ product_key }) => product_key === input.productKey)) {
           requests.push({ product_key: input.productKey, requested_at: '2026-11-22T10:00:00Z' });
         }
+        if (heldProductWrite) await heldProductWrite;
         return reply(202, { requested: true, productKey: input.productKey });
       }
       if (productAccount && req.method === 'GET' && !url.search) {
@@ -392,6 +394,9 @@ try {
   const browserCommand = (path, body) => webdriver(session + path, body);
   const execute = (script, ...args) => browserCommand('/execute/sync', { script, args });
   const text = () => execute('return document.body.innerText;');
+  const foregroundAccountPage = async () => {
+    assert.equal(await execute("document.dispatchEvent(new Event('visibilitychange')); return document.visibilityState;"), 'visible');
+  };
   const viewport = (width, height, mobile) => browserCommand('/goog/cdp/execute', {
     cmd: 'Emulation.setDeviceMetricsOverride', params: { width, height, deviceScaleFactor: 1, mobile },
   });
@@ -771,14 +776,55 @@ try {
   productAccess.get(company.id).requests.length = 0;
   await productsFor(company);
   await assertProductView(company, 'Ingen åtkomst', 'Aktiv');
-  await clickButton('Begär åtkomst till Laddabonnemang', true);
+  const productWrite = Promise.withResolvers();
+  const productConfirmation = Promise.withResolvers();
+  heldProductWrite = productWrite.promise;
+  nextProductReply.set(company.id, productConfirmation.promise);
+  try {
+    await clickButton('Begär åtkomst till Laddabonnemang', true);
+    await pending(() => productAccess.get(company.id).requests.length === 1);
+    assert.match(await productView(), /Skickar begäran/);
+    await foregroundAccountPage();
+    assert.match(await productView(), /Skickar begäran/, 'Foreground must preserve the pending product request with a committed upstream write');
+    productWrite.resolve();
+    await pending(() => !nextProductReply.has(company.id));
+    await foregroundAccountPage();
+    assert.match(await productView(), /Skickar begäran/, 'Foreground must preserve the confirming product read');
+  } finally {
+    productWrite.resolve();
+    productConfirmation.resolve(false);
+    heldProductWrite = undefined;
+    nextProductReply.delete(company.id);
+  }
   await assertProductView(company, 'Begärd', 'Aktiv');
-  assert.equal(await execute('return document.activeElement.id;'), 'account-products-title');
+  assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Mina konton');
   assert.ok(!(await productView()).includes('Begär åtkomst till Laddabonnemang'));
   assert.deepEqual(businessCalls().slice(requestStart).map(({ method, path, actor }) => [method, path, actor]), [
     ['GET', productPath(company), 'first'], ['POST', productPath(company), 'first'], ['GET', productPath(company), 'first'],
+    ['GET', '/v1/accounts', 'first'],
   ]);
-  verified.push('owner submits a product request and sees the backend-confirmed pending state');
+
+  productAccess.get(company.id).requests.length = 0;
+  await productsFor(company);
+  await assertProductView(company, 'Ingen åtkomst', 'Aktiv');
+  const originalMemberships = accounts.first;
+  const writeBeforeRoleChange = Promise.withResolvers();
+  heldProductWrite = writeBeforeRoleChange.promise;
+  try {
+    await clickButton('Begär åtkomst till Laddabonnemang', true);
+    await pending(() => productAccess.get(company.id).requests.length === 1);
+    accounts.first = [personal, { ...company, role: 'driver' }];
+    await foregroundAccountPage();
+    writeBeforeRoleChange.resolve();
+    await pending(async () => (await text()).includes(`${company.name} · Företag · Förare`));
+    assert.equal(await productView(), '');
+    assert.match(await text(), /Din åtkomst till kontot har ändrats/);
+  } finally {
+    accounts.first = originalMemberships;
+    writeBeforeRoleChange.resolve();
+    heldProductWrite = undefined;
+  }
+  verified.push('foreground retains product request confirmation and enforces refreshed account role');
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !/Konto Grön/.test(await text()));
   await pending(() => calls.filter(({ path, actor, signInMethod, scope }) =>
@@ -876,9 +922,6 @@ try {
   const accountCreationWrites = () => businessCalls().filter(({ method, path }) => method === 'POST' && path === '/v1/accounts').length;
   const createdAccountReads = () => businessCalls().filter(({ method, path, actor }) =>
     method === 'GET' && path === '/v1/accounts' && actor === 'second').length;
-  const foregroundAccountPage = async () => {
-    assert.equal(await execute("document.dispatchEvent(new Event('visibilitychange')); return document.visibilityState;"), 'visible');
-  };
   const writesBeforeRetry = accountCreationWrites();
   const readsBeforeRetry = createdAccountReads();
   const creation = Promise.withResolvers();
