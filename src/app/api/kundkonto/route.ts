@@ -1,7 +1,9 @@
-import { readCustomerAccountApi } from "@/lib/customer-account-api";
+import { createCustomerPersonalAccount, readCustomerAccountApi } from "@/lib/customer-account-api";
 import { accountRoleLabels, isCustomerResourceId, type CustomerAccount } from "@/lib/customer-accounts";
 
 export const dynamic = "force-dynamic";
+
+export const POST = createCustomerPersonalAccount;
 
 export function GET(request: Request) {
   return readCustomerAccountApi(request, "/v1/accounts", payload => {

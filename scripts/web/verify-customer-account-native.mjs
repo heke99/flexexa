@@ -103,8 +103,8 @@ try {
     assert.equal(response.status, 200);
     return (await response.json()).access_token;
   };
-  const [recipient, outsider, billing, owner] = await Promise.all([
-    scenario.recipient, scenario.outsider, scenario.billing, scenario.owner,
+  const [recipient, outsider, billing, owner, fresh] = await Promise.all([
+    scenario.recipient, scenario.outsider, scenario.billing, scenario.owner, scenario.fresh,
   ].map(tokenFor));
   const productPath = `/v1/accounts/${scenario.company}/product-access`;
   const requested = await fetchLocal(`${stackApi}${productPath}`, {
@@ -117,22 +117,27 @@ try {
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', `/CN=${loopback}`, '-addext', `subjectAltName=IP:${loopback}`, '-keyout', privateKey, '-out', certificate]);
   const orderPaths = new Set([scenario.company, scenario.customer].map(id => `/v1/accounts/${id}/orders?limit=10`));
-  let upstreamReads = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, unexpectedRequests = 0, redirectUpstream = false;
+  let upstreamReads = 0, accountWrites = 0, productReads = 0, productWrites = 0, orderReads = 0, vehicleReads = 0, sessionReads = 0, unexpectedRequests = 0, redirectUpstream = false;
   tls = createHttpsServer({ key: await readFile(privateKey), cert: await readFile(certificate) }, async (request, response) => {
     const accountList = request.url === '/v1/accounts';
     const productAccess = request.url === productPath;
     const orderList = orderPaths.has(request.url);
     const vehicleList = /^\/v1\/accounts\/([0-9a-f-]{36})\/vehicles\?limit=25(?:&after=[A-Za-z0-9_-]{1,512})?$/.exec(request.url);
     const knownVehicleAccount = vehicleList && [scenario.customer, scenario.other, scenario.company].includes(vehicleList[1]);
-    const write = productAccess && request.method === 'POST';
-    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList && !knownVehicleAccount))) || request.headers.cookie || request.headers.origin) {
+    const sessionPath = /^\/v1\/accounts\/([0-9a-f-]{36})\/sessions(?:\?limit=10|\/[0-9a-f-]{36})$/.exec(request.url);
+    const knownSessionAccount = sessionPath && [scenario.customer, scenario.other, scenario.company].includes(sessionPath[1]);
+    const accountWrite = accountList && request.method === 'POST';
+    const write = accountWrite || (productAccess && request.method === 'POST');
+    if ((!write && (request.method !== 'GET' || (!accountList && !productAccess && !orderList && !knownVehicleAccount && !knownSessionAccount))) || request.headers.cookie || request.headers.origin) {
       unexpectedRequests += 1;
       response.writeHead(400).end();
       return;
     }
-    if (accountList) upstreamReads += 1;
+    if (accountWrite) accountWrites += 1;
+    else if (accountList) upstreamReads += 1;
     else if (orderList) orderReads += 1;
     else if (knownVehicleAccount) vehicleReads += 1;
+    else if (knownSessionAccount) sessionReads += 1;
     else if (write) productWrites += 1;
     else productReads += 1;
     if (redirectUpstream) {
@@ -143,7 +148,8 @@ try {
       const chunks = [];
       if (write) for await (const chunk of request) chunks.push(chunk);
       const body = write ? Buffer.concat(chunks).toString() : undefined;
-      if (write) assert.equal(body, '{"productKey":"energy_optimization"}');
+      if (accountWrite) assert.deepEqual(JSON.parse(body), { name: 'Mitt nya privatkonto' });
+      else if (write) assert.equal(body, '{"productKey":"energy_optimization"}');
       const result = await fetchLocal(`${stackApi}${request.url}`, {
         method: request.method,
         headers: { Authorization: request.headers.authorization ?? '', ...(write ? { 'Content-Type': 'application/json' } : {}) },
@@ -170,7 +176,8 @@ try {
     const response = await fetchLocal(`${nextOrigin}/api/kundkonto${path}`, {
       method: options.method,
       headers: { Cookie: 'flexexa_admin=fixture-must-stay-local', ...(authorization ? { Authorization: authorization } : {}),
-        ...(options.origin ? { Origin: options.origin } : {}) },
+        ...(options.origin ? { Origin: options.origin } : {}), ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: options.body ? JSON.stringify(options.body) : undefined,
     });
     assert.equal(response.status, status);
     assert.match(response.headers.get('cache-control') ?? '', /\bno-store\b/);
@@ -270,6 +277,8 @@ try {
   assert.equal(orderReads, 5);
 
   const vehicleFixture = new Client({ connectionString: databaseUrl });
+  const visibleSession = randomUUID(), hiddenSession = randomUUID();
+  const sessionDate = '2026-11-22T10:01:00.000Z', sessionUpdate = '2026-11-22T10:05:00.000Z';
   await vehicleFixture.connect();
   try {
     await vehicleFixture.query(`INSERT INTO charging_subscription.vehicles(id,account_id,country,plate)
@@ -282,6 +291,11 @@ try {
     );
     await vehicleFixture.query(`INSERT INTO charging_subscription.memberships(account_id,principal_id,role) VALUES($1,$2,'driver')`, [scenario.customer, principal]);
     await vehicleFixture.query(`INSERT INTO charging_subscription.driver_grants(account_id,principal_id,subscription_id) VALUES($1,$2,$3)`, [scenario.customer, principal, subscription]);
+    await vehicleFixture.query(`INSERT INTO charging_subscription.sessions
+      (id,account_id,subscription_id,vehicle_id,evse_id,provider,provider_session_id,status,created_at,updated_at,requested_principal_id)
+      VALUES($1,$3,$4,$6,'fixture-evse-a','isolated-fixture','internal-session-a','completed',$7,$8,$9),
+        ($2,$3,$5,$6,'fixture-evse-b','isolated-fixture','internal-session-b','failed',$8,$8,$9)`,
+    [visibleSession, hiddenSession, scenario.customer, subscription, consumer.sub, scenario.car, sessionDate, sessionUpdate, principal]);
   } finally {
     await vehicleFixture.end();
   }
@@ -317,8 +331,38 @@ try {
   }
   assert.deepEqual(await vehicles(scenario.customer, recipient, 200), { items: firstPage.items, nextCursor: null });
   assert.equal(vehicleReads, 6);
+  const sessions = (accountId, token, status, path = '') => requestAccount(`/${accountId}/laddningar${path}`, token && `Bearer ${token}`, status);
+  assert.deepEqual(await sessions(scenario.customer, null, 401), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await sessions(scenario.customer, recipient, 400, '?limit=25'), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await sessions(scenario.customer, recipient, 400, '/bad-id'), { error: 'INVALID_INPUT' });
+  assert.equal(sessionReads, 0);
+  const visible = { id: visibleSession, status: 'completed', createdAt: sessionDate, updatedAt: sessionUpdate };
+  const hidden = { id: hiddenSession, status: 'failed', createdAt: sessionUpdate, updatedAt: sessionUpdate };
+  assert.deepEqual(await sessions(scenario.customer, recipient, 200), { items: [hidden, visible] });
+  assert.deepEqual(await sessions(scenario.customer, recipient, 200, `/${hiddenSession}`), hidden);
+  assert.deepEqual(await sessions(scenario.customer, outsider, 200), { items: [visible] });
+  assert.deepEqual(await sessions(scenario.customer, outsider, 200, `/${visibleSession}`), visible);
+  assert.deepEqual(await sessions(scenario.customer, outsider, 404, `/${hiddenSession}`), { error: 'NOT_FOUND' });
+  assert.deepEqual(await sessions(scenario.other, outsider, 404, `/${visibleSession}`), { error: 'NOT_FOUND' });
+  assert.deepEqual(await sessions(scenario.customer, billing, 403), { error: 'ACCESS_DENIED' });
+  assert.equal(sessionReads, 7);
+  assert.deepEqual(await account(fresh, 200), { items: [] });
+  const create = (token, status, origin, body = { name: '  Mitt nya privatkonto  ' }) => requestAccount(
+    '', token && `Bearer ${token}`, status, { method: 'POST', origin, body },
+  );
+  assert.deepEqual(await create(null, 401, nextOrigin), { error: 'UNAUTHENTICATED' });
+  assert.deepEqual(await create(fresh, 403, 'https://outside.invalid'), { error: 'ACCESS_DENIED' });
+  assert.deepEqual(await create(fresh, 400, nextOrigin, { name: 'Förfalskad', role: 'owner' }), { error: 'INVALID_INPUT' });
+  assert.deepEqual(await create(fresh, 413, nextOrigin, { name: ' '.repeat(2048) }), { error: 'BODY_TOO_LARGE' });
+  assert.equal(accountWrites, 0);
+  const [created, replayedAccount] = await Promise.all([create(fresh, 201, nextOrigin), create(fresh, 201, nextOrigin)]);
+  assert.match(created.id, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(created, { id: created.id, kind: 'personal', name: 'Mitt nya privatkonto' });
+  assert.deepEqual(replayedAccount, created);
+  assert.deepEqual(await account(fresh, 200), { items: [{ ...created, role: 'owner' }] });
+  assert.equal(accountWrites, 2);
   assert.equal(unexpectedRequests, 0);
-  console.log('Verified Next account, product, order and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
+  console.log('Verified Next account creation, product, order, session and paged vehicle flows through PostgreSQL with tenant, billing and driver isolation.');
 } finally {
   await stop(next);
   if (tls?.listening) {

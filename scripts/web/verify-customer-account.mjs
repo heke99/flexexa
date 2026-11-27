@@ -12,6 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const host = '127.0.0.1';
 const portal = 'https://ladda.flexexa.com/';
 const overview = '/app/konto/oversikt';
+const loginHelp = '/app/konto/hjalp';
 const publishableKey = 'sb_publishable_local_browser_fixture';
 const password = 'fixture-only-customer-password';
 const incorrectCode = '135790';
@@ -28,6 +29,7 @@ const verifyPath = `/auth/v1/factors/${verifiedFactor.id}/verify`;
 const personal = { id: '11111111-1111-4111-8111-111111111111', kind: 'personal', name: 'Konto Grön', role: 'owner' };
 const company = { id: '33333333-3333-4333-8333-333333333333', kind: 'business', name: 'Konto Guld', role: 'owner' };
 const otherCompany = { id: '22222222-2222-4222-8222-222222222222', kind: 'business', name: 'Konto Blå', role: 'billing' };
+const createdPersonalId = '99999999-9999-4999-8999-111111111111';
 const accounts = {
   first: [personal, company],
   second: [otherCompany],
@@ -36,6 +38,8 @@ const userIds = { first: randomUUID(), second: randomUUID() };
 const productPath = ({ id }) => `/v1/accounts/${id}/product-access`;
 const privateOrder = '77777777-7777-4777-8777-777777777777';
 const companyOrder = '88888888-8888-4888-8888-888888888888';
+const personalSession = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+const companySession = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
 const vehicleCursor = 'eyJ4IjoxfQ';
 const grant = (product_key, enabled, status = 'active') => ({ product_key, status, version: 4, enabled, expires_at: null });
 const productAccess = new Map([
@@ -101,6 +105,12 @@ const nextProductReply = new Map();
 const signingKey = randomBytes(32);
 let fixture;
 let heldOrderReply;
+let heldSessionReply;
+const accountsWithoutSessions = new Set();
+let loseAccountCreationReply = false;
+let heldAccountCreationReply;
+let heldCreatedAccountList;
+let privateOrderState = 'pending';
 let startURL;
 let upstream;
 let secondHasTotp = false;
@@ -217,16 +227,44 @@ try {
         return reply(403, { error: 'MFA_REQUIRED' });
       }
       if (url.pathname === '/v1/accounts' && req.method === 'GET' && !url.search) {
+        if (actor === 'second' && heldCreatedAccountList) await heldCreatedAccountList;
         return reply(200, { items: accounts[actor] });
+      }
+      if (url.pathname === '/v1/accounts' && req.method === 'POST' && !url.search) {
+        const { name, ...extra } = await requestBody(req);
+        if (actor !== 'second' || name !== 'Mitt nya privatkonto' || Object.keys(extra).length || req.headers.origin || req.headers.cookie) {
+          return reply(400, { error: 'INVALID_INPUT' });
+        }
+        const existing = accounts.second.find(item => item.kind === 'personal');
+        const created = existing ?? { id: createdPersonalId, name, kind: 'personal', role: 'owner' };
+        if (!existing) accounts.second = [created, ...accounts.second];
+        if (loseAccountCreationReply) { loseAccountCreationReply = false; return reply(503, { error: 'UNAVAILABLE' }); }
+        if (heldAccountCreationReply) await heldAccountCreationReply;
+        return reply(201, { id: created.id, kind: created.kind, name: created.name });
       }
       const orderAccount = /^\/v1\/accounts\/([^/]+)\/orders$/.exec(url.pathname)?.[1];
       if (orderAccount && req.method === 'GET' && url.search === '?limit=10') {
         if (!accounts[actor].some(({ id, role }) => id === orderAccount && role !== 'driver')) return reply(403, { error: 'FORBIDDEN' });
         if (orderAccount === personal.id && heldOrderReply) await heldOrderReply;
         const order = orderAccount === personal.id
-          ? { id: privateOrder, state: 'pending', checkout_url: 'https://checkout.invalid/private-only' }
+          ? { id: privateOrder, state: privateOrderState, checkout_url: 'https://checkout.invalid/private-only' }
           : { id: companyOrder, state: 'paid', quantity: 1, agreement: { amount_minor: 12345, currency: 'sek', email: 'fixture-only@example.test' } };
         return reply(200, { items: [{ ...order, created_at: '2026-11-21T10:00:00Z' }], nextCursor: null });
+      }
+      const sessionPath = /^\/v1\/accounts\/([^/]+)\/sessions(?:\/([^/]+))?$/.exec(url.pathname);
+      if (sessionPath && req.method === 'GET') {
+        const [, accountId, sessionId] = sessionPath;
+        if (!accounts[actor].some(({ id }) => id === accountId)) return reply(403, { error: 'FORBIDDEN' });
+        const id = accountId === personal.id ? personalSession : companySession;
+        const session = { id, status: accountId === personal.id ? 'uncertain' : 'completed',
+          created_at: '2026-11-21T10:00:00Z', updated_at: '2026-11-21T11:00:00Z',
+          provider_session_id: 'never-show-fixture-provider-session' };
+        if (!sessionId && url.search === '?limit=10') {
+          return reply(200, { items: accountsWithoutSessions.has(accountId) ? [] : [session], nextCursor: null });
+        }
+        if (sessionId !== id || url.search) return reply(404, { error: 'NOT_FOUND' });
+        if (id === personalSession && heldSessionReply) await heldSessionReply;
+        return reply(200, session);
       }
       const vehicleAccount = /^\/v1\/accounts\/([^/]+)\/vehicles$/.exec(url.pathname)?.[1];
       if (vehicleAccount && req.method === 'GET' && url.searchParams.get('limit') === '25') {
@@ -271,12 +309,17 @@ try {
   upstream = `https://${host}:${fixture.address().port}`;
   const [enabledPort, disabledPort, passwordOnlyPort, driverPort] = await Promise.all(Array.from({ length: 4 }, portAvailable));
   const nextBin = resolve('node_modules/next/dist/bin/next');
+  const nextEnv = (enabled, emailOtp = false) => ({
+    ...process.env, NODE_ENV: 'production', NODE_EXTRA_CA_CERTS: certificatePath,
+    FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW: String(enabled), FLEXEXA_CUSTOMER_AUTH_URL: upstream,
+    FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW: String(emailOtp),
+    FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY: publishableKey, FLEXEXA_CUSTOMER_API_URL: upstream,
+  });
+  // Next compiles the Auth origin into the production response headers at build time.
+  execFileSync(process.execPath, [nextBin, 'build'], { env: nextEnv(true, true), stdio: 'inherit' });
   const launchNext = (port, enabled, emailOtp = false) => {
     const nextAlive = launch(process.execPath, [nextBin, 'start', '--hostname', host, '--port', String(port)], {
-      env: { ...process.env, NODE_ENV: 'production', NODE_EXTRA_CA_CERTS: certificatePath,
-        FLEXEXA_CUSTOMER_ACCOUNT_PREVIEW: String(enabled), FLEXEXA_CUSTOMER_AUTH_URL: upstream,
-        FLEXEXA_CUSTOMER_EMAIL_OTP_PREVIEW: String(emailOtp),
-        FLEXEXA_CUSTOMER_AUTH_PUBLISHABLE_KEY: publishableKey, FLEXEXA_CUSTOMER_API_URL: upstream },
+      env: nextEnv(enabled, emailOtp),
     });
     const base = `http://${host}:${port}`;
     return pending(async () => {
@@ -290,6 +333,10 @@ try {
   };
   startURL = await launchNext(enabledPort, true, true);
   const enabledNext = childProcesses.at(-1);
+  const previewHeaders = await request(startURL + overview);
+  assert.equal(previewHeaders.headers.get('content-security-policy')?.split('; ').find(part => part.startsWith('connect-src ')),
+    `connect-src 'self' ${upstream}`);
+  await previewHeaders.body?.cancel();
   const disabled = await launchNext(disabledPort, false);
   const passwordOnly = await launchNext(passwordOnlyPort, true);
   const passwordOnlyPage = await request(passwordOnly + overview);
@@ -297,6 +344,15 @@ try {
   const passwordOnlyHtml = await passwordOnlyPage.text();
   assert.match(passwordOnlyHtml, /Lösenord/);
   assert.doesNotMatch(passwordOnlyHtml, /Logga in med e-postkod/);
+  for (const base of [passwordOnly, disabled]) {
+    const help = await request(base + loginHelp + '?next=https%3A%2F%2Foutside.invalid');
+    assert.equal(help.status, 200);
+    const html = await help.text();
+    assert.match(html, /Kontaktuppgifter/);
+    assert.doesNotMatch(html, /Logga in med e-postkod|href="https:\/\/outside\.invalid/);
+  }
+  const unavailableEmailMode = await request(passwordOnly + overview + '?inloggning=epostkod');
+  assert.match(await unavailableEmailMode.text(), /Lösenord/);
   const hostileQuery = '?next=https%3A%2F%2Foutside.invalid&code=ignored-fixture';
   assertPortalRedirect(await request(disabled + '/app/konto' + hostileQuery), portal);
   assertPortalRedirect(await request(disabled + overview + hostileQuery), portal);
@@ -354,6 +410,11 @@ try {
     if (keyboard) await browserCommand(`/element/${element[elementKey]}/value`, { text: '\uE007' });
     else await browserCommand(`/element/${element[elementKey]}/click`, {});
   };
+  const clickHelpLink = async label => {
+    const element = await execute('return [...document.querySelectorAll("main a")].find(link => link.textContent.trim() === arguments[0]);', label);
+    assert.ok(element?.[elementKey], `Missing help link ${label}`);
+    await browserCommand(`/element/${element[elementKey]}/value`, { text: '\uE007' });
+  };
   const assertFallback = async () => {
     const fallback = await execute('return [...document.links].find(link => link.innerText.trim() === "Öppna kundportalen")?.href;');
     assert.equal(fallback, portal, 'The account overview must expose the fixed portal fallback');
@@ -366,7 +427,8 @@ try {
   };
   const assertNoStorage = async () => {
     const persisted = await execute('return JSON.stringify({local: {...localStorage}, session: {...sessionStorage}, cookies: document.cookie});');
-    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode,
+    for (const token of [...issued.keys(), 'fixture-refresh-', password, incorrectCode, validCode, validEmailCode, privateOrder, companyOrder,
+      personalSession, companySession,
       'first@example.test', 'second@example.test', ...Object.values(accounts).flatMap(entries => entries.flatMap(({ id, name }) => [id, name]))]) {
       assert.ok(!persisted.includes(token), 'Browser persistence contains credentials or an account record');
     }
@@ -405,9 +467,22 @@ try {
   await clickButton('Endast nödvändiga');
   await pending(async () => /Logga in/.test(await text()));
   await assertFallback();
+  await clickHelpLink('Hjälp med inloggning');
+  await pending(async () => await browserCommand('/url') === startURL + loginHelp);
+  assert.equal(await execute('return document.querySelector("main h1").textContent.trim();'), 'Hjälp med inloggning');
+  assert.deepEqual(await execute('return [...document.querySelectorAll("main a")].map(link => link.getAttribute("href"));'),
+    [`${overview}?inloggning=epostkod`, '/kontakt', overview]);
+  await clickHelpLink('Logga in med e-postkod');
+  await pending(async () => (await text()).includes('Skicka kod'));
+  assert.equal(await execute('return document.querySelector("#account-otp-email").value;'), '');
+  assert.equal(otpRequests, 0, 'Opening account help and choosing email code must not send a code');
+  await clickButton('Avbryt');
+  await pending(async () => (await text()).includes('Lösenord'));
+  verified.push('keyboard account help keeps the same environment, with OTP off and on and no automatic credential request');
   await login('first');
   await pending(async () => /Mina konton[\s\S]*Konto Grön/.test(await text()));
   assert.match(await text(), /Konto Grön · Privat · Ägare/);
+  assert.doesNotMatch(await text(), /Skapa privatkonto/);
   assert.doesNotMatch(await text(), /Konto Blå/);
   assert.equal(await execute('return document.querySelector("main h2")?.textContent?.trim();'), 'Mina konton');
   const delayedProduct = Promise.withResolvers();
@@ -437,11 +512,14 @@ try {
 
   await viewport(390, 844, true);
   await login('second');
-  await pending(async () => (await text()).includes('Fortsätt i kundportalen för att bekräfta din inloggning.'));
+  await pending(async () => (await text()).includes('Inloggningen behöver bekräftas. Se Hjälp med inloggning för dina alternativ.'));
   assert.doesNotMatch(await text(), /Konto Grön|Konto Blå/);
   await assertFallback();
   await assertNoStorage();
   assert.ok(!calls.some(({ path }) => path.startsWith('/auth/v1/factors/')), 'Unsupported MFA never creates a challenge');
+  await clickHelpLink('Hjälp med inloggning');
+  await pending(async () => await browserCommand('/url') === startURL + loginHelp);
+  assert.equal(await execute('return [...document.querySelectorAll("main a")].find(link => link.textContent.trim() === "Kontaktuppgifter")?.getAttribute("href");'), '/kontakt');
   secondHasTotp = true;
   await browserCommand('/url', { url: startURL + overview });
   await pending(async () => /Logga in/.test(await text()));
@@ -526,10 +604,97 @@ try {
   await pending(async () => (await text()).includes(companyOrder));
   assert.match(await text(), /Betald.*123,45/);
   assert.doesNotMatch(await text(), /FLE 123|checkout\.invalid|fixture-only@example\.test/);
+  const orderContinuation = () => execute(`const link = [...document.querySelectorAll('#account-orders a')]
+    .find(element => element.textContent.trim() === 'Öppna beställningen i kundportalen');
+    return link ? { href: link.href, referrerPolicy: link.referrerPolicy,
+      reference: document.getElementById(link.getAttribute('aria-describedby'))?.textContent } : null;`);
+  assert.equal(await orderContinuation(), null);
   await clickButton(`Visa beställningar för ${personal.name}`);
   await pending(async () => (await text()).includes(privateOrder));
   assert.match(await text(), /Väntar på betalning/);
   assert.doesNotMatch(await text(), new RegExp(`${companyOrder}|checkout\\.invalid`));
+  assert.deepEqual(await orderContinuation(), { href: `${portal}bestallningar?order=${privateOrder}`,
+    referrerPolicy: 'no-referrer', reference: `Referens ${privateOrder}` });
+  const delayedRefresh = Promise.withResolvers();
+  heldOrderReply = delayedRefresh.promise;
+  try {
+    privateOrderState = 'paid';
+    await clickButton('Uppdatera beställningar', true);
+    await pending(async () => (await text()).includes('Hämtar beställningar'));
+    assert.equal(await orderContinuation(), null);
+    assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Uppdatera beställningar');
+  } finally {
+    delayedRefresh.resolve();
+    heldOrderReply = null;
+  }
+  await pending(async () => /Betald[\s\S]*Referens 77777777/.test(await text()));
+  assert.equal(await orderContinuation(), null);
+  verified.push('private order continuation and keyboard refresh of backend-confirmed payment status');
+  const membershipsBeforeDenial = accounts.first;
+  const accountReadCount = () => businessCalls().filter(({ path, actor }) => path === '/v1/accounts' && actor === 'first').length;
+  try {
+    const beforeRoleChange = accountReadCount();
+    accounts.first = [personal, { ...company, role: 'driver' }];
+    await clickButton(`Visa beställningar för ${company.name}`);
+    await pending(async () => (await text()).includes(`${company.name} · Företag · Förare`));
+    assert.equal(accountReadCount(), beforeRoleChange + 1);
+    assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Mina konton');
+    assert.doesNotMatch(await text(), new RegExp(`Visa beställningar för ${company.name}|${privateOrder}|${companyOrder}`));
+    const beforeRemoval = accountReadCount();
+    accounts.first = [personal];
+    await clickButton(`Visa fordon för ${company.name}`);
+    await pending(async () => (await text()).includes('Kontolistan har hämtats på nytt.') && !(await text()).includes(company.name));
+    assert.equal(accountReadCount(), beforeRemoval + 1);
+    assert.doesNotMatch(await text(), /FLE 123|FLE 246/);
+  } finally {
+    accounts.first = membershipsBeforeDenial;
+  }
+  verified.push('denied account reads immediately revalidate role and membership');
+  await clickButton('Uppdatera');
+  await pending(async () => (await text()).includes(company.name));
+  await clickButton(`Visa laddningar för ${personal.name}`, true);
+  await pending(async () => (await text()).includes(personalSession));
+  assert.match(await text(), /Status behöver stämmas av/);
+  const delayedSession = Promise.withResolvers();
+  heldSessionReply = delayedSession.promise;
+  try {
+    await clickButton('Visa laddning', true);
+    await pending(() => businessCalls().some(({ path }) => path.endsWith(`/sessions/${personalSession}`)));
+    await clickButton(`Visa laddningar för ${company.name}`);
+    await pending(async () => (await text()).includes(companySession));
+  } finally {
+    delayedSession.resolve();
+    heldSessionReply = null;
+  }
+  await clickButton('Visa laddning', true);
+  await pending(async () => /Laddningsdetaljer[\s\S]*Senast uppdaterad/.test(await text()));
+  assert.equal(await execute('return document.activeElement.textContent.trim();'), 'Laddningsdetaljer');
+  assert.match(await text(), /Avslutad/);
+  assert.doesNotMatch(await text(), new RegExp(`${personalSession}|never-show-fixture-provider-session|Stoppa laddning`));
+  await clickButton('Tillbaka till senaste laddningar');
+  await pending(async () => /Senaste laddningar/.test(await text()) && (await text()).includes(companySession));
+  await assertNoStorage();
+  verified.push('account-scoped recent charging and details, keyboard access and stale cross-account replies discarded');
+
+  try {
+    accountsWithoutSessions.add(company.id);
+    await clickButton('Uppdatera laddningar', true);
+    await pending(async () => (await text()).includes('Det finns inga laddningar att visa på kontot.'));
+    assert.doesNotMatch(await text(), new RegExp(`${personalSession}|${companySession}`));
+    accountsWithoutSessions.delete(company.id);
+    await clickButton('Uppdatera laddningar', true);
+    await pending(async () => (await text()).includes(companySession));
+    const beforeSessionRoleRevoked = accountReadCount();
+    accounts.first = [personal];
+    await clickButton('Uppdatera laddningar', true);
+    await pending(async () => (await text()).includes('Kontolistan har hämtats på nytt.') && !(await text()).includes(company.name));
+    assert.equal(accountReadCount(), beforeSessionRoleRevoked + 1);
+    assert.doesNotMatch(await text(), new RegExp(`Senaste laddningar|Laddningsdetaljer|${personalSession}|${companySession}`));
+  } finally {
+    accountsWithoutSessions.delete(company.id);
+    accounts.first = membershipsBeforeDenial;
+  }
+  verified.push('mobile charging history empty state and immediate clearing after Commerce denies a removed membership');
   await clickButton('Logga ut');
   await pending(async () => /Logga in/.test(await text()) && !(await text()).includes(personal.name));
   await assertNoStorage();
@@ -699,6 +864,53 @@ try {
   assert.deepEqual(await cacheNames(), []);
   await assertNoStorage();
   verified.push('public offline fallback, no stored or queued account traffic, and a fresh identity after reconnect');
+
+  await pending(async () => (await text()).includes('Skapa privatkonto'));
+  const writesBeforeCreation = businessCalls().filter(({ method }) => method === 'POST').length;
+  loseAccountCreationReply = true;
+  await enter('Kontonamn', 'Mitt nya privatkonto');
+  await clickButton('Skapa privatkonto', true);
+  await pending(async () => (await text()).includes('Privatkontot kunde inte bekräftas.'));
+  assert.doesNotMatch(await text(), /Ditt privatkonto är klart\./);
+
+  const accountCreationWrites = () => businessCalls().filter(({ method, path }) => method === 'POST' && path === '/v1/accounts').length;
+  const createdAccountReads = () => businessCalls().filter(({ method, path, actor }) =>
+    method === 'GET' && path === '/v1/accounts' && actor === 'second').length;
+  const foregroundAccountPage = async () => {
+    assert.equal(await execute("document.dispatchEvent(new Event('visibilitychange')); return document.visibilityState;"), 'visible');
+  };
+  const writesBeforeRetry = accountCreationWrites();
+  const readsBeforeRetry = createdAccountReads();
+  const creation = Promise.withResolvers();
+  const confirmation = Promise.withResolvers();
+  heldAccountCreationReply = creation.promise;
+  heldCreatedAccountList = confirmation.promise;
+  try {
+    await clickButton('Skapa privatkonto', true);
+    await pending(() => accountCreationWrites() === writesBeforeRetry + 1);
+    await foregroundAccountPage();
+    assert.match(await text(), /Skapar privatkonto/);
+    creation.resolve();
+    await pending(() => createdAccountReads() === readsBeforeRetry + 1);
+    await foregroundAccountPage();
+  } finally {
+    creation.resolve();
+    confirmation.resolve();
+    heldAccountCreationReply = undefined;
+    heldCreatedAccountList = undefined;
+  }
+  await pending(async () => (await text()).includes('Ditt privatkonto är klart.'));
+  assert.equal(createdAccountReads(), readsBeforeRetry + 1, 'Foreground refresh must not replace the creation confirmation');
+  assert.match(await text(), /Mitt nya privatkonto · Privat · Ägare/);
+  assert.match(await text(), /Konto Blå · Företag · Ekonomi/);
+  assert.doesNotMatch(await text(), /Skapa privatkonto|Konto Grön|Konto Guld/);
+  assert.equal(businessCalls().filter(({ method }) => method === 'POST').length, writesBeforeCreation + 2);
+  assert.equal(accounts.second.filter(item => item.id === createdPersonalId).length, 1);
+  await foregroundAccountPage();
+  await pending(() => createdAccountReads() === readsBeforeRetry + 2);
+  await pending(async () => (await text()).includes('Mitt nya privatkonto · Privat · Ägare'));
+  await assertNoStorage();
+  verified.push('keyboard personal account setup, safe retry, and membership confirmation across foreground refresh');
   console.log(JSON.stringify({ gate: 'web-customer-account-browser', status: 'passed', browser: browser.capabilities.browserVersion, checks: verified }));
 } finally {
   if (session) {
