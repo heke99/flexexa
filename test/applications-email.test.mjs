@@ -34,7 +34,7 @@ test('permanent email failure does not stop a later job in the same batch',async
 
 test('retryable email failure stops the current batch rather than retrying in a loop',async t=>{
  const outcomes=setup(t,[429,200]);
- assert.equal(await sendPendingEmails(2),0);
+ await assert.rejects(sendPendingEmails(2), { code: 'EMAIL_HTTP_429', status: 429 });
  assert.deepEqual(outcomes,['retry']);
 });
 
@@ -63,7 +63,7 @@ test('an accepted email whose response was lost is reconciled with the same prov
   completions.push(data);
   return Response.json({ updated: 1 });
  });
- assert.equal(await sendPendingEmails(1), 0);
+ await assert.rejects(sendPendingEmails(1), { code: 'TRANSPORT_UNCERTAIN', status: 503 });
  assert.equal(await sendPendingEmails(1), 1);
  assert.equal(accepted.size, 1);
  assert.deepEqual(completions, [
@@ -85,7 +85,7 @@ test('empty provider receipts and stale or invalid database confirmations cannot
   completions.push(data);
   return Response.json(confirmation);
  });
- assert.equal(await sendPendingEmails(1), 0);
+ await assert.rejects(sendPendingEmails(1), { code: 'INVALID_EMAIL_RECEIPT', status: 502 });
  assert.deepEqual(completions[0], { id: 'job-1', claim_token: 'claim-1', outcome: 'retry', error: 'INVALID_EMAIL_RECEIPT' });
  receipt = { id: 'provider-1' };
  confirmation = { updated: 0 };

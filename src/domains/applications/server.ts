@@ -87,6 +87,7 @@ export async function sendPendingEmails(max = 5) {
   let outcome = "retry";
   let error = "TRANSPORT_UNCERTAIN";
   let providerId: string | undefined;
+  let retryFailure: ApplicationError | undefined;
   try {
    const key = process.env.RESEND_API_KEY;
    if (!key) throw new ApplicationError("EMAIL_NOT_CONFIGURED", 503);
@@ -102,7 +103,7 @@ export async function sendPendingEmails(max = 5) {
     signal: AbortSignal.timeout(12000),
    });
    if (response.ok) {
-    const result = await response.json();
+    const result = await response.json().catch(() => null);
     if (typeof result?.id !== "string" || !/^[\w-]{1,100}$/.test(result.id)) {
      throw new ApplicationError("INVALID_EMAIL_RECEIPT", 502);
     }
@@ -112,11 +113,16 @@ export async function sendPendingEmails(max = 5) {
    } else {
     outcome = response.status === 429 || response.status >= 500 ? "retry" : "permanent";
     error = `EMAIL_HTTP_${response.status}`;
+    if (outcome === "retry") {
+     retryFailure = response.status === 429
+      ? new ApplicationError(error, 429, limitedApplicationResponse(response).retryAfter)
+      : new ApplicationError(error, 503);
+    }
    }
   } catch (cause) {
    // A timeout is uncertain. Preserve the same idempotency key for a bounded retry.
-   const { failure } = reportApplicationFailure("send_email", cause instanceof ApplicationError ? cause : new ApplicationError("TRANSPORT_UNCERTAIN", 503));
-   error = failure.code;
+   retryFailure = cause instanceof ApplicationError ? cause : new ApplicationError("TRANSPORT_UNCERTAIN", 503);
+   error = retryFailure.code;
   }
 
   const completion = await rpc<{ updated: number } | null>("finish_email", {
@@ -130,7 +136,8 @@ export async function sendPendingEmails(max = 5) {
    throw new ApplicationError("INVALID_EMAIL_COMPLETION", 502);
   }
   if (completion.updated === 1 && outcome === "sent") sent++;
-  if (outcome === "retry") break;
+  // Only report the upstream retry after acknowledging its outcome to the queue.
+  if (retryFailure) throw retryFailure;
  }
  return sent;
 }
