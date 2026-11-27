@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -68,15 +68,43 @@ async function until(predicate, name) {
  assert.fail(name);
 }
 
-async function submit(status, body = applicant) {
+async function submitRaw(status, body, duplex) {
  const response = await fetch(base + "/api/applications", {
   method: "POST", headers: { Origin: "http://localhost:" + port, "Content-Type": "application/json" },
-  body: JSON.stringify(body), signal: AbortSignal.timeout(5_000),
+  body, duplex, signal: AbortSignal.timeout(5_000),
  });
  const result = await response.json();
  if (errors.length) throw errors[0];
  assert.equal(response.status, status);
  return { response, result };
+}
+
+function submit(status, body = applicant) {
+ return submitRaw(status, JSON.stringify(body));
+}
+
+function streamBody(body) {
+ return new Blob([body]).stream();
+}
+
+async function expectEarlyRejection(body) {
+ const request = httpRequest(base + "/api/applications", {
+  method: "POST", signal: AbortSignal.timeout(5_000),
+  headers: { Origin: "http://localhost:" + port, "Transfer-Encoding": "chunked", "Content-Type": "application/json" },
+ });
+ const pending = once(request, "response");
+ // Keep the upload open. The response must not depend on an end-of-body marker.
+ request.write(body);
+ try {
+  const [response] = await pending;
+  assert.equal(response.statusCode, 413);
+  assert.equal(response.headers["cache-control"], "no-store");
+  const chunks = [];
+  for await (const chunk of response) chunks.push(chunk);
+  assert.deepEqual(JSON.parse(Buffer.concat(chunks)), { error: "För mycket data." });
+ } finally {
+  request.destroy();
+ }
 }
 
 async function expectFailure(status, code, retryAfter = null) {
@@ -95,12 +123,25 @@ try {
   return response?.ok;
  }, "Production Next fixture did not start");
  await submit(400, { ...applicant, privacy_ack: false });
+ const invalidMileage = await submit(400, { ...applicant, annual_miles: { toString: null, valueOf: null } });
+ assert.deepEqual(invalidMileage.result, { error: "Ange körsträckan i mil per år." });
+ const malformed = await submitRaw(400, `{"email": ${privateDetail}}`);
+ assert.equal(malformed.response.headers.get("cache-control"), "no-store");
+ assert.deepEqual(malformed.result, { error: "Kontrollera formuläret." });
+ const tooLarge = JSON.stringify({ ...applicant, padding: "å".repeat(4096) });
+ assert.ok(tooLarge.length < 8192 && Buffer.byteLength(tooLarge) > 8192);
+ for (const { response, result } of [await submitRaw(413, tooLarge), await submitRaw(413, streamBody(tooLarge), "half")]) {
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(result, { error: "För mycket data." });
+ }
+ await expectEarlyRejection(tooLarge);
  assert.deepEqual(actions, []);
 
  const confirmations = [];
+ const exactLimit = JSON.stringify(applicant).padEnd(8192, " ");
  for (const created of [true, false]) {
   upstream = response => reply(response, { ok: true, created });
-  const { result } = await submit(200);
+  const { result } = created ? await submitRaw(200, streamBody(exactLimit), "half") : await submit(200);
   assert.equal(result.ok, true);
   confirmations.push(result);
   await until(() => actions.at(-1) === "claim_email", "No confirmed queue pass");
@@ -130,7 +171,7 @@ try {
  assert.deepEqual(actions, Array(invalid.length + 4).fill("submit"));
  for (const privateValue of [privateDetail, applicant.email, secret]) assert.ok(!logs.includes(privateValue));
  assert.deepEqual(errors, []);
- console.log("Production Next application submission: new and duplicate acknowledged; quota and invalid receipts never claim email; safe 429/502/503 correlation.");
+ console.log("Production Next application submission: bounded UTF-8 upload; safe input errors; new and duplicate acknowledged; quota and invalid receipts never claim email; safe 429/502/503 correlation.");
 } finally {
  if (child.exitCode === null) {
   child.kill("SIGTERM");

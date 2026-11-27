@@ -2,8 +2,10 @@ import {unstable_cache} from "next/cache";
 import {after,NextResponse} from "next/server";
 import {rpc,networkHash,sendPendingEmails,validOrigin,reportApplicationFailure,ApplicationError,settings} from "@/domains/applications/server";
 import {validateApplication} from "@/domains/applications/validation";
+import {JsonRequestError,readBoundedJson} from "@/lib/bounded-json-request";
 export const maxDuration=120;
 export const revalidate=0;
+const applicationBodyLimit = 8192;
 async function fetchPublicStats() {
  const {count,remaining}=await rpc("stats");
  if(typeof count!=="number"||!Number.isSafeInteger(count)||count<0||
@@ -31,10 +33,27 @@ export async function GET() {
   return NextResponse.json({ error: "Antalet kan inte hämtas just nu.", requestId }, { status: failure.status, headers });
  }
 }
-export async function POST(request:Request){
- if(!validOrigin(request))return NextResponse.json({error:"Ogiltigt anrop."},{status:403});
- if(Number(request.headers.get("content-length")||0)>8192)return NextResponse.json({error:"För mycket data."},{status:413});
- let data;try{const raw=await request.text();if(raw.length>8192)throw Error("För mycket data.");const parsed=JSON.parse(raw);data=validateApplication(parsed);}catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Kontrollera formuläret."},{status:400});}
+export async function POST(request: Request) {
+ const headers = { "Cache-Control": "no-store" };
+ if (!validOrigin(request)) return NextResponse.json({ error: "Ogiltigt anrop." }, { status: 403, headers });
+ if (Number(request.headers.get("content-length")) > applicationBodyLimit) {
+  return NextResponse.json({ error: "För mycket data." }, { status: 413, headers });
+ }
+ let input: unknown;
+ try {
+  input = await readBoundedJson(request, applicationBodyLimit);
+ } catch (error) {
+  if (error instanceof JsonRequestError && error.status === 413) {
+   return NextResponse.json({ error: "För mycket data." }, { status: 413, headers });
+  }
+  return NextResponse.json({ error: "Kontrollera formuläret." }, { status: 400, headers });
+ }
+ let data;
+ try {
+  data = validateApplication(input);
+ } catch (error) {
+  return NextResponse.json({ error: error instanceof Error ? error.message : "Kontrollera formuläret." }, { status: 400, headers });
+ }
  try {
   const result = await rpc<unknown>("submit", {
    ...data,
@@ -45,7 +64,7 @@ export async function POST(request:Request){
    throw new ApplicationError("INVALID_APPLICATION_RECEIPT", 502);
   }
   if ("limited" in result && result.limited === true && !("ok" in result) && !("created" in result)) {
-   return NextResponse.json({ error: "För många försök. Försök igen senare." }, { status: 429, headers: { "Cache-Control": "no-store" } });
+   return NextResponse.json({ error: "För många försök. Försök igen senare." }, { status: 429, headers });
   }
   if ("limited" in result || !("ok" in result) || result.ok !== true ||
       !("created" in result) || typeof result.created !== "boolean") {
